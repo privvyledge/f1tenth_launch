@@ -59,7 +59,8 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
     rm -rf /var/lib/apt/lists/*
 
 #################################################### (Optional) Setup F1tenth
-RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git
+RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git && \
+    cd f1tenth_system && git submodule update --init --force --remote
 #################################################### (Optional) Setup VESC
 #################################################### (Optional) Setup microROS
 #################################################### (Optional) Setup Autoware
@@ -73,7 +74,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
 #    ros-${ROS_DISTRO}-slam-toolbox && \
 #    rm -rf /var/lib/apt/lists/*
 RUN cd "$BUILD_HOME/src" && git clone https://github.com/SteveMacenski/slam_toolbox.git -b ${ROS_DISTRO}-devel && \
-    rosdep install -q -y -r --from-paths src --ignore-src
+    cd slam_toolbox && rosdep install -q -y -r --from-paths src --ignore-src
 #################################################### (Optional) Setup Robot localization
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-robot-localization && \
@@ -83,9 +84,12 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
     ros-${ROS_DISTRO}-imu-tools && \
     rm -rf /var/lib/apt/lists/*
 #################################################### Setup Autonomous bringup package
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git
 
 # Setup permanent variables
 RUN echo "source /f1tenth_ws/install/setup.bash" >> ~/.bashrc
 
 # RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
-RUN cd "$BUILD_HOME" && source ${ROS_ROOT}/setup.bash && colcon build --symlink-install
+RUN cd "$BUILD_HOME" && \
+    rosdep update && rosdep install --from-paths src -i -y && \
+    source ${ROS_ROOT}/setup.bash && colcon build --symlink-install

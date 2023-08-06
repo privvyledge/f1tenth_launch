@@ -1,196 +1,141 @@
-# basically the same as f1tenth bringup
+# MIT License
 
+# Copyright (c) 2020 Hongrui Zheng
 
-# Copyright 2021 the Autoware Foundation
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 
-import launch
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration
-from ament_index_python import get_package_share_directory
-
+from launch.actions import DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription
+from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
+from ament_index_python.packages import get_package_share_directory
 import os
 
-
 def generate_launch_description():
-    f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
-
-    # param files
-    vesc_to_odom_node_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/vesc_to_odom_node.param.yaml')
-    odom_to_state_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/odom_to_state_conversion.param.yaml')
-    joy_translator_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/logitech_f710_basic.param.yaml')
-    joy_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/joy.param.yaml')
+    joy_teleop_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'joy_teleop.yaml'
+    )
     vesc_config = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/vesc.param.yaml')
-    hokuyo_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/urg_node.param.yaml')
-    ekf_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "param/ekf.param.yaml")
-    imu_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "param/razor.param.yaml")
-    laser_filter_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "param/laser_filter.param.yaml")
-    f1tenth_urdf = os.path.join(
-        f1tenth_launch_pkg_prefix, 'urdf/f1tenth_vesc.urdf')
-
-    with open(f1tenth_urdf, 'r') as infp:
-        urdf_file = infp.read()
-
-    vesc_interface_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'param/vesc_config.param.yaml'
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'vesc.yaml'
+    )
+    sensors_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'sensors.yaml'
+    )
+    mux_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'mux.yaml'
     )
 
-    with_joy_param = DeclareLaunchArgument(
-        'with_joy',
-        default_value='True',
-        description='Launch joystick_interface in addition to other nodes'
-    )
+    joy_la = DeclareLaunchArgument(
+        'joy_config',
+        default_value=joy_teleop_config,
+        description='Descriptions for joy and joy_teleop configs')
+    vesc_la = DeclareLaunchArgument(
+        'vesc_config',
+        default_value=vesc_config,
+        description='Descriptions for vesc configs')
+    sensors_la = DeclareLaunchArgument(
+        'sensors_config',
+        default_value=sensors_config,
+        description='Descriptions for sensor configs')
+    mux_la = DeclareLaunchArgument(
+        'mux_config',
+        default_value=mux_config,
+        description='Descriptions for ackermann mux configs')
 
-    # Nodes
-    vesc_driver_launcher = Node(
-        package='vesc_driver',
-        executable='vesc_driver_node',
-        name='vesc_driver_node',
-        namespace='vehicle',
-        output='screen',
-        parameters=[vesc_config]
-    )
+    ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
 
-    vesc_to_odom_launcher = Node(
+    joy_node = Node(
+        package='joy',
+        executable='joy_node',
+        name='joy',
+        parameters=[LaunchConfiguration('joy_config')]
+    )
+    joy_teleop_node = Node(
+        package='joy_teleop',
+        executable='joy_teleop',
+        name='joy_teleop',
+        parameters=[LaunchConfiguration('joy_config')]
+    )
+    ackermann_to_vesc_node = Node(
+        package='vesc_ackermann',
+        executable='ackermann_to_vesc_node',
+        name='ackermann_to_vesc_node',
+        parameters=[LaunchConfiguration('vesc_config')]
+    )
+    vesc_to_odom_node = Node(
         package='vesc_ackermann',
         executable='vesc_to_odom_node',
         name='vesc_to_odom_node',
-        namespace='vehicle',
-        output='screen',
-        parameters=[vesc_to_odom_node_param_file],
-        remappings=[
-            ('odom', "vesc_odom")
-        ]
+        parameters=[LaunchConfiguration('vesc_config')]
     )
-
-    # joystick driver node
-    joy = Node(
-        package='joy_linux',
-        executable='joy_linux_node',
-        output='screen',
-        parameters=[joy_param_file]
+    vesc_driver_node = Node(
+        package='vesc_driver',
+        executable='vesc_driver_node',
+        name='vesc_driver_node',
+        parameters=[LaunchConfiguration('vesc_config')]
     )
-
-    # joystick translator node
-    joy_translator = Node(
-        package='joystick_vehicle_interface_nodes',
-        executable='joystick_vehicle_interface_node_exe',
-        output='screen',
-        parameters=[joy_translator_param_file],
-        remappings=[
-            ("basic_command", "/vehicle/vehicle_command"),
-            ("auto_basic_command", "/vehicle/auto_vehicle_command"),
-            ("state_command", "/vehicle/state_command")
-        ],
-        condition=IfCondition(LaunchConfiguration('with_joy'))
+    throttle_interpolator_node = Node(
+        package='f1tenth_stack',
+        executable='throttle_interpolator',
+        name='throttle_interpolator',
+        parameters=[LaunchConfiguration('vesc_config')]
     )
-
-    vesc_interface_node = Node(
-        package='vesc_interface',
-        executable='vesc_interface_node_exe',
-        namespace='vehicle',
-        output='screen',
-        parameters=[vesc_interface_param_file],
-    )
-
-    odom_to_state_node = Node(
-        package='odom_to_state_conversion_nodes',
-        executable='odom_to_state_conversion_nodes_exe',
-        namespace='vehicle',
-        output='screen',
-        parameters=[odom_to_state_param_file],
-        remappings=[
-            ("vehicle_state", "/vehicle/vehicle_kinematic_state"),
-            ("odometry", "/vehicle/odometry"),
-            ("odom", "/vehicle/odometry/filtered")
-        ]
-    )
-
-    ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        namespace='vehicle',
-        name='ekf_filter_node_odom',
-        output='screen',
-        parameters=[ekf_param_file],
-    )
-
-    razor_node = Node(
-        package='razor_imu_ros2',
-        executable='razor_imu_ros2_exe',
-        output='screen',
-        parameters=[imu_param_file],
-        remappings=[
-            ('imu', '/razor/imu'),
-        ]
-    )
-
-    hokuyo_node = Node(
+    urg_node = Node(
         package='urg_node',
         executable='urg_node_driver',
-        namespace='lidar',
-        output='screen',
-        parameters=[hokuyo_param_file],
-        remappings=[
-            ('scan', '/lidar/scan_raw')
-        ]
+        name='urg_node',
+        parameters=[LaunchConfiguration('sensors_config')]
+    )
+    ackermann_mux_node = Node(
+        package='ackermann_mux',
+        executable='ackermann_mux',
+        name='ackermann_mux',
+        parameters=[LaunchConfiguration('mux_config')],
+        remappings=[('ackermann_cmd_out', 'ackermann_drive')]
+    )
+    static_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_baselink_to_laser',
+        arguments=['0.27', '0.0', '0.11', '0.0', '0.0', '0.0', 'base_link', 'laser']
     )
 
-    laser_filter_node = Node(
-        package="laser_filters",
-        namespace='lidar',
-        executable="scan_to_scan_filter_chain",
-        parameters=[laser_filter_param_file],
-        remappings=[
-            ('output', 'scan'),
-            ('scan', '/lidar/scan_raw')
-        ]
-    )
+    # finalize
+    ld.add_action(joy_node)
+    ld.add_action(joy_teleop_node)
+    ld.add_action(ackermann_to_vesc_node)
+    ld.add_action(vesc_to_odom_node)
+    ld.add_action(vesc_driver_node)
+    # ld.add_action(throttle_interpolator_node)
+    ld.add_action(urg_node)
+    ld.add_action(ackermann_mux_node)
+    ld.add_action(static_tf_node)
 
-    robot_publisher = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='robot_state_publisher',
-        namespace='vehicle',
-        output='screen',
-        parameters=[{'robot_description': urdf_file}],
-    )
-
-    return launch.LaunchDescription([
-        with_joy_param,
-        vesc_driver_launcher,
-        vesc_to_odom_launcher,
-        odom_to_state_node,
-        joy,
-        joy_translator,
-        vesc_interface_node,
-        hokuyo_node,
-        laser_filter_node,
-        robot_publisher,
-        ekf_node,
-        razor_node
-    ])
-
-
+    return ld
