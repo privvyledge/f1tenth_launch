@@ -84,7 +84,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
     ros-${ROS_DISTRO}-imu-tools && \
     rm -rf /var/lib/apt/lists/*
 #################################################### Setup Autonomous bringup package
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b localization_dev
 
 # Setup permanent variables
 RUN echo "source /f1tenth_ws/install/setup.bash" >> ~/.bashrc
