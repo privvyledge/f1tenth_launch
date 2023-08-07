@@ -18,7 +18,7 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_camera',
-            arguments=['0.24115', '0.0', '0.0961', '0.0', '0.0', '0.0', 'base_link', 'laser']
+            arguments=['0.24115', '0.0', '0.0961', '0.0', '0.0', '0.0', 'base_link', 'camera']
     )  # Realsense
 
     vesc_imu_static_tf_node = Node(
