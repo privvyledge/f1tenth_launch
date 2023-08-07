@@ -69,7 +69,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
     ros-${ROS_DISTRO}-navigation2 \
     ros-${ROS_DISTRO}-nav2-bringup && \
     rm -rf /var/lib/apt/lists/*
-#################################################### (Optional) Setup SLAM toolbox
+#################################################### (Optional) Setup SLAM toolbox. Use galactic and above (or noetic) to get pose
 #RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
 #    ros-${ROS_DISTRO}-slam-toolbox && \
 #    rm -rf /var/lib/apt/lists/*
@@ -83,13 +83,15 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-i
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-imu-tools && \
     rm -rf /var/lib/apt/lists/*
-#################################################### Setup Autonomous bringup package
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b localization_dev
+#################################################### Setup Autonomous bringup package.
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b localization_dev && \
+    rosdep install -q -y -r --from-paths src --ignore-src
 
 # Setup permanent variables
 RUN echo "source /f1tenth_ws/install/setup.bash" >> ~/.bashrc
 
 # RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
 RUN cd "$BUILD_HOME" && \
+    source ${ROS_ROOT}/setup.bash && \
     rosdep update && rosdep install --from-paths src -i -y && \
-    source ${ROS_ROOT}/setup.bash && colcon build --symlink-install
+    colcon build --symlink-install
