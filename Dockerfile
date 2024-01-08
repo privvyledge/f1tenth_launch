@@ -1,17 +1,60 @@
-# pull base image
-FROM f1tenth/focal-l4t-foxy:f1tenth-stack
+# todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
+# todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
+# todo: setup particle filter
+# todo: setup micro ros
+# pull base image (Autoware or OSRF ROS2 or Dusty-NV)
+FROM ghcr.io/autowarefoundation/autoware-universe:humble-latest-cuda-arm64
 
 # Set up the shell
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV TZ=America/New_York
 
+# Setup user
+ARG USER=autoware
+ARG USERNAME=${USER}
+ENV USERNAME ${USERNAME}
+
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+ENV NVIDIA_DRIVER_CAPABILITIES all
+ENV NVIDIA_VISIBLE_DEVICES all
+
+RUN groupadd --gid $USER_GID $USERNAME && \
+        useradd --uid $USER_UID --gid $USER_GID -m $USERNAME && \
+        echo "$USERNAME:$USERNAME" | chpasswd && \
+        usermod --shell /bin/bash $USERNAME && \
+        usermod -aG sudo,video $USERNAME && \
+        usermod  --uid $USER_UID $USERNAME && \
+        echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME && \
+        chmod 0440 /etc/sudoers.d/$USERNAME \
+
+# Setup env and shell
+ENV LOGNAME root
+ENV DEBIAN_FRONTEND noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV TZ=America/New_York
+
+ARG ROS_VERSION="ROS2"
+ARG ROS_DISTRO="humble"
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_ROOT=/opt/ros/${ROS_DISTRO}
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
 # Install packages
-RUN apt-get update -y && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     sudo \
     git \
     curl \
     wget \
+    less \
+    zstd \
+    udev \
     build-essential \
+    apt-transport-https \
+    openssh-server libv4l-0 libv4l-dev v4l-utils binutils xz-utils bzip2 lbzip2 \
+    ca-certificates libegl1 \
     lsb-release \
     gnupg2 \
     cmake \
@@ -20,11 +63,11 @@ RUN apt-get update -y && DEBIAN_FRONTEND="noninteractive" apt-get install -y --n
     g++ \
     libpython3-dev \
     python3-dev \
-    python \
     python3 \
     python3-pip \
     python3-setuptools \
     python3-numpy \
+    python3-rosdep \
     python3-matplotlib \
     python3-opencv \
     python3-pil \
@@ -32,9 +75,14 @@ RUN apt-get update -y && DEBIAN_FRONTEND="noninteractive" apt-get install -y --n
     python3-tk \
     python3-pyqt5 \
     libopencv-dev \
-    gedit \
-    nautilus && \
-    rm -rf /var/lib/apt/lists/*
+    libssl-dev \
+    libusb-1.0-0-dev \
+    libgtk-3-dev \
+    libglfw3-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    qtcreator && \
+    sudo rm -rf /var/lib/apt/lists/*
 
 # Initialize ROS workspace
 ENV BUILD_HOME=/f1tenth_ws
@@ -44,54 +92,171 @@ RUN mkdir -p "$BUILD_HOME/src"
 
 #################################################### (Optional) Setup ROS2
 
+WORKDIR /sdks
 #################################################### Setup YDLidar
-RUN mkdir -p "/SDKs/YDLIDAR" && cd "/SDKs/YDLIDAR" && git clone https://github.com/YDLIDAR/YDLidar-SDK.git && \
+RUN mkdir -p "/sdks/YDLIDAR" && cd "/sdks/YDLIDAR" && git clone https://github.com/YDLIDAR/YDLidar-SDK.git && \
     cd YDLidar-SDK && mkdir build && cd build && cmake .. && make && sudo make install
 
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_driver.git
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_driver.git -b ${ROS_DISTRO}
 #RUN cd $BUILD_HOME && \
 #    chmod 0777 src/ydlidar_ros2_driver/startup/* && sudo sh src/ydlidar_ros2_driver/startup/initenv.sh
 
 #################################################### Setup Realsense ROS
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
-    ros-${ROS_DISTRO}-librealsense2* \
-    ros-${ROS_DISTRO}-realsense2-* && \
-    rm -rf /var/lib/apt/lists/*
+#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-librealsense2* \
+#    ros-${ROS_DISTRO}-realsense2-* && \
+#    rm -rf /var/lib/apt/lists/*
+ARG LIBREALSENSE_VERSION=development
+RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
+    cd librealsense && \
+    mkdir build && \
+    cd build && \
+    cmake \
+       -DBUILD_EXAMPLES=true \
+	   -DFORCE_RSUSB_BACKEND=true \
+	   -DBUILD_WITH_CUDA=true \
+	   -DCMAKE_BUILD_TYPE=release \
+	   -DBUILD_PYTHON_BINDINGS=bool:true \
+	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+       -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=true \
+	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
+	   ../ && \
+    make -j$(($(nproc)-1)) && \
+    sudo make install && \
+    cd ../ && \
+    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/ && \
+    sudo udevadm control --reload-rules && udevadm trigger
+
+#################################################### Setup TF2 and Geometry2
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-tf2-tools \
+    ros-${ROS_DISTRO}-tf-transformations \
+    ros-${ROS_DISTRO}-rqt-tf-tree \
+    ros-${ROS_DISTRO}-tf2-geometry-msgs && \
+    python3 -m pip install transforms3d numpy && \
+    sudo rm -rf /var/lib/apt/lists/*
 
 #################################################### (Optional) Setup F1tenth
-RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git && \
-    cd f1tenth_system && git submodule update --init --force --remote
+RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git -b ${ROS_DISTRO}-devel && \
+    cd f1tenth_system && git submodule update --init --force --remote && \
+    cd vesc && git checkout ros2_imu_fix
 #################################################### (Optional) Setup VESC
-#################################################### (Optional) Setup microROS
 #################################################### (Optional) Setup Autoware
+
 #################################################### (Optional) Setup ROS Nav
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-navigation2 \
     ros-${ROS_DISTRO}-nav2-bringup && \
-    rm -rf /var/lib/apt/lists/*
+    sudo rm -rf /var/lib/apt/lists/*
+# RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-gazebo-ros-pkgs && \
+#    cd "$BUILD_HOME/src" && git clone https://github.com/ros-planning/navigation2.git -b ${ROS_DISTRO}-devel && \
+#    sudo rm -rf /var/lib/apt/lists/*
+
 #################################################### (Optional) Setup SLAM toolbox. Use galactic and above (or noetic) to get pose
-#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
-#    ros-${ROS_DISTRO}-slam-toolbox && \
-#    rm -rf /var/lib/apt/lists/*
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/SteveMacenski/slam_toolbox.git -b ${ROS_DISTRO}-devel && \
-    cd slam_toolbox && rosdep install -q -y -r --from-paths src --ignore-src
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-slam-toolbox && \
+    sudo rm -rf /var/lib/apt/lists/*
+# RUN cd "$BUILD_HOME/src" && git clone https://github.com/SteveMacenski/slam_toolbox.git -b ${ROS_DISTRO}-devel && \
+#    cd slam_toolbox && rosdep install -q -y -r --from-paths src --ignore-src
+
 #################################################### (Optional) Setup Robot localization
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-robot-localization && \
-    rm -rf /var/lib/apt/lists/*
+    sudo rm -rf /var/lib/apt/lists/*
+# RUN cd "$BUILD_HOME/src" && git clone https://github.com/cra-ros-pkg/robot_localization.git -b ${ROS_DISTRO}-devel && \
+#    cd robot_localization && rosdep install -q -y -r --from-paths src --ignore-src
+
 #################################################### (Optional) Setup IMU Filters
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-imu-tools && \
-    rm -rf /var/lib/apt/lists/*
+    sudo rm -rf /var/lib/apt/lists/*
+
 #################################################### Setup Autonomous bringup package.
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b localization_dev && \
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b ${ROS_DISTRO}-dev
+
+#################################################### Setup Laser filters/pipeline.
+#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-laser-pipeline ros-${ROS_DISTRO}-laser-filters  && \
+#    rm -rf /var/lib/apt/lists/*
+RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-filters && \
+    git clone https://github.com/ros-perception/laser_filters.git -b ros2
+
+#################################################### Setup depth image to laser scan.
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-depth-image-to-laserscan  && \
+    sudo rm -rf /var/lib/apt/lists/*
+# RUN #cd "$BUILD_HOME/src" && git clone https://github.com/ros-perception/depthimage_to_laserscan.git -b ${ROS_DISTRO}-devel && \
+#    cd laser_filters && rosdep install -q -y -r --from-paths src --ignore-src
+
+#################################################### Setup laser odometry packages
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_odometry.git && \
+    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git && \
     rosdep install -q -y -r --from-paths src --ignore-src
 
-# Setup permanent variables
-RUN echo "source /f1tenth_ws/install/setup.bash" >> ~/.bashrc
+#################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
+#RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
+#    cd rtabmap_ros && rosdep install -q -y -r --from-paths src --ignore-src
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-rtabmap-ros && \
+    sudo rm -rf /var/lib/apt/lists/*
 
-# RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
-RUN cd "$BUILD_HOME" && \
-    source ${ROS_ROOT}/setup.bash && \
-    rosdep update && rosdep install --from-paths src -i -y && \
-    colcon build --symlink-install
+#-------------------------------------------------
+# Setup MicroROS (https://github.com/micro-ROS/micro_ros_setup.git | https://micro.ros.org/docs/tutorials/core/first_application_linux/)
+#-------------------------------------------------
+RUN git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup && \
+    python3 -m pip install pyserial
+
+#-------------------------------------------------
+# Setup Autoware. Todo: use main branch when done
+#-------------------------------------------------
+ARG AUTOWARE_DIR='src'
+ARG AUTOWARE_FOLDER_NAME='autoware_gokart'
+RUN git clone -b gokart_devel https://github.com/privvyledge/autoware.gokart.git ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME} && \
+    mkdir -p ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/src && \
+    vcs import src/${AUTOWARE_FOLDER_NAME}/src < ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/autoware.repos
+
+
+#--------------------------------
+# Build ROS workspace
+# The '--event-handlers console_direct+ --base-paths',  ' -DCMAKE_LIBRARY_PATH' and ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"' flags are needed by ZED
+# The ' -DCMAKE_BUILD_TYPE=Release' flag is for all of them, especially Autoware
+#--------------------------------
+RUN sudo apt update && \
+    source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    rosdep update && \
+#    rosdep install --from-paths src/autoware/src --ignore-src -r -y && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    colcon build --symlink-install --event-handlers console_direct+ --base-paths src --cmake-args ' -DCMAKE_BUILD_TYPE=Release' ' -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs' ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"'
+
+#-----------------------------
+# Setup microros agent, i.e create_agent_ws, then build_agent. Modified to skip rosdep keys and specify colcon build arguments
+#-----------------------------
+RUN bash -c 'source install/setup.bash; \
+             EXTERNAL_SKIP="lio_sam fast_lio"; \
+             ros2 run micro_ros_setup create_agent_ws.sh; \
+             ros2 run micro_ros_setup build_agent.sh'
+
+#-----------------------------
+# Setup environment variables
+#-----------------------------
+# Todo: use ENV to modify PATHs, e.g PATH, PYTHONPATH, LD_LIBRARY_PATH
+# Todo: add autoware environment variables like vehicle_id
+RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_direct+"' >> ~/.bashrc && \
+    echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> ~/.bashrc && \
+    echo "source ${BUILD_HOME}/install/setup.bash" >> ~/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
+    echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib' >> ~/.bashrc && \
+    echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib' >> ~/.bashrc && \
+    echo "source /usr/share/colcon_cd/function/colcon_cd.sh" >> ~/.bashrc && \
+    echo "export _colcon_cd_root=${ROS_ROOT}" >> ~/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
+
+## RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
+#RUN cd "$BUILD_HOME" && \
+#    source ${ROS_ROOT}/setup.bash && \
+#    rosdep update && rosdep install --from-paths src -i -y && \
+#    colcon build --symlink-install
+
+## Todo: remove the lines below
+RUN sudo apt update && sudo apt install gedit cheese nautilus net-tools iputils-ping -y

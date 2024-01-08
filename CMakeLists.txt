@@ -29,7 +29,7 @@ find_package(ament_cmake REQUIRED)
 #install(TARGETS test_node
 #  DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch params config
+install(DIRECTORY launch params config data
   DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

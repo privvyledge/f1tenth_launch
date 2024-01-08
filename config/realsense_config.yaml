@@ -1,0 +1,39 @@
+/**:
+  ros__parameters:
+#    serial_no: 843112073259 # d435i
+#    device_type: d435i
+#    camera_name: 'camera'
+#    camera_namespace: 'camera'
+    initial_reset: true
+    base_frame_id: camera_link
+
+    enable_sync: true
+    enable_depth: true
+    enable_color: true
+    enable_infra: true
+    enable_infra1: true
+    enable_infra2: true
+    enable_confidence: true
+    enable_gyro: true
+    enable_accel: true
+    enable_pose: true
+    enable_rgbd: false
+    pointcloud.enable: true
+
+    depth_module.profile: 640x480x30
+    rgb_camera.profile: 1280x720x30
+    align_depth.enable: true
+    pointcloud.ordered_pc: true
+#    pointcloud.stream_filter: 2
+    pointcloud.allow_no_texture_points: true
+    colorizer.enable: false
+
+    gyro_fps: 200 # 400
+    accel_fps: 200 # 100
+    unite_imu_method: 2
+
+    publish_tf: true
+    tf_publish_rate: 30.0
+
+    enable_pointcloud: true
+    dense_pointcloud: true

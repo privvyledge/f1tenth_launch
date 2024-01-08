@@ -25,7 +25,7 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_vesc_imu',
-            arguments=['0.13', '0.0', '0.05', '0.0', '0.0', '0.0', 'base_link', 'imu_link']  # todo: measure
+            arguments=['0.13', '0.0', '0.043', '-1.57079633', '0.0', '3.14159265', 'base_link', 'imu_link']
     )  # VESC IMU (/sensors/imu/raw)
 
     base_footprint_tf_node = Node(
