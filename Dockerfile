@@ -1,5 +1,7 @@
 # todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
 # todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
+# Todo: setup Nvidia ISAAC ROS vSLAM
+# Todo: setup RTABMAP based 2D LaserScan + Realsense global localization
 # todo: setup particle filter
 # todo: setup micro ros
 # pull base image (Autoware or OSRF ROS2 or Dusty-NV)
@@ -84,6 +86,9 @@ RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get inst
     qtcreator && \
     sudo rm -rf /var/lib/apt/lists/*
 
+# Install Python Packages
+RUN python3 -m pip install do-mpc casadi
+
 # Initialize ROS workspace
 ENV BUILD_HOME=/f1tenth_ws
 ARG BUILD_HOME=$BUILD_HOME
@@ -93,6 +98,18 @@ RUN mkdir -p "$BUILD_HOME/src"
 #################################################### (Optional) Setup ROS2
 
 WORKDIR /sdks
+# Install Acados. Todo: fork the repository and specify target architecture for Jetsons. See: https://github.com/giaf/blasfeo/blob/master/README.md
+# todo: (TX2: ARMV8A_ARM_CORTEX_A57, AGX ORIN: ARMV8A_ARM_CORTEX_A76)
+ARG TARGET_CPU_ARCHITECHTURE=ARMV8A_ARM_CORTEX_A57
+RUN mkdir -p "/sdks/acados" && cd "/sdks/acados" && \
+    export ACADOS_ROOT='/sdks/acados' && export ACADOS_PATH=${ACADOS_ROOT} && export ACADOS_SOURCE_DIR=${ACADOS_ROOT} \
+    git clone https://github.com/acados/acados.git && cd acados && \
+    git submodule update --recursive --init && \
+    mkdir build && cd build && \
+    cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_OSQP=ON -DACADOS_INSTALL_DIR=${ACADOS_ROOT} -DBLASFEO_TARGET=${TARGET_CPU_ARCHITECHTURE} .. && \
+    make install -j$(nproc) && \
+    python3 -m pip install -e ${ACADOS_ROOT}/interfaces/acados_template
+
 #################################################### Setup YDLidar
 RUN mkdir -p "/sdks/YDLIDAR" && cd "/sdks/YDLIDAR" && git clone https://github.com/YDLIDAR/YDLidar-SDK.git && \
     cd YDLidar-SDK && mkdir build && cd build && cmake .. && make && sudo make install
@@ -201,10 +218,10 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_o
     git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git
 
 #################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
-#RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
+#RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap.git && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
 #    cd rtabmap_ros && rosdep install -q -y -r --from-paths src --ignore-src
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
-    ros-${ROS_DISTRO}-rtabmap-ros && \
+    ros-${ROS_DISTRO}-rtabmap* && \
     sudo rm -rf /var/lib/apt/lists/*
 
 #-------------------------------------------------
@@ -254,6 +271,10 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib' >> ~/.bashrc && \
+    echo 'export ACADOS_ROOT=/sdks/acados' >> ~/.bashrc && \
+    echo 'export ACADOS_PATH=${ACADOS_ROOT}' >> ~/.bashrc && \
+    echo 'export ACADOS_SOURCE_DIR=${ACADOS_ROOT}' >> ~/.bashrc && \
+    echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${ACADOS_ROOT}/lib' >> ~/.bashrc && \
     echo "source /usr/share/colcon_cd/function/colcon_cd.sh" >> ~/.bashrc && \
     echo "export _colcon_cd_root=${ROS_ROOT}" >> ~/.bashrc && \
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
