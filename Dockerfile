@@ -27,7 +27,7 @@ RUN groupadd --gid $USER_GID $USERNAME && \
         usermod -aG sudo,video $USERNAME && \
         usermod  --uid $USER_UID $USERNAME && \
         echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME && \
-        chmod 0440 /etc/sudoers.d/$USERNAME \
+        chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Setup env and shell
 ENV LOGNAME root
@@ -124,8 +124,15 @@ RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://git
     make -j$(($(nproc)-1)) && \
     sudo make install && \
     cd ../ && \
-    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/ && \
-    sudo udevadm control --reload-rules && udevadm trigger
+    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
+
+# Setup UDEV Rules. Disconnect all cameras. Todo: For now causes build to fail. Test after disconnecting. Might need to setup udev rules on host instead of docker.
+# Todo: test setting up udev rules as root (https://forums.docker.com/t/udevadm-control-reload-rules/135564)
+#RUN #sudo udevadm control --reload-rules && udevadm trigger
+## or
+#RUN cd /sdks/librealsense && ./scripts/setup_udev_rules.sh
+
+WORKDIR $BUILD_HOME
 
 #################################################### Setup TF2 and Geometry2
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
@@ -136,7 +143,7 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
     python3 -m pip install transforms3d numpy && \
     sudo rm -rf /var/lib/apt/lists/*
 
-#################################################### (Optional) Setup F1tenth
+#################################################### (Optional) Setup F1tenth. Todo: setup IMU fix on humble branch
 RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git -b ${ROS_DISTRO}-devel && \
     cd f1tenth_system && git submodule update --init --force --remote && \
     cd vesc && git checkout ros2_imu_fix
@@ -182,17 +189,16 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_lau
 RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-filters && \
     git clone https://github.com/ros-perception/laser_filters.git -b ros2
 
-#################################################### Setup depth image to laser scan.
-RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
-    ros-${ROS_DISTRO}-depth-image-to-laserscan  && \
-    sudo rm -rf /var/lib/apt/lists/*
-# RUN #cd "$BUILD_HOME/src" && git clone https://github.com/ros-perception/depthimage_to_laserscan.git -b ${ROS_DISTRO}-devel && \
+#################################################### Setup depth image to laser scan. No need as its already in the container
+#RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-depth-image-to-laserscan  && \
+#    sudo rm -rf /var/lib/apt/lists/*
+# RUN #cd "$BUILD_HOME/src" && git clone https://github.com/ros-perception/depthimage_to_laserscan.git -b ros2 && \
 #    cd laser_filters && rosdep install -q -y -r --from-paths src --ignore-src
 
 #################################################### Setup laser odometry packages
 RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_odometry.git && \
-    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git && \
-    rosdep install -q -y -r --from-paths src --ignore-src
+    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git
 
 #################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
 #RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
