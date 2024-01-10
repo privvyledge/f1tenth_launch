@@ -25,7 +25,7 @@ def generate_launch_description():
 
     # Load parameter files
     localization_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'config', 'localizer_amcl.yaml')
+        f1tenth_launch_pkg_prefix, 'config', '/localization/localizer_amcl.yaml')
     localization_param = DeclareLaunchArgument(
             'localization_param_file',
             default_value=localization_param_file,
@@ -37,7 +37,7 @@ def generate_launch_description():
     imu_filter_param_file = os.path.join(
             f1tenth_launch_pkg_prefix, "config/imu_filter.yaml")
     laser_filter_param_file = os.path.join(
-            f1tenth_launch_pkg_prefix, "config/laser_filter.yaml")
+            f1tenth_launch_pkg_prefix, "config/filters/laser_filter.yaml")
 
     map_file_path = os.path.join(
             f1tenth_launch_pkg_prefix, 'data/maps', 'raslab.yaml')
@@ -50,7 +50,7 @@ def generate_launch_description():
     print(LaunchConfiguration("map_file"))
 
     # Include launch files (run map_server and AMCL nodes).
-    #  Todo: load map separately so other it can be loaded without AMCL
+    #  Todo: load map separately so it can be loaded without AMCL
     nav2_localization = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     os.path.join(nav2_pkg_prefix,
@@ -72,24 +72,38 @@ def generate_launch_description():
             parameters=[ekf_param_file],
     )
 
-    imu_filter_node = Node(
-                package='imu_filter_madgwick',
-                node_executable='imu_filter_madgwick_node',
-                node_name='imu_filter',
-                output='screen',
-                parameters=[imu_filter_param_file],
-                remappings=[('/imu/data_raw', '/sensors/imu/raw')]
-            )
+    # imu_filter_node = Node(
+    #             package='imu_filter_madgwick',
+    #             node_executable='imu_filter_madgwick_node',
+    #             node_name='imu_filter',
+    #             output='screen',
+    #             parameters=[imu_filter_param_file],
+    #             remappings=[('/imu/data_raw', '/sensors/imu/raw')]
+    #         )
 
-    laser_filter_node = Node(
-            package="laser_filters",
-            namespace='lidar',
-            executable="scan_to_scan_filter_chain",
-            parameters=[laser_filter_param_file],
-            remappings=[
-                ('output', 'scan'),
-                ('scan', '/lidar/scan')
-            ]
+    imu_filter_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    os.path.join(f1tenth_launch_pkg_prefix,
+                                 'launch/filters/imu_filter.launch.py')
+            )
+    )
+
+    # laser_filter_node = Node(
+    #         package="laser_filters",
+    #         namespace='lidar',
+    #         executable="scan_to_scan_filter_chain",
+    #         parameters=[laser_filter_param_file],
+    #         remappings=[
+    #             ('output', 'scan'),
+    #             ('scan', '/lidar/scan')
+    #         ]
+    # )
+
+    laser_filter_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    os.path.join(f1tenth_launch_pkg_prefix,
+                                 'launch/filters/laser_filter.launch.py')
+            )
     )
 
     # Create Launch Description and add nodes to the launch description

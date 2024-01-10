@@ -1,3 +1,5 @@
+# todo: fix xforwarding issue
+# todo: fix Realsense issues: color image, gyro, accel, point clouds, GPU
 # todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
 # todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
 # Todo: setup Nvidia ISAAC ROS vSLAM
@@ -96,60 +98,7 @@ ARG BUILD_HOME=$BUILD_HOME
 RUN mkdir -p "$BUILD_HOME/src"
 
 #################################################### (Optional) Setup ROS2
-
-WORKDIR /sdks
-# Install Acados. Todo: fork the repository and specify target architecture for Jetsons. See: https://github.com/giaf/blasfeo/blob/master/README.md
-# todo: (TX2: ARMV8A_ARM_CORTEX_A57, AGX ORIN: ARMV8A_ARM_CORTEX_A76)
-ARG TARGET_CPU_ARCHITECHTURE=ARMV8A_ARM_CORTEX_A57
-RUN mkdir -p "/sdks/acados" && cd "/sdks/acados" && \
-    export ACADOS_ROOT='/sdks/acados' && export ACADOS_PATH=${ACADOS_ROOT} && export ACADOS_SOURCE_DIR=${ACADOS_ROOT} \
-    git clone https://github.com/acados/acados.git && cd acados && \
-    git submodule update --recursive --init && \
-    mkdir build && cd build && \
-    cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_OSQP=ON -DACADOS_INSTALL_DIR=${ACADOS_ROOT} -DBLASFEO_TARGET=${TARGET_CPU_ARCHITECHTURE} .. && \
-    make install -j$(nproc) && \
-    python3 -m pip install -e ${ACADOS_ROOT}/interfaces/acados_template
-
-#################################################### Setup YDLidar
-RUN mkdir -p "/sdks/YDLIDAR" && cd "/sdks/YDLIDAR" && git clone https://github.com/YDLIDAR/YDLidar-SDK.git && \
-    cd YDLidar-SDK && mkdir build && cd build && cmake .. && make && sudo make install
-
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_driver.git -b ${ROS_DISTRO}
-#RUN cd $BUILD_HOME && \
-#    chmod 0777 src/ydlidar_ros2_driver/startup/* && sudo sh src/ydlidar_ros2_driver/startup/initenv.sh
-
-#################################################### Setup Realsense ROS
-#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
-#    ros-${ROS_DISTRO}-librealsense2* \
-#    ros-${ROS_DISTRO}-realsense2-* && \
-#    rm -rf /var/lib/apt/lists/*
-ARG LIBREALSENSE_VERSION=development
-RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
-    cd librealsense && \
-    mkdir build && \
-    cd build && \
-    cmake \
-       -DBUILD_EXAMPLES=true \
-	   -DFORCE_RSUSB_BACKEND=true \
-	   -DBUILD_WITH_CUDA=true \
-	   -DCMAKE_BUILD_TYPE=release \
-	   -DBUILD_PYTHON_BINDINGS=bool:true \
-	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-       -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=true \
-	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
-	   ../ && \
-    make -j$(($(nproc)-1)) && \
-    sudo make install && \
-    cd ../ && \
-    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
-
-# Setup UDEV Rules. Disconnect all cameras. Todo: For now causes build to fail. Test after disconnecting. Might need to setup udev rules on host instead of docker.
-# Todo: test setting up udev rules as root (https://forums.docker.com/t/udevadm-control-reload-rules/135564)
-#RUN #sudo udevadm control --reload-rules && udevadm trigger
-## or
-#RUN cd /sdks/librealsense && ./scripts/setup_udev_rules.sh
-
-WORKDIR $BUILD_HOME
+WORKDIR $BUILD_HOME/src
 
 #################################################### Setup TF2 and Geometry2
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
@@ -196,8 +145,9 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
     ros-${ROS_DISTRO}-imu-tools && \
     sudo rm -rf /var/lib/apt/lists/*
 
-#################################################### Setup Autonomous bringup package.
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b ${ROS_DISTRO}-dev
+#################################################### Setup Autonomous bringup packages.
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b ${ROS_DISTRO}-dev && \
+    git clone https://github.com/privvyledge/trajectory_following_ros2.git
 
 #################################################### Setup Laser filters/pipeline.
 #RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
@@ -213,9 +163,9 @@ RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get instal
 # RUN #cd "$BUILD_HOME/src" && git clone https://github.com/ros-perception/depthimage_to_laserscan.git -b ros2 && \
 #    cd laser_filters && rosdep install -q -y -r --from-paths src --ignore-src
 
-#################################################### Setup laser odometry packages
-RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_odometry.git && \
-    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git
+#################################################### Setup laser odometry packages. Todo: setup for humble
+#RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_odometry.git && \
+#    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git
 
 #################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
 #RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap.git && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
@@ -238,6 +188,66 @@ ARG AUTOWARE_FOLDER_NAME='autoware_gokart'
 RUN git clone -b gokart_devel https://github.com/privvyledge/autoware.gokart.git ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME} && \
     mkdir -p ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/src && \
     vcs import src/${AUTOWARE_FOLDER_NAME}/src < ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/autoware.repos
+
+WORKDIR /sdks
+
+# Install Acados.
+ARG TX2_ARCHITECTURE=ARMV8A_ARM_CORTEX_A57
+ARG ORIN_ARCHITECTURE=ARMV8A_ARM_CORTEX_A76
+ARG ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE=$TX2_ARCHITECTURE
+ARG ACADOS_OPENMP_PARALLELIZATION_ENABLED=OFF
+RUN mkdir -p "/sdks/" && cd "/sdks/" && \
+    export ACADOS_ROOT='/sdks/acados' && export ACADOS_PATH=${ACADOS_ROOT} && export ACADOS_SOURCE_DIR=${ACADOS_ROOT} && \
+    git clone https://github.com/acados/acados.git && cd acados && \
+    git submodule update --recursive --init && \
+    mkdir build && cd build && \
+    cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_OSQP=ON -DACADOS_INSTALL_DIR=${ACADOS_ROOT} -DBLASFEO_TARGET=${ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE} -DACADOS_WITH_OPENMP=${ACADOS_OPENMP_PARALLELIZATION_ENABLED} .. && \
+    make install -j$(nproc) && \
+    python3 -m pip install -e ${ACADOS_ROOT}/interfaces/acados_template && \
+    curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+    source $HOME/.cargo/env && cd ../bin && \
+    git clone https://github.com/acados/tera_renderer.git && cd tera_renderer && $HOME/.cargo/bin/cargo build --verbose --release && \
+    cp target/release/t_renderer ${ACADOS_ROOT}/bin
+
+#################################################### Setup YDLidar
+RUN mkdir -p "/sdks/YDLIDAR" && cd "/sdks/YDLIDAR" && git clone https://github.com/YDLIDAR/YDLidar-SDK.git && \
+    cd YDLidar-SDK && mkdir build && cd build && cmake .. && make && sudo make install
+
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_driver.git -b ${ROS_DISTRO}
+#RUN cd $BUILD_HOME && \
+#    chmod 0777 src/ydlidar_ros2_driver/startup/* && sudo sh src/ydlidar_ros2_driver/startup/initenv.sh
+
+#################################################### Setup Realsense ROS
+#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-librealsense2* \
+#    ros-${ROS_DISTRO}-realsense2-* && \
+#    rm -rf /var/lib/apt/lists/*
+ARG LIBREALSENSE_VERSION=development
+RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
+    cd librealsense && \
+    mkdir build && \
+    cd build && \
+    cmake \
+       -DBUILD_EXAMPLES=true \
+	   -DFORCE_RSUSB_BACKEND=true \
+	   -DBUILD_WITH_CUDA=true \
+	   -DCMAKE_BUILD_TYPE=release \
+	   -DBUILD_PYTHON_BINDINGS=bool:true \
+	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+       -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=true \
+	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
+	   ../ && \
+    make -j$(($(nproc)-1)) && \
+    sudo make install && \
+    cd ../ && \
+    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/ && \
+    sudo apt install ros-${ROS_DISTRO}-realsense2-*
+
+# Setup UDEV Rules. Disconnect all cameras. Todo: For now causes build to fail. Test after disconnecting. Might need to setup udev rules on host instead of docker.
+# Todo: test setting up udev rules as root (https://forums.docker.com/t/udevadm-control-reload-rules/135564)
+#RUN #sudo udevadm control --reload-rules && udevadm trigger
+## or
+#RUN cd /sdks/librealsense && ./scripts/setup_udev_rules.sh
 
 
 #--------------------------------

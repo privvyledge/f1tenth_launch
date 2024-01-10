@@ -22,16 +22,16 @@ def generate_launch_description():
     # Parameter files
     lidar_config = os.path.join(
             get_package_share_directory('f1tenth_launch'),
-            'config',
+            'config/sensors',
             'ydlidar_X4.yaml')
 
     depth_config = os.path.join(
             get_package_share_directory('f1tenth_launch'),
-            'config',
+            'config/sensors',
             'realsense_config.yaml')
     realsense_imu_config = os.path.join(
             get_package_share_directory('f1tenth_launch'),
-            'config',
+            'config/sensors',
             'realsense_imu_config.yaml')
 
     # depth_launch_path = PathJoinSubstitution(
@@ -84,20 +84,20 @@ def generate_launch_description():
                         ]
     )
 
-    rf2o_odometry_node = Node(
-            package='rf2o_laser_odometry',
-            executable='rf2o_laser_odometry_node',
-            name='rf2o_laser_odometry',
-            output='screen',
-            parameters=[{
-                'laser_scan_topic': '/lidar/scan',
-                'odom_topic': '/odom/rf2o',
-                'publish_tf': False,
-                'base_frame_id': 'base_link',
-                'odom_frame_id': 'odom',
-                'init_pose_from_topic': '',
-                'freq': 10.0}],
-    )
+    # rf2o_odometry_node = Node(
+    #         package='rf2o_laser_odometry',
+    #         executable='rf2o_laser_odometry_node',
+    #         name='rf2o_laser_odometry',
+    #         output='screen',
+    #         parameters=[{
+    #             'laser_scan_topic': '/lidar/scan',
+    #             'odom_topic': '/odom/rf2o',
+    #             'publish_tf': False,
+    #             'base_frame_id': 'base_link',
+    #             'odom_frame_id': 'odom',
+    #             'init_pose_from_topic': '',
+    #             'freq': 10.0}],
+    # )
 
     laser_scan_matcher_node = Node(
             package='ros2_laser_scan_matcher',

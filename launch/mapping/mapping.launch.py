@@ -1,18 +1,10 @@
-# Copyright 2020-2022, The Autoware Foundation
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from ament_index_python import get_package_share_directory
+"""
+Todo: launch joystick in a separate package, i.e vehicle_bringup
+Todo: pass arguments to mapper
+Todo: load from ROSBAG
+Todo: refer to https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/slam_launch.py
+"""
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -30,6 +22,13 @@ def IfEqualsCondition(arg_name: str, value: str):
 
 
 def generate_launch_description():
+    # Parameters
+    lifecycle_nodes = ['map_saver']
+    use_sim_time = True
+    autostart = True
+    save_map_timeout = 2.0
+    free_thresh_default = 0.25
+    occupied_thresh_default = 0.65
 
     # package paths
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
@@ -37,17 +36,20 @@ def generate_launch_description():
 
     # parameters
     mapping_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "param/mapper_params_online_async.param.yaml"
+        f1tenth_launch_pkg_prefix, "config/mapping.yaml"
     )
     mapping_param = DeclareLaunchArgument(
         "mapping_param_file",
         default_value=mapping_param_file,
         description="Path to config file for mapping nodes",
     )
+    map_file_name = os.path.join(f1tenth_launch_pkg_prefix, "data/raslab.yaml")
+    map_file_name_la = DeclareLaunchArgument('map_file_name', default_value=map_file_name,
+                                             description="location to store the map periodically.")
 
     with_joy_param = DeclareLaunchArgument(
         'with_joy',
-        default_value='False',
+        default_value='True',
         description='Launch joystick_interface in addition to other nodes'
     )
 
@@ -59,12 +61,12 @@ def generate_launch_description():
 
     vehicle_interface_mode = DeclareLaunchArgument(
         'vehicle_interface',
-        default_value='svl',
+        default_value='vesc',
         description='Launch rviz in addition to other nodes'
     )
 
     rviz_cfg_path = os.path.join(f1tenth_launch_pkg_prefix,
-                                 'rviz2', 'f1tenth.rviz')
+                                 'rviz', 'slam_toolbox.rviz')
     rviz_cfg_path_param = DeclareLaunchArgument(
         'rviz_cfg_path_param',
         default_value=rviz_cfg_path,
@@ -91,14 +93,24 @@ def generate_launch_description():
         condition=IfEqualsCondition("vehicle_interface", "vesc")
     )
 
-    slam_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(slam_toolbox_pkg_prefix,
-                         'launch/online_async_launch.py')
-        ),
-        launch_arguments={
-            'params_file': LaunchConfiguration('mapping_param_file'),
-        }.items()
+    # slam_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(slam_toolbox_pkg_prefix,
+    #                      'launch/online_async_launch.py')
+    #     ),
+    #     launch_arguments={
+    #         'params_file': LaunchConfiguration('mapping_param_file'),
+    #     }.items()
+    # )
+
+    slam_launch = Node(
+            parameters=[
+                mapping_param_file
+            ],
+            package='slam_toolbox',
+            executable='sync_slam_toolbox_node',
+            name='slam_toolbox',
+            output='screen'
     )
 
     rviz2 = Node(
@@ -109,14 +121,40 @@ def generate_launch_description():
         arguments=['-d', LaunchConfiguration("rviz_cfg_path_param")]
     )
 
+    # Nodes launching commands
+    start_map_saver_server_cmd = Node(
+            package='nav2_map_server',
+            executable='map_saver_server',
+            output='screen',
+            emulate_tty=True,  # https://github.com/ros2/launch/issues/188
+            parameters=[
+                {'map_topic': map_file_name},
+                {'save_map_timeout': save_map_timeout},
+                {'free_thresh_default': free_thresh_default},
+                {'occupied_thresh_default': occupied_thresh_default},
+                {'map_subscribe_transient_local': True}])
+
+    start_lifecycle_manager_cmd = Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager',
+            output='screen',
+            emulate_tty=True,  # https://github.com/ros2/launch/issues/188
+            parameters=[{'use_sim_time': use_sim_time},
+                        {'autostart': autostart},
+                        {'node_names': lifecycle_nodes}])
+
     return LaunchDescription([
         with_joy_param,
         with_rviz_param,
         vehicle_interface_mode,
         mapping_param,
+        map_file_name_la,
         rviz_cfg_path_param,
         vehicle_launch_svl,
         vehicle_launch_vesc,
         slam_launch,
-        rviz2
+        rviz2,
+        start_map_saver_server_cmd,
+        start_lifecycle_manager_cmd
     ])
