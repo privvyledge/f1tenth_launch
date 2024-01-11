@@ -114,6 +114,21 @@ def generate_launch_description():
                         ('ackermann_cmd', '/vehicle/ackermann_cmd')]
     )
 
+    twist_to_ackermann_node = Node(
+            package='trajectory_following_ros2',
+            executable='twist_to_ackermann',
+            name='twist_to_ackermann_converter',
+            parameters=[
+                {'wheelbase': 0.256},
+                {'twist_topic': '/cmd_vel'},  # /cmd_vel or /cmd_vel_smooth
+                {'ackermann_cmd_topic': '/drive'},
+                {'frame_id': 'base_link'},
+                {'cmd_angle_instead_rotvel': False},
+            ],
+            remappings=[('ackermann_cmd_out', 'ackermann_drive'),
+                        ('ackermann_cmd', '/vehicle/ackermann_cmd')]
+    )  # todo: put package in this repository and make parameters input.
+
     # add nodes to the launch description
     ld.add_action(joy_node)
     ld.add_action(joy_teleop_node)

@@ -36,7 +36,7 @@ def generate_launch_description():
 
     # parameters
     mapping_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "config/mapping.yaml"
+        f1tenth_launch_pkg_prefix, "config/mapping/mapping.yaml"
     )
     mapping_param = DeclareLaunchArgument(
         "mapping_param_file",
@@ -88,7 +88,7 @@ def generate_launch_description():
     vehicle_launch_vesc = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(f1tenth_launch_pkg_prefix,
-                         'launch/f1tenth_vehicle_vesc.launch.py'),
+                         'launch/vehicle.launch.py'),
         ),
         condition=IfEqualsCondition("vehicle_interface", "vesc")
     )

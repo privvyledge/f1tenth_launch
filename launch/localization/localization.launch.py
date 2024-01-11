@@ -1,10 +1,11 @@
 """
 This nodes sets up local and global localization.
-* Load map (yaml or posegraph)
-* Launch AMCL (or slam_toolbox)
+* Load map (yaml and/or posegraph)
+* Launch AMCL (or slam_toolbox or particle_filter, etc.)
 * (Optional) Launch IMU Filter
 * (Optional) Launch Laser Filter
-* Launch EKF node
+* Launch Kalman Filter (EKF or UKF) nodes
+
 """
 import os
 from launch import LaunchDescription
@@ -20,7 +21,6 @@ from ament_index_python import get_package_share_directory
 def generate_launch_description():
     # Get path to files and directories
     nav2_pkg_prefix = get_package_share_directory('nav2_bringup')
-
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
 
     # Load parameter files
@@ -50,7 +50,7 @@ def generate_launch_description():
     print(LaunchConfiguration("map_file"))
 
     # Include launch files (run map_server and AMCL nodes).
-    #  Todo: load map separately so it can be loaded without AMCL
+    #  Todo: load map separately so it can be loaded without AMCL. See (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L110)
     nav2_localization = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     os.path.join(nav2_pkg_prefix,
@@ -63,13 +63,20 @@ def generate_launch_description():
     )
 
     # Run nodes
-    ekf_node = Node(
-            package='robot_localization',
-            executable='ekf_node',
-            namespace='vehicle',
-            name='ekf_filter_node_odom',
-            output='screen',
-            parameters=[ekf_param_file],
+    # ekf_node = Node(
+    #         package='robot_localization',
+    #         executable='ekf_node',
+    #         namespace='vehicle',
+    #         name='ekf_filter_node_odom',
+    #         output='screen',
+    #         parameters=[ekf_param_file],
+    # )
+
+    ekf_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    os.path.join(f1tenth_launch_pkg_prefix,
+                                 'launch/localization/dual_ekf.launch.py')
+            )
     )
 
     # imu_filter_node = Node(
@@ -112,7 +119,7 @@ def generate_launch_description():
         map_file,
         nav2_localization,
         ekf_node,
-        # imu_filter_node,
+        imu_filter_node,
         laser_filter_node,
     ])
 

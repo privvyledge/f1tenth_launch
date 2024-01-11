@@ -1,3 +1,8 @@
+"""
+Todo: include ekf_launch files instead of setting nodes
+Todo: add condition to select nodes
+"""
+
 from launch import LaunchDescription
 from ament_index_python.packages import get_package_share_directory
 import launch_ros.actions

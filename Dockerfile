@@ -21,9 +21,6 @@ ENV USERNAME ${USERNAME}
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-ENV NVIDIA_DRIVER_CAPABILITIES all
-ENV NVIDIA_VISIBLE_DEVICES all
-
 RUN groupadd --gid $USER_GID $USERNAME && \
         useradd --uid $USER_UID --gid $USER_GID -m $USERNAME && \
         echo "$USERNAME:$USERNAME" | chpasswd && \
@@ -223,7 +220,10 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_dr
 #    ros-${ROS_DISTRO}-realsense2-* && \
 #    rm -rf /var/lib/apt/lists/*
 ARG LIBREALSENSE_VERSION=development
-RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
+# todo: set envs above instead of exporting
+RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
+    export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
+    cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
     cd librealsense && \
     mkdir build && \
     cd build && \
@@ -255,6 +255,7 @@ RUN cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://git
 # The '--event-handlers console_direct+ --base-paths',  ' -DCMAKE_LIBRARY_PATH' and ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"' flags are needed by ZED
 # The ' -DCMAKE_BUILD_TYPE=Release' flag is for all of them, especially Autoware
 #--------------------------------
+WORKDIR $BUILD_HOME
 RUN sudo apt update && \
     source /opt/ros/${ROS_DISTRO}/setup.bash && \
     rosdep update && \
@@ -281,6 +282,9 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib' >> ~/.bashrc && \
+    echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64' >> ~/.bashrc && \
+    echo 'export PATH=${PATH}:/usr/local/cuda/bin' >> ~/.bashrc && \
+    echo 'CUDACXX=/usr/local/cuda/bin/nvcc' >> ~/.bashrc && \
     echo 'export ACADOS_ROOT=/sdks/acados' >> ~/.bashrc && \
     echo 'export ACADOS_PATH=${ACADOS_ROOT}' >> ~/.bashrc && \
     echo 'export ACADOS_SOURCE_DIR=${ACADOS_ROOT}' >> ~/.bashrc && \
@@ -294,6 +298,10 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
 #    source ${ROS_ROOT}/setup.bash && \
 #    rosdep update && rosdep install --from-paths src -i -y && \
 #    colcon build --symlink-install
+
+
+ENV NVIDIA_DRIVER_CAPABILITIES all
+ENV NVIDIA_VISIBLE_DEVICES all
 
 ## Todo: remove the lines below
 RUN sudo apt update && sudo apt install gedit cheese nautilus net-tools iputils-ping -y
