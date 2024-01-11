@@ -25,7 +25,7 @@ def generate_launch_description():
 
     # Load parameter files
     localization_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, 'config', '/localization/localizer_amcl.yaml')
+        f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_amcl.yaml')
     localization_param = DeclareLaunchArgument(
             'localization_param_file',
             default_value=localization_param_file,

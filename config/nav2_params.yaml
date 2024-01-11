@@ -137,7 +137,7 @@ controller_server:
     failure_tolerance: 0.3
     odom_topic: "/vehicle/odometry/filtered"
     progress_checker_plugins: "progress_checker" # "progress_checker" for Humble and older, ["progress_checker"] otherwise
-    goal_checker_plugins: "goal_checker" # "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
+    goal_checker_plugins: ["goal_checker"] # "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
     controller_plugins: ["FollowPath"]
 
     # Progress checker parameters
