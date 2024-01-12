@@ -109,7 +109,7 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
 #################################################### (Optional) Setup F1tenth. Todo: setup IMU fix on humble branch
 RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git -b ${ROS_DISTRO}-devel && \
     cd f1tenth_system && git submodule update --init --force --remote && \
-    cd vesc && git checkout ros2_imu_fix
+    cd vesc && git checkout ros2_motor_direction_fix
 #################################################### (Optional) Setup VESC
 #################################################### (Optional) Setup Autoware
 
@@ -295,14 +295,9 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
 
 ## RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
-#RUN cd "$BUILD_HOME" && \
-#    source ${ROS_ROOT}/setup.bash && \
-#    rosdep update && rosdep install --from-paths src -i -y && \
-#    colcon build --symlink-install
-
 
 ENV NVIDIA_DRIVER_CAPABILITIES all
-ENV NVIDIA_VISIBLE_DEVICES all
+#ENV NVIDIA_VISIBLE_DEVICES all  # causes graphical failures
 
 ## Todo: remove the lines below
 RUN sudo apt update && sudo apt install gedit cheese nautilus net-tools iputils-ping -y

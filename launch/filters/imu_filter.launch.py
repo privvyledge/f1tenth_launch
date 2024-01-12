@@ -43,7 +43,8 @@ def generate_launch_description():
                 ],
                 # parameters=[imu_filter_param_file],
                 remappings=[
-                    ('/imu/data_raw', '/sensors/imu/raw'),
+                    ('/imu/data_raw', '/vehicle/sensors/imu/raw'),  # input topic: /vehicle/sensors/imu/raw
+                    ('/imu/data', '/vehicle/sensors/imu/data'),  # output topic: /vehicle/sensors/imu/data
                 ]
             ),
 
