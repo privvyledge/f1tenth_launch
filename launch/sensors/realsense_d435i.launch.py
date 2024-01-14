@@ -36,7 +36,7 @@ def generate_launch_description():
 
     # Create a dictionary for substitutable parameters
     param_substitutions = {
-        'unite_imu_method': unite_imu_method,
+        # 'unite_imu_method': unite_imu_method,
     }
 
     configured_params = ParameterFile(
@@ -138,11 +138,12 @@ def generate_launch_description():
                     [f1tenth_launch_dir, 'launch/filters', 'imu_filter.launch.py']
             )),
             condition=IfCondition([launch_imu_filter]),
-            # launch_arguments={
-            #     'pointcloud.enable': 'true',
-            #     'ordered_pc': 'true',
-            #     'initial_reset': 'true'
-            # }.items()
+            launch_arguments={
+                'input_topic': '/camera/imu',
+                'output_topic': '/camera/imu/filtered',
+                'remove_gravity_vector': 'True',
+                'node_name': 'realsense_imu_filter'
+            }.items()
     )
 
     ld.add_action(realsense_node)

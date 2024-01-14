@@ -48,7 +48,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [rtabmap_launch_dir, 'launch', 'realsense_d435i_color.launch.py']
             )),
-            condition=LaunchConfigurationEquals(mapping_mode, 'color'),
+            condition=LaunchConfigurationEquals('mapping_mode', 'color'),
     )
 
     '''
@@ -62,7 +62,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [rtabmap_launch_dir, 'launch', 'realsense_d435i_infra.launch.py']
             )),
-            condition=LaunchConfigurationEquals(mapping_mode, 'infra'),
+            condition=LaunchConfigurationEquals('mapping_mode', 'infra'),
     )
 
     '''
@@ -76,7 +76,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [rtabmap_launch_dir, 'launch', 'realsense_d435i_stereo.launch.py']
             )),
-            condition=LaunchConfigurationEquals(mapping_mode, 'stereo'),
+            condition=LaunchConfigurationEquals('mapping_mode', 'stereo'),
     )
 
     ld.add_action(color_node)

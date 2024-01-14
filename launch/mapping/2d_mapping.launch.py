@@ -30,29 +30,44 @@ def generate_launch_description():
     save_map_timeout = 2.0
     free_thresh_default = 0.25
     occupied_thresh_default = 0.65
+    offline_mapping = LaunchConfiguration('offline_mapping')
+    declare_offline_mapping = DeclareLaunchArgument(
+            "offline_mapping",
+            default_value='True',
+            description="Path to config file for mapping nodes",
+    )
 
     # package paths
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
     slam_toolbox_pkg_prefix = get_package_share_directory('slam_toolbox')
 
     # parameters
-    mapping_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping.yaml"
+    offline_mapping_param_file = os.path.join(
+        f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping_offline.yaml"
     )
-    mapping_param = DeclareLaunchArgument(
-        "mapping_param_file",
-        default_value=mapping_param_file,
+    offline_mapping_param = DeclareLaunchArgument(
+        "offline_mapping_param_file",
+        default_value=offline_mapping_param_file,
         description="Path to config file for mapping nodes",
+    )
+
+    online_mapping_param_file = os.path.join(
+            f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping_online.yaml"
+    )
+    online_mapping_param = DeclareLaunchArgument(
+            "online_mapping_param_file",
+            default_value=online_mapping_param_file,
+            description="Path to config file for mapping nodes",
     )
     map_file_name = os.path.join(f1tenth_launch_pkg_prefix, "data/raslab.yaml")
     map_file_name_la = DeclareLaunchArgument('map_file_name', default_value=map_file_name,
                                              description="location to store the map periodically.")
 
-    with_joy_param = DeclareLaunchArgument(
-        'with_joy',
-        default_value='True',
-        description='Launch joystick_interface in addition to other nodes'
-    )
+    # with_joy_param = DeclareLaunchArgument(
+    #     'with_joy',
+    #     default_value='True',
+    #     description='Launch joystick_interface in addition to other nodes'
+    # )
 
     with_rviz_param = DeclareLaunchArgument(
         'with_rviz',
@@ -91,7 +106,24 @@ def generate_launch_description():
             os.path.join(f1tenth_launch_pkg_prefix,
                          'launch/vehicle/vehicle.launch.py'),
         ),
-        condition=IfEqualsCondition("vehicle_interface", "vesc")
+        condition=IfCondition(PythonExpression(['not ', offline_mapping])),
+        # condition=IfEqualsCondition("vehicle_interface", "vesc")
+    )
+
+    sensor_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    os.path.join(f1tenth_launch_pkg_prefix,
+                                 'launch/sensors/sensors.launch.py'),
+            ),
+            condition=IfCondition(PythonExpression(['not ', offline_mapping])),
+    )
+
+    ekf_odom_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    os.path.join(f1tenth_launch_pkg_prefix,
+                                 'launch/localization/ekf_odom.launch.py'),
+            ),
+            condition=IfCondition(PythonExpression(['not ', offline_mapping])),
     )
 
     # slam_launch = IncludeLaunchDescription(
@@ -100,13 +132,25 @@ def generate_launch_description():
     #                      'launch/online_async_launch.py')
     #     ),
     #     launch_arguments={
-    #         'params_file': LaunchConfiguration('mapping_param_file'),
+    #         'params_file': LaunchConfiguration('offline_mapping_param_file'),
     #     }.items()
     # )
 
-    slam_launch = Node(
+    offline_slam_launch = Node(
+            condition=IfCondition([offline_mapping]),
             parameters=[
-                mapping_param_file
+                offline_mapping_param_file
+            ],
+            package='slam_toolbox',
+            executable='sync_slam_toolbox_node',
+            name='slam_toolbox',
+            output='screen'
+    )
+
+    online_slam_launch = Node(
+            condition=IfCondition(PythonExpression(['not ', offline_mapping])),
+            parameters=[
+                offline_mapping_param_file
             ],
             package='slam_toolbox',
             executable='sync_slam_toolbox_node',
@@ -146,15 +190,20 @@ def generate_launch_description():
                         {'node_names': lifecycle_nodes}])
 
     return LaunchDescription([
-        with_joy_param,
+        declare_offline_mapping,
+        # with_joy_param,
         with_rviz_param,
         vehicle_interface_mode,
-        mapping_param,
+        offline_mapping_param,
+        online_mapping_param,
         map_file_name_la,
         rviz_cfg_path_param,
         # vehicle_launch_svl,
         vehicle_launch_vesc,
-        slam_launch,
+        sensor_launch,
+        ekf_odom_launch,
+        offline_slam_launch,
+        online_slam_launch,
         rviz2,
         start_map_saver_server_cmd,
         start_lifecycle_manager_cmd

@@ -23,11 +23,11 @@
     rgb_camera.profile: 640x480x30  # 640x480x60, 848x480x30, 1280x720x30
     rgb_camera.color_format: bgr8
     rgb_camera:
-      enable_auto_exposure: false
+      enable_auto_exposure: true
     align_depth.enable: true
-#    depth_module.emitter_enable: 0
+    depth_module.emitter_enabled: 0
     depth_module.infra_format: bgr8
-    depth_modul.enable_auto_exposure: false
+    depth_module.enable_auto_exposure: true
     pointcloud.ordered_pc: false
     pointcloud.stream_filter: 2
     pointcloud.allow_no_texture_points: true

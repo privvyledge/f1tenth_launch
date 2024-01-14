@@ -5,7 +5,8 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Pyth
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
-from launch_xml.launch_description_sources import XMLLaunchDescriptionSource, PythonLaunchDescriptionSource
+from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -131,6 +132,18 @@ def generate_launch_description():
                     [f1tenth_launch_dir, 'launch/filters', 'imu_filter.launch.py']
             )),
             condition=IfCondition([launch_imu_filter]),
+            launch_arguments={
+                'input_topic': '/vehicle/sensors/imu/raw',
+                'output_topic': '/vehicle/sensors/imu/data',
+                'remove_gravity_vector': 'False',
+                'node_name': 'vesc_imu_filter'
+            }.items()
+    )
+
+    static_transform_publisher_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                    [f1tenth_launch_dir, 'launch/vehicle', 'static_transformations.launch.py']
+            ))
     )
 
     # add nodes to the launch description
@@ -142,5 +155,7 @@ def generate_launch_description():
     # ld.add_action(throttle_interpolator_node)
     ld.add_action(ackermann_mux_node)
     ld.add_action(twist_to_ackermann_node)
+    ld.add_action(imu_filter_node)
+    ld.add_action(static_transform_publisher_node)
 
     return ld
