@@ -37,7 +37,7 @@ def generate_launch_description():
 
     # parameters
     mapping_param_file = os.path.join(
-        f1tenth_launch_pkg_prefix, "config/mapping/mapping.yaml"
+        f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping.yaml"
     )
     mapping_param = DeclareLaunchArgument(
         "mapping_param_file",
