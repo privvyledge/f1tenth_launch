@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
 Todo: launch realsense URDF/Xacro with robot state publisher using _d435i.urdf.xacro or test_d435i_camera.urdf.xacro (https://navigation.ros.org/setup_guides/urdf/setup_urdf.html  | https://github.com/IntelRealSense/realsense-ros/blob/ros2-development/realsense2_description/launch/view_model.launch.py)
+Todo: switch to XML launch to simplify.
+
+Steps:
+    * include lidar launch file and pass launch filter argument bool to lidar launch file
+    * include camera_depth launch file and pass arguments for camera_depth filter,  IMU and IMU filter
+    * (optional) include depth_image_to_laserscan launch file and pass argument to filter laserscan
+    * (optional) publish lidar odometry
+    * (optional) publish visual odometry
 """
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -19,6 +27,7 @@ import os
 
 
 def generate_launch_description():
+    f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     # Parameter files
     lidar_config = os.path.join(
             get_package_share_directory('f1tenth_launch'),
@@ -55,14 +64,20 @@ def generate_launch_description():
     ld = LaunchDescription([lidar_la, depth_la])
 
     # Nodes
-    lidar_node = LifecycleNode(package='ydlidar_ros2_driver',
-                               executable='ydlidar_ros2_driver_node',
-                               name='ydlidar_ros2_driver_node',
-                               output='screen',
-                               emulate_tty=True,
-                               parameters=[LaunchConfiguration('lidar_config')],
-                               namespace='lidar',
-                               )
+    # lidar_node = LifecycleNode(package='ydlidar_ros2_driver',
+    #                            executable='ydlidar_ros2_driver_node',
+    #                            name='ydlidar_ros2_driver_node',
+    #                            output='screen',
+    #                            emulate_tty=True,
+    #                            parameters=[LaunchConfiguration('lidar_config')],
+    #                            namespace='lidar',
+    #                            )
+
+    lidar_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                    [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
+            ))
+    )
 
     # #################### Begin LaserScan (or PointCloud) to Odometry
     rtabmap_icp_odometry = Node(
@@ -77,7 +92,7 @@ def generate_launch_description():
                 'wait_for_transform': 0.1,
                 # 'wait_imu_to_init ': False, # use if imu is passed
             }],
-            remappings=[('scan', '/lidar/scan'),
+            remappings=[('scan', '/lidar/scan_filtered'),
                         # ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation
                         ('odom', '/odom/rtabmap_icp'),
                         ('odom_last_frame', '/rtabmap_icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
@@ -137,24 +152,30 @@ def generate_launch_description():
     #         launch_arguments={'sensor': depth_sensor_name}.items()
     #     )
 
-    realsense_node = Node(
-            package='realsense2_camera',
-            namespace='camera',
-            name='camera',
-            executable='realsense2_camera_node',
-            parameters=[LaunchConfiguration('depth_config')],
-            output='screen',
-            emulate_tty=True,
-    )
+    # realsense_node = Node(
+    #         package='realsense2_camera',
+    #         namespace='camera',
+    #         name='camera',
+    #         executable='realsense2_camera_node',
+    #         parameters=[LaunchConfiguration('depth_config')],
+    #         output='screen',
+    #         emulate_tty=True,
+    # )
+    #
+    # realsense_imu_node = Node(
+    #         package='realsense2_camera',
+    #         # namespace='sensors/camera',
+    #         name='camera',
+    #         executable='realsense2_camera_node',
+    #         parameters=[LaunchConfiguration('realsense_imu_config')],
+    #         output='screen',
+    #         emulate_tty=True,
+    # )
 
-    realsense_imu_node = Node(
-            package='realsense2_camera',
-            # namespace='sensors/camera',
-            name='camera',
-            executable='realsense2_camera_node',
-            parameters=[LaunchConfiguration('realsense_imu_config')],
-            output='screen',
-            emulate_tty=True,
+    realsense_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                    [f1tenth_launch_dir, 'launch/sensors', 'realsense_d435i.launch.py']
+            ))
     )
 
     depth_to_laserscan_node = Node(
@@ -177,7 +198,7 @@ def generate_launch_description():
     # ld.add_action(rf2o_odometry_node)
     # ld.add_action(laser_scan_matcher_node)
 
-    # ld.add_action(realsense_node)
+    ld.add_action(realsense_node)
     # ld.add_action(realsense_imu_node)
     # ld.add_action(depth_to_laserscan_node)
     return ld

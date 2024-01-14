@@ -52,6 +52,7 @@ RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get inst
     less \
     zstd \
     udev \
+    unzip \
     build-essential \
     apt-transport-https \
     openssh-server libv4l-0 libv4l-dev v4l-utils binutils xz-utils bzip2 lbzip2 \
@@ -107,7 +108,7 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
     sudo rm -rf /var/lib/apt/lists/*
 
 #################################################### (Optional) Setup F1tenth. Todo: setup IMU fix on humble branch
-RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git -b ${ROS_DISTRO}-devel && \
+RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.com/privvyledge/f1tenth_system.git -b foxy-devel && \
     cd f1tenth_system && git submodule update --init --force --remote && \
     cd vesc && git checkout ros2_motor_direction_fix
 #################################################### (Optional) Setup VESC
@@ -180,11 +181,11 @@ RUN git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git 
 #-------------------------------------------------
 # Setup Autoware. Todo: use main branch when done
 #-------------------------------------------------
-ARG AUTOWARE_DIR='src'
-ARG AUTOWARE_FOLDER_NAME='autoware_gokart'
-RUN git clone -b gokart_devel https://github.com/privvyledge/autoware.gokart.git ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME} && \
-    mkdir -p ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/src && \
-    vcs import src/${AUTOWARE_FOLDER_NAME}/src < ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/autoware.repos
+#ARG AUTOWARE_DIR='src'
+#ARG AUTOWARE_FOLDER_NAME='autoware_gokart'
+#RUN git clone -b gokart_devel https://github.com/privvyledge/autoware.gokart.git ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME} && \
+#    mkdir -p ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/src && \
+#    vcs import src/${AUTOWARE_FOLDER_NAME}/src < ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/autoware.repos
 
 WORKDIR /sdks
 
@@ -215,18 +216,41 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_dr
 #    chmod 0777 src/ydlidar_ros2_driver/startup/* && sudo sh src/ydlidar_ros2_driver/startup/initenv.sh
 
 #################################################### Setup Realsense ROS
-#RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
+#RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
 #    ros-${ROS_DISTRO}-librealsense2* \
 #    ros-${ROS_DISTRO}-realsense2-* && \
-#    rm -rf /var/lib/apt/lists/*
-ARG LIBREALSENSE_VERSION=development
+#    sudo rm -rf /var/lib/apt/lists/*
+
 # todo: set envs above instead of exporting
+# branches R/2542, master, development, etc
+#ARG LIBREALSENSE_BRANCH="R/2542"
+#RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
+#    export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
+#    cd /sdks && git clone --branch ${LIBREALSENSE_BRANCH} --depth=1 https://github.com/IntelRealSense/librealsense && \
+#    cd librealsense && \
+#    mkdir build && \
+#    cd build && \
+#    cmake \
+#      -DBUILD_EXAMPLES=true \
+#	   -DFORCE_RSUSB_BACKEND=true \
+#	   -DBUILD_WITH_CUDA=true \
+#	   -DCMAKE_BUILD_TYPE=release \
+#	   -DBUILD_PYTHON_BINDINGS=bool:true \
+#	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+#      -DBUILD_GRAPHICAL_EXAMPLES=true \
+#	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
+#	   ../ && \
+#    make -j$(($(nproc)-1)) && \
+#    sudo make install && \
+#    cd ../ && \
+#    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
+
+ARG LIBREALSENSE_VERSION="2.54.2"
 RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
     export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
-    cd /sdks && git clone --branch ${LIBREALSENSE_VERSION} --depth=1 https://github.com/IntelRealSense/librealsense && \
-    cd librealsense && \
-    mkdir build && \
-    cd build && \
+    cd /sdks && wget https://github.com/IntelRealSense/librealsense/archive/refs/tags/v${LIBREALSENSE_VERSION}.zip && \
+    unzip "v${LIBREALSENSE_VERSION}.zip" && rm "v${LIBREALSENSE_VERSION}.zip" && \
+    mv librealsense-${LIBREALSENSE_VERSION} librealsense && cd librealsense && mkdir build && cd build && \
     cmake \
        -DBUILD_EXAMPLES=true \
 	   -DFORCE_RSUSB_BACKEND=true \
@@ -234,21 +258,24 @@ RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linu
 	   -DCMAKE_BUILD_TYPE=release \
 	   -DBUILD_PYTHON_BINDINGS=bool:true \
 	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-       -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=true \
+       -DBUILD_GRAPHICAL_EXAMPLES=true \
 	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
 	   ../ && \
     make -j$(($(nproc)-1)) && \
-    sudo make install && \
+    sudo make install &&  \
     cd ../ && \
-    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/ && \
-    sudo apt install ros-${ROS_DISTRO}-realsense2-*
+    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
 
-# Setup UDEV Rules. Disconnect all cameras. Todo: For now causes build to fail. Test after disconnecting. Might need to setup udev rules on host instead of docker.
+# Setup UDEV Rules. Disconnect all cameras. Todo: Might need to setup udev rules on host instead of docker.
 # Todo: test setting up udev rules as root (https://forums.docker.com/t/udevadm-control-reload-rules/135564)
-#RUN #sudo udevadm control --reload-rules && udevadm trigger
-## or
-#RUN cd /sdks/librealsense && ./scripts/setup_udev_rules.sh
 
+# Install realsense ros
+# RUN sudo apt install -y --no-install-recommends ros-${ROS_DISTRO}-realsense2-*
+ARG REALSENSE_ROS_VERSION=4.54.1
+RUN cd ${BUILD_HOME}/src && wget https://github.com/IntelRealSense/realsense-ros/archive/refs/tags/${REALSENSE_ROS_VERSION}.zip && \
+    unzip ${REALSENSE_ROS_VERSION}.zip && \
+    mv realsense-ros-${REALSENSE_ROS_VERSION}/ realsense-ros && \
+    rm ${REALSENSE_ROS_VERSION}.zip
 
 #--------------------------------
 # Build ROS workspace

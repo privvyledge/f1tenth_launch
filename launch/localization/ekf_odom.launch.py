@@ -49,7 +49,7 @@ def generate_launch_description():
     # It only applies when `use_namespace` is True.
     # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
     # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
+    # User defined config file should contain '<robot_namespace>' keyword for the replacements. todo: remove and just add the namespace a node argument instead
     params_file = ReplaceString(
             source_file=params_file,
             replacements={'<robot_namespace>': ('/', namespace)},
@@ -73,12 +73,12 @@ def generate_launch_description():
 
     declare_use_namespace_cmd = DeclareLaunchArgument(
             'use_namespace',
-            default_value='false',
+            default_value='False',
             description='Whether to apply a namespace to the navigation stack')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
-            default_value='false',
+            default_value='False',
             description='Use simulation (Gazebo) clock if true')
 
     declare_params_file_cmd = DeclareLaunchArgument(
@@ -99,11 +99,11 @@ def generate_launch_description():
             description='log level')
 
     declare_kf_type = DeclareLaunchArgument(
-            'use_ekf', default_value='true',
-            description='whether to use ekf. If false uses ukf insted')
+            'use_ekf', default_value='True',
+            description='whether to use ekf. If false uses ukf instead')
 
     declare_node_name = DeclareLaunchArgument(
-            'node_name', default_value='ekf',
+            'node_name', default_value='ekf_node',
             description='ekf_node, ukf_node')
 
     # Specify actions/nodes

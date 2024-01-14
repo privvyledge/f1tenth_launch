@@ -3,6 +3,7 @@ Todo: launch joystick in a separate package, i.e vehicle_bringup
 Todo: pass arguments to mapper
 Todo: load from ROSBAG
 Todo: refer to https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/slam_launch.py
+Todo: add argument to select online/offline mapping
 """
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -10,7 +11,7 @@ from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, LaunchConfigurationEquals
 
 import os
 
@@ -74,21 +75,21 @@ def generate_launch_description():
     )
 
     # nodes
-    vehicle_launch_svl = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(f1tenth_launch_pkg_prefix,
-                         'launch/f1tenth_vehicle_svl.launch.py'),
-        ),
-        launch_arguments={
-            'with_joy': LaunchConfiguration('with_joy'),
-        }.items(),
-        condition=IfEqualsCondition("vehicle_interface", "svl")
-    )
+    # vehicle_launch_svl = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(f1tenth_launch_pkg_prefix,
+    #                      'launch/f1tenth_vehicle_svl.launch.py'),
+    #     ),
+    #     launch_arguments={
+    #         'with_joy': LaunchConfiguration('with_joy'),
+    #     }.items(),
+    #     condition=IfEqualsCondition("vehicle_interface", "svl")
+    # )
 
     vehicle_launch_vesc = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(f1tenth_launch_pkg_prefix,
-                         'launch/vehicle.launch.py'),
+                         'launch/vehicle/vehicle.launch.py'),
         ),
         condition=IfEqualsCondition("vehicle_interface", "vesc")
     )
@@ -151,7 +152,7 @@ def generate_launch_description():
         mapping_param,
         map_file_name_la,
         rviz_cfg_path_param,
-        vehicle_launch_svl,
+        # vehicle_launch_svl,
         vehicle_launch_vesc,
         slam_launch,
         rviz2,

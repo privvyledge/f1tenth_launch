@@ -1,93 +1,90 @@
-# MIT License
-
-# Copyright (c) 2020 Hongrui Zheng
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.substitutions import Command
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
-from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
+from launch.conditions import IfCondition, LaunchConfigurationEquals
+from launch_xml.launch_description_sources import XMLLaunchDescriptionSource, PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
 
 
 def generate_launch_description():
-    joy_teleop_config = os.path.join(
-            get_package_share_directory('f1tenth_launch'),
-            'config',
+    f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
+    joy_teleop_config_file = os.path.join(
+            f1tenth_launch_dir,
+            'config/vehicle',
             'joy_teleop.yaml'
     )
-    vesc_config = os.path.join(
-            get_package_share_directory('f1tenth_launch'),
-            'config',
+    vesc_config_file = os.path.join(
+            f1tenth_launch_dir,
+            'config/vehicle',
             'vesc.yaml'
     )
-    mux_config = os.path.join(
+    mux_config_file = os.path.join(
             get_package_share_directory('f1tenth_stack'),
             'config',
             'mux.yaml'
     )
 
+    # Create the launch configuration variables
+    vesc_config = LaunchConfiguration('vesc_config')
+    joy_config = LaunchConfiguration('joy_config')
+    mux_config = LaunchConfiguration('mux_config')
+    launch_joystick = LaunchConfiguration('launch_joystick')
+    launch_imu_filter = LaunchConfiguration('launch_imu_filter')
+
     joy_la = DeclareLaunchArgument(
             'joy_config',
-            default_value=joy_teleop_config,
+            default_value=joy_teleop_config_file,
             description='Descriptions for joy and joy_teleop configs')
     vesc_la = DeclareLaunchArgument(
             'vesc_config',
-            default_value=vesc_config,
+            default_value=vesc_config_file,
             description='Descriptions for vesc configs')
     mux_la = DeclareLaunchArgument(
             'mux_config',
-            default_value=mux_config,
+            default_value=mux_config_file,
             description='Descriptions for ackermann mux configs')
+    declare_launch_joystick = DeclareLaunchArgument(
+            'launch_joystick',
+            default_value='True',
+            description='Whether to start the joystick node.')
+    declare_launch_imu_filter = DeclareLaunchArgument(
+            'launch_imu_filter',
+            default_value='True',
+            description='Whether to start the joystick node.')
 
-    ld = LaunchDescription([joy_la, vesc_la, mux_la])
+    ld = LaunchDescription([joy_la, vesc_la, mux_la,
+                            declare_launch_joystick, declare_launch_imu_filter])
 
     joy_node = Node(
+            condition=IfCondition([launch_joystick]),
             package='joy',
             executable='joy_node',
             name='joy',
-            parameters=[LaunchConfiguration('joy_config')]
+            parameters=[joy_config]
     )
     joy_teleop_node = Node(
             package='joy_teleop',
             executable='joy_teleop',
             name='joy_teleop',
-            parameters=[LaunchConfiguration('joy_config')]
+            parameters=[joy_config]
     )
     ackermann_to_vesc_node = Node(
             package='vesc_ackermann',
             executable='ackermann_to_vesc_node',
             name='ackermann_to_vesc_node',
             namespace='vehicle',
-            parameters=[LaunchConfiguration('vesc_config')]
+            parameters=[vesc_config]
     )
     vesc_to_odom_node = Node(
             package='vesc_ackermann',
             executable='vesc_to_odom_node',
             name='vesc_to_odom_node',
             namespace='vehicle',  # autoware
-            parameters=[LaunchConfiguration('vesc_config')],
+            parameters=[vesc_config],
             remappings=[  # ('/odom', '/vesc/odom'),
                 ('odom', 'vesc_odom'),  # autoware
             ]
@@ -97,25 +94,25 @@ def generate_launch_description():
             executable='vesc_driver_node',
             name='vesc_driver_node',
             namespace='vehicle',  # autoware
-            parameters=[LaunchConfiguration('vesc_config')]
+            parameters=[vesc_config]
     )
     throttle_interpolator_node = Node(
             package='f1tenth_stack',
             executable='throttle_interpolator',
             name='throttle_interpolator',
-            parameters=[LaunchConfiguration('vesc_config')]
+            parameters=[vesc_config]
     )
     ackermann_mux_node = Node(
             package='ackermann_mux',
             executable='ackermann_mux',
             name='ackermann_mux',
-            parameters=[LaunchConfiguration('mux_config')],
+            parameters=[mux_config],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
                         ('ackermann_cmd', '/vehicle/ackermann_cmd')]
     )
 
     twist_to_ackermann_node = Node(
-            package='trajectory_following_ros2',
+            package='trajectory_following_ros2',   # todo: put package in this repository and make parameters input.
             executable='twist_to_ackermann',
             name='twist_to_ackermann_converter',
             parameters=[
@@ -127,7 +124,14 @@ def generate_launch_description():
             ],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
                         ('ackermann_cmd', '/vehicle/ackermann_cmd')]
-    )  # todo: put package in this repository and make parameters input.
+    )
+
+    imu_filter_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                    [f1tenth_launch_dir, 'launch/filters', 'imu_filter.launch.py']
+            )),
+            condition=IfCondition([launch_imu_filter]),
+    )
 
     # add nodes to the launch description
     ld.add_action(joy_node)
@@ -137,5 +141,6 @@ def generate_launch_description():
     ld.add_action(vesc_driver_node)
     # ld.add_action(throttle_interpolator_node)
     ld.add_action(ackermann_mux_node)
+    ld.add_action(twist_to_ackermann_node)
 
     return ld
