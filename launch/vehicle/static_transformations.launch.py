@@ -15,12 +15,12 @@ def generate_launch_description():
             arguments=['0.11815', '0.0', '0.1491', '0.0', '0.0', '0.0', 'base_link', 'lidar']
     )  # YDLidar
 
-    camera_static_tf_node = Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='static_baselink_to_camera',
-            arguments=['0.24115', '0.0', '0.0961', '0.0', '0.0', '0.0', 'base_link', 'camera_link']
-    )  # Realsense
+    # camera_static_tf_node = Node(
+    #         package='tf2_ros',
+    #         executable='static_transform_publisher',
+    #         name='static_baselink_to_camera',
+    #         arguments=['0.24115', '0.0', '0.0961', '0.0', '0.0', '0.0', 'base_link', 'camera_link']
+    # )  # Realsense
 
     vesc_imu_static_tf_node = Node(
             package='tf2_ros',

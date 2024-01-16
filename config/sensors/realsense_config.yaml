@@ -3,7 +3,7 @@
 #    device_type: d435i
 #    camera_name: 'camera'
 #    camera_namespace: 'camera'
-    initial_reset: true
+    initial_reset: false
 #    base_frame_id: camera_link
 
     enable_sync: true

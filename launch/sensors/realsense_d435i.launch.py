@@ -23,7 +23,7 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 
 def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
-    urdf_path = os.path.join(get_package_share_directory('realsense2_description'), 'urdf/test_d435i_camera.urdf.xacro')
+    urdf_path = os.path.join(get_package_share_directory('f1tenth_launch'), 'urdf/f1tenth.urdf.xacro')
 
     # Create the launch configuration variables
     config_file = LaunchConfiguration('config_file')
@@ -152,9 +152,8 @@ def generate_launch_description():
             executable='robot_state_publisher',
             name='realsense_state_publisher',
             parameters=[{
-                'robot_description': ParameterValue(Command(['xacro ', str(urdf_path)], ' ',
-                                             'use_nominal_extrinsics:=True', ' ',
-                                             'add_plug:=True'), value_type=str)
+                'robot_description': ParameterValue(Command(['xacro ', str(urdf_path), ' ',
+                                             'use_nominal_extrinsics:=False']), value_type=str)
             }],
             output='screen'
     )

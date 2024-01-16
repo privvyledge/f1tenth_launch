@@ -5,8 +5,8 @@
   <xacro:arg name="use_nominal_extrinsics" default="False" />
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro"/>
 
-<!--  <link name="base_link" />-->
-  <xacro:sensor_d435i parent="base_link" use_nominal_extrinsics="$(arg use_nominal_extrinsics)" add_plug="False" use_mesh="True">
-<!--    <origin xyz="0.24115 0 0.0961" rpy="0 0 0"/>-->
+  <link name="base_link" />
+  <xacro:sensor_d435i parent="base_link" use_nominal_extrinsics="$(arg use_nominal_extrinsics)">
+    <origin xyz="0.24115 0 0.0961" rpy="0 0 0"/>
   </xacro:sensor_d435i>
 </robot>
