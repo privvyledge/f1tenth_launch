@@ -17,12 +17,13 @@ from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
-from launch_ros.descriptions import ParameterFile
+from launch_ros.descriptions import ParameterFile, ParameterValue
 from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
 def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
+    urdf_path = os.path.join(get_package_share_directory('realsense2_description'), 'urdf/test_d435i_camera.urdf.xacro')
 
     # Create the launch configuration variables
     config_file = LaunchConfiguration('config_file')
@@ -146,8 +147,21 @@ def generate_launch_description():
             }.items()
     )
 
+    robot_state_publisher_node = Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='realsense_state_publisher',
+            parameters=[{
+                'robot_description': ParameterValue(Command(['xacro ', str(urdf_path)], ' ',
+                                             'use_nominal_extrinsics:=True', ' ',
+                                             'add_plug:=True'), value_type=str)
+            }],
+            output='screen'
+    )
+
     ld.add_action(realsense_node)
     ld.add_action(realsense_imu_node)
     ld.add_action(imu_filter_node)
+    ld.add_action(robot_state_publisher_node)
 
     return ld

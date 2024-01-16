@@ -3,8 +3,8 @@
 #    device_type: d435i
 #    camera_name: 'camera'
 #    camera_namespace: 'camera'
-    initial_reset: false
-    base_frame_id: camera_link
+    initial_reset: true
+#    base_frame_id: camera_link
 
     enable_sync: true
     enable_depth: true
@@ -19,18 +19,18 @@
     enable_rgbd: false
     pointcloud.enable: true
 
-    depth_module.profile: 640x480x30  # 640x480x60, 848x480x30, 1280x720x30
-    rgb_camera.profile: 640x480x30  # 640x480x60, 848x480x30, 1280x720x30
+    depth_module.profile: 640x480x15  # 640x480x60, 848x480x30, 1280x720x30
+    rgb_camera.profile: 640x480x15  # 640x480x60, 848x480x30, 1280x720x30
     rgb_camera.color_format: bgr8
     rgb_camera:
       enable_auto_exposure: true
-    align_depth.enable: true
+#    align_depth.enable: true
     depth_module.emitter_enabled: 0
-    depth_module.infra_format: bgr8
+#    depth_module.infra_format: bgr8
     depth_module.enable_auto_exposure: true
     pointcloud.ordered_pc: false
     pointcloud.stream_filter: 2
-    pointcloud.allow_no_texture_points: true
+    pointcloud.allow_no_texture_points: false
     colorizer.enable: false
 
     gyro_fps: 200 # 200, 400

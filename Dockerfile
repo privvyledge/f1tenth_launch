@@ -43,6 +43,10 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 ENV ROS_ROOT=/opt/ros/${ROS_DISTRO}
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
+
+ENV NVIDIA_DRIVER_CAPABILITIES all
+#ENV NVIDIA_VISIBLE_DEVICES all  # causes graphical failures
+
 # Install packages
 RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     sudo \
@@ -223,48 +227,48 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_dr
 
 # todo: set envs above instead of exporting
 # branches R/2542, master, development, etc
-#ARG LIBREALSENSE_BRANCH="R/2542"
-#RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
-#    export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
-#    cd /sdks && git clone --branch ${LIBREALSENSE_BRANCH} --depth=1 https://github.com/IntelRealSense/librealsense && \
-#    cd librealsense && \
-#    mkdir build && \
-#    cd build && \
-#    cmake \
-#      -DBUILD_EXAMPLES=true \
-#	   -DFORCE_RSUSB_BACKEND=true \
-#	   -DBUILD_WITH_CUDA=true \
-#	   -DCMAKE_BUILD_TYPE=release \
-#	   -DBUILD_PYTHON_BINDINGS=bool:true \
-#	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-#      -DBUILD_GRAPHICAL_EXAMPLES=true \
-#	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
-#	   ../ && \
-#    make -j$(($(nproc)-1)) && \
-#    sudo make install && \
-#    cd ../ && \
-#    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
-
-ARG LIBREALSENSE_VERSION="2.54.2"
+ARG LIBREALSENSE_BRANCH="R/2542"
 RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
     export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
-    cd /sdks && wget https://github.com/IntelRealSense/librealsense/archive/refs/tags/v${LIBREALSENSE_VERSION}.zip && \
-    unzip "v${LIBREALSENSE_VERSION}.zip" && rm "v${LIBREALSENSE_VERSION}.zip" && \
-    mv librealsense-${LIBREALSENSE_VERSION} librealsense && cd librealsense && mkdir build && cd build && \
+    cd /sdks && git clone --branch ${LIBREALSENSE_BRANCH} --depth=1 https://github.com/IntelRealSense/librealsense && \
+    cd librealsense && \
+    mkdir build && \
+    cd build && \
     cmake \
-       -DBUILD_EXAMPLES=true \
+      -DBUILD_EXAMPLES=true \
 	   -DFORCE_RSUSB_BACKEND=true \
 	   -DBUILD_WITH_CUDA=true \
 	   -DCMAKE_BUILD_TYPE=release \
 	   -DBUILD_PYTHON_BINDINGS=bool:true \
 	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-       -DBUILD_GRAPHICAL_EXAMPLES=true \
+      -DBUILD_GRAPHICAL_EXAMPLES=true \
 	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
 	   ../ && \
     make -j$(($(nproc)-1)) && \
-    sudo make install &&  \
+    sudo make install && \
     cd ../ && \
     sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
+
+#ARG LIBREALSENSE_VERSION="2.54.2"
+#RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
+#    export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
+#    cd /sdks && wget https://github.com/IntelRealSense/librealsense/archive/refs/tags/v${LIBREALSENSE_VERSION}.zip && \
+#    unzip "v${LIBREALSENSE_VERSION}.zip" && rm "v${LIBREALSENSE_VERSION}.zip" && \
+#    mv librealsense-${LIBREALSENSE_VERSION} librealsense && cd librealsense && mkdir build && cd build && \
+#    cmake \
+#       -DBUILD_EXAMPLES=true \
+#	   -DFORCE_RSUSB_BACKEND=true \
+#	   -DBUILD_WITH_CUDA=true \
+#	   -DCMAKE_BUILD_TYPE=release \
+#	   -DBUILD_PYTHON_BINDINGS=bool:true \
+#	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+#       -DBUILD_GRAPHICAL_EXAMPLES=true \
+#	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
+#	   ../ && \
+#    make -j$(($(nproc)-1)) && \
+#    sudo make install &&  \
+#    cd ../ && \
+#    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
 
 # Setup UDEV Rules. Disconnect all cameras. Todo: Might need to setup udev rules on host instead of docker.
 # Todo: test setting up udev rules as root (https://forums.docker.com/t/udevadm-control-reload-rules/135564)
@@ -322,9 +326,6 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
 
 ## RUN ros2 doctor # run this if the LIDAR doesn't run (https://github.com/YDLIDAR/ydlidar_ros2_driver/issues/10)
-
-ENV NVIDIA_DRIVER_CAPABILITIES all
-#ENV NVIDIA_VISIBLE_DEVICES all  # causes graphical failures
 
 ## Todo: remove the lines below
 RUN sudo apt update && sudo apt install gedit cheese nautilus net-tools iputils-ping -y
