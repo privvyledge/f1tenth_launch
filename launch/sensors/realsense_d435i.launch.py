@@ -147,6 +147,8 @@ def generate_launch_description():
             }.items()
     )
 
+    # set use_nominal_extrinsics:=True to use ideal dimensions instead of the calibrated dimensions.
+    # Useful for simulations, e.g Gazebo
     robot_state_publisher_node = Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',

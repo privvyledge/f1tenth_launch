@@ -38,7 +38,7 @@ def generate_launch_description():
 
     ld = LaunchDescription([
         lidar_static_tf_node,
-        camera_static_tf_node,
+        # camera_static_tf_node,
         vesc_imu_static_tf_node,
         base_footprint_tf_node,
     ])
