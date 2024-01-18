@@ -11,7 +11,8 @@ Steps:
     * (optional) publish visual odometry
 """
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 from launch_ros.actions import LifecycleNode
 from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -48,6 +49,8 @@ def generate_launch_description():
     # )
 
     depth_sensor_name = 'realsense'
+    stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
+    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
 
     # Launch Arguments
     lidar_la = DeclareLaunchArgument('lidar_config',
@@ -59,20 +62,17 @@ def generate_launch_description():
     realsense_imu_la = DeclareLaunchArgument('realsense_imu_config',
                                              default_value=realsense_imu_config,
                                              description='Path to the Realsense IMU parameters file to use.')
+    stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud_config',
+                                                    default_value='False',
+                                                    description='Whether to publish a PointCloud2 message from stereo images.')
+    depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud_config',
+                                                        default_value='False',
+                                                        description='Whether to publish a PointCloud2 message from a depth image.')
 
     # Create Launch Description
-    ld = LaunchDescription([lidar_la, depth_la])
+    ld = LaunchDescription([lidar_la, depth_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la])
 
     # Nodes
-    # lidar_node = LifecycleNode(package='ydlidar_ros2_driver',
-    #                            executable='ydlidar_ros2_driver_node',
-    #                            name='ydlidar_ros2_driver_node',
-    #                            output='screen',
-    #                            emulate_tty=True,
-    #                            parameters=[LaunchConfiguration('lidar_config')],
-    #                            namespace='lidar',
-    #                            )
-
     lidar_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
@@ -99,20 +99,20 @@ def generate_launch_description():
                         ]
     )
 
-    # rf2o_odometry_node = Node(
-    #         package='rf2o_laser_odometry',
-    #         executable='rf2o_laser_odometry_node',
-    #         name='rf2o_laser_odometry',
-    #         output='screen',
-    #         parameters=[{
-    #             'laser_scan_topic': '/lidar/scan',
-    #             'odom_topic': '/odom/rf2o',
-    #             'publish_tf': False,
-    #             'base_frame_id': 'base_link',
-    #             'odom_frame_id': 'odom',
-    #             'init_pose_from_topic': '',
-    #             'freq': 10.0}],
-    # )
+    rf2o_odometry_node = Node(
+            package='rf2o_laser_odometry',
+            executable='rf2o_laser_odometry_node',
+            name='rf2o_laser_odometry',
+            output='screen',
+            parameters=[{
+                'laser_scan_topic': '/lidar/scan_filtered',
+                'odom_topic': '/odom/rf2o',
+                'publish_tf': False,
+                'base_frame_id': 'base_link',
+                'odom_frame_id': 'odom',
+                'init_pose_from_topic': '',
+                'freq': 10.0}],
+    )
 
     laser_scan_matcher_node = Node(
             package='ros2_laser_scan_matcher',
@@ -134,43 +134,11 @@ def generate_launch_description():
 
     # #################### End LaserScan (or PointCloud) to Odometry
 
-    # realsense_node = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(PathJoinSubstitution(
-    #             [FindPackageShare('realsense2_camera'), 'launch', 'rs_launch.py']
-    #         )),
-    #         condition=LaunchConfigurationEquals('sensor', 'realsense'),
-    #         launch_arguments={
-    #             'pointcloud.enable': 'true',
-    #             'ordered_pc': 'true',
-    #             'initial_reset': 'true'
-    #         }.items()
-    #     )
-
     # depth_image_node = IncludeLaunchDescription(
     #         PythonLaunchDescriptionSource(depth_launch_path),
     #         condition=IfCondition(PythonExpression(['"" != "', depth_sensor_name, '"'])),
     #         launch_arguments={'sensor': depth_sensor_name}.items()
     #     )
-
-    # realsense_node = Node(
-    #         package='realsense2_camera',
-    #         namespace='camera',
-    #         name='camera',
-    #         executable='realsense2_camera_node',
-    #         parameters=[LaunchConfiguration('depth_config')],
-    #         output='screen',
-    #         emulate_tty=True,
-    # )
-    #
-    # realsense_imu_node = Node(
-    #         package='realsense2_camera',
-    #         # namespace='sensors/camera',
-    #         name='camera',
-    #         executable='realsense2_camera_node',
-    #         parameters=[LaunchConfiguration('realsense_imu_config')],
-    #         output='screen',
-    #         emulate_tty=True,
-    # )
 
     realsense_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
@@ -184,21 +152,103 @@ def generate_launch_description():
             name='depthimage_to_laserscan_node',
             output='screen',
             parameters=[{'scan_time': 0.0333},
-                        {'output_frame': "camera_depth"},
+                        {'output_frame': "camera_link"},
                         {'range_min': 0.45},
-                        {'range_max': 4.0}],
+                        {'range_max': 10.0}],
             arguments=['depth:=/camera/depth/image_rect_raw',
                        'depth_camera_info:=/camera/depth/camera_info',
-                       'scan:=/scan'])
+                       'scan:=/scan/depth_image'])
+
+    # ################# Depth Image to PointCloud
+    depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
+            condition=IfCondition([depthimage_to_pointcloud]),
+            name='depth_image_container',
+            namespace='',
+            package='rclcpp_components',
+            executable='component_container',
+            composable_node_descriptions=[
+                # Driver itself
+                ComposableNode(
+                        package='depth_image_proc',
+                        plugin='depth_image_proc::PointCloudXyzNode',
+                        name='point_cloud_xyz_node',
+                        remappings=[('image_rect', '/camera/depth/image_rect_raw'),  # or aligned depth
+                                    ('camera_info', '/camera/depth/camera_info'),
+                                    ('image', '/camera/depth/converted_image')]
+                ),
+            ],
+            output='screen',
+    )
+
+    stereo_to_pointcloud_node = ComposableNodeContainer(
+            condition=IfCondition([stereo_to_pointcloud]),
+            name='stereo_image_container',
+            namespace='',
+            package='rclcpp_components',
+            executable='component_container',
+            composable_node_descriptions=[
+                ComposableNode(
+                        condition=IfCondition([stereo_to_pointcloud]),
+                        package='stereo_image_proc',
+                        plugin='stereo_image_proc::DisparityNode',
+                        parameters=[{
+                            'approximate_sync': 'True',
+                            'use_system_default_qos': 'False',
+                            'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
+                            'prefilter_size': '9',
+                            'prefilter_cap': '31',
+                            'correlation_window_size': '15',
+                            'min_disparity': '0',
+                            'disparity_range': '64',
+                            'texture_threshold': '10',
+                            'speckle_size': '100',
+                            'speckle_range': '4',
+                            'disp12_max_diff': '0',
+                            'uniqueness_ratio': '15.0',
+                            'P1': '200.0',
+                            'P2': '400.0',
+                            'full_dp': 'False',
+                            'queue_size': '1',
+                        }],
+                        remappings=[
+                            ('left/image_rect', '/camera/infra1/image_rect_raw'),
+                            ('left/camera_info', '/camera/infra1/camera_info'),
+                            ('right/image_rect', '/camera/infra2/image_rect_raw'),
+                            ('right/camera_info', '/camera/infra2/camera_info'),
+                        ]
+                ),
+                ComposableNode(
+                        condition=IfCondition([stereo_to_pointcloud]),
+                        package='stereo_image_proc',
+                        plugin='stereo_image_proc::PointCloudNode',
+                        parameters=[{
+                            'approximate_sync': 'True',
+                            'avoid_point_cloud_padding': 'False',
+                            'use_color': 'False',
+                            'use_system_default_qos': 'False',
+                            'queue_size': '1',
+                        }],
+                        remappings=[
+                            ('left/camera_info', '/camera/infra1/camera_info'),
+                            ('right/camera_info', '/camera/infra2/camera_info'),
+                            ('left/image_rect_color', '/camera/infra1/image_rect_raw'),
+                        ]
+                ),
+            ],
+            output='screen',
+    )
 
     # Add nodes to launch description
     ld.add_action(lidar_node)
 
     ld.add_action(rtabmap_icp_odometry)
-    # ld.add_action(rf2o_odometry_node)
+    ld.add_action(rf2o_odometry_node)
     # ld.add_action(laser_scan_matcher_node)
 
     ld.add_action(realsense_node)
     # ld.add_action(realsense_imu_node)
-    # ld.add_action(depth_to_laserscan_node)
+    ld.add_action(depth_to_laserscan_node)
+
+    ld.add_action(depth_image_to_pointcloud_xyz_node)
+    ld.add_action(stereo_to_pointcloud_node)
     return ld

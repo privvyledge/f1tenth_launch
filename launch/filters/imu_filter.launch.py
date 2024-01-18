@@ -6,6 +6,7 @@ import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.actions import DeclareLaunchArgument
 from ament_index_python.packages import get_package_share_directory
 
@@ -37,6 +38,7 @@ def generate_launch_description():
     output_topic = LaunchConfiguration('output_topic')
     remove_gravity_vector = LaunchConfiguration('remove_gravity_vector')
     node_name = LaunchConfiguration('node_name')
+    use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
 
     input_topic_la = DeclareLaunchArgument(
             'input_topic',
@@ -55,12 +57,18 @@ def generate_launch_description():
             'node_name',
             default_value='imu_filter',
             description='Whether or not to remove the gravity vector.')
+    use_madgwick_filter_la = DeclareLaunchArgument(
+            'use_madgwick_filter',
+            default_value='True',
+            description='Whether or not to use the Madgwick Filter. Uses the complementary filter if False.')
 
-    ld = LaunchDescription([imu_frame_la, input_topic_la, output_topic_la, remove_gravity_vector_la, node_name_la])
+    ld = LaunchDescription([imu_frame_la, input_topic_la, output_topic_la,
+                            remove_gravity_vector_la, node_name_la, use_madgwick_filter_la])
 
-    imu_filter_node = Node(
-                package='imu_complementary_filter',
-                executable='complementary_filter_node',
+    imu_madgwick_filter_node = Node(
+                condition=IfCondition([use_madgwick_filter]),
+                package='imu_filter_madgwick',
+                executable='imu_filter_madgwick_node',
                 name=node_name,
                 output='screen',
                 parameters=[
@@ -74,7 +82,7 @@ def generate_launch_description():
                     {'remove_gravity_vector': remove_gravity_vector},
                     {'publish_tf': publish_tf},
                     {'reverse_tf': reverse_tf},
-                ],
+                ],  # todo: use parameter file instead
                 # parameters=[imu_filter_param_file],
                 remappings=[
                     ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
@@ -82,6 +90,32 @@ def generate_launch_description():
                 ]
             )
 
-    ld.add_action(imu_filter_node)
+    imu_complementary_filter_node = Node(
+            condition=IfCondition(PythonExpression(['not ', use_madgwick_filter])),
+            package='imu_complementary_filter',
+            executable='complementary_filter_node',
+            name=node_name,
+            output='screen',
+            parameters=[
+                {'do_bias_estimation': True},
+                {'do_adaptive_gain': True},
+                {'use_mag': False},
+                {'gain_acc': 0.01},
+                {'gain_mag': 0.01},
+                {'fixed_frame': imu_frame},
+                {'world_frame': "enu"},
+                {'remove_gravity_vector': remove_gravity_vector},
+                {'publish_tf': publish_tf},
+                {'reverse_tf': reverse_tf},
+            ],  # todo: use parameter file instead
+            # parameters=[imu_filter_param_file],
+            remappings=[
+                ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
+                ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
+            ]
+    )
+
+    ld.add_action(imu_madgwick_filter_node)
+    ld.add_action(imu_complementary_filter_node)
 
     return ld

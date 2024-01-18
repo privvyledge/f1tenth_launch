@@ -169,11 +169,19 @@ RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get instal
 #RUN cd "$BUILD_HOME/src" && git clone https://github.com/Adlink-ROS/rf2o_laser_odometry.git && \
 #    git clone https://github.com/AlexKaravaev/csm && git clone https://github.com/AlexKaravaev/ros2_laser_scan_matcher.git
 
+#################################################### Setup rf2o laser odometry
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/MAPIRlab/rf2o_laser_odometry.git
+
 #################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
 #RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap.git && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
 #    cd rtabmap_ros && rosdep install -q -y -r --from-paths src --ignore-src
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-rtabmap* && \
+    sudo rm -rf /var/lib/apt/lists/*
+
+#################################################### Setup Image Proc (e.g PointClouds from depth or stereo images)
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-image-pipeline && \
     sudo rm -rf /var/lib/apt/lists/*
 
 #-------------------------------------------------

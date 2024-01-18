@@ -136,7 +136,8 @@ def generate_launch_description():
                 'input_topic': '/vehicle/sensors/imu/raw',
                 'output_topic': '/vehicle/sensors/imu/data',
                 'remove_gravity_vector': 'False',
-                'node_name': 'vesc_imu_filter'
+                'node_name': 'vesc_imu_filter',
+                'use_madgwick_filter': 'True',
             }.items()
     )
 

@@ -2,9 +2,9 @@
   ros__parameters:
     stateless: false
     use_mag: false
-    publish_tf: true
+    publish_tf: false  # true
     reverse_tf: false
-    fixed_frame: "imu_link"  # imu_link, base_lnk, odom
+    fixed_frame: "imu_link"  # imu_link, base_link, odom
     constant_dt: 0.0
     publish_debug_topics: false
     world_frame: "enu"

@@ -143,7 +143,8 @@ def generate_launch_description():
                 'input_topic': '/camera/imu',
                 'output_topic': '/camera/imu/filtered',
                 'remove_gravity_vector': 'True',
-                'node_name': 'realsense_imu_filter'
+                'node_name': 'realsense_imu_filter',
+                'use_madgwick_filter': 'True',
             }.items()
     )
 

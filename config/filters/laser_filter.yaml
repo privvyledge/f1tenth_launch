@@ -14,6 +14,6 @@
 
         invert: false # activate to remove all points outside of the box
 
-    filter2:
-      name: interpolation
-      type: laser_filters/InterpolationFilter
+#    filter2:
+#      name: interpolation
+#      type: laser_filters/InterpolationFilter
