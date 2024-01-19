@@ -62,10 +62,10 @@ def generate_launch_description():
     realsense_imu_la = DeclareLaunchArgument('realsense_imu_config',
                                              default_value=realsense_imu_config,
                                              description='Path to the Realsense IMU parameters file to use.')
-    stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud_config',
+    stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
                                                     default_value='False',
                                                     description='Whether to publish a PointCloud2 message from stereo images.')
-    depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud_config',
+    depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
                                                         default_value='False',
                                                         description='Whether to publish a PointCloud2 message from a depth image.')
 
@@ -83,17 +83,19 @@ def generate_launch_description():
     rtabmap_icp_odometry = Node(
             package='rtabmap_odom',
             executable='icp_odometry',
-            name='icp',
+            name='rtabmap_icp',
             output='screen',
             parameters=[{
                 'frame_id': 'base_link',
                 'odom_frame_id': 'odom',
                 'publish_tf': False,
                 'wait_for_transform': 0.1,
-                # 'wait_imu_to_init ': False, # use if imu is passed
+                'wait_imu_to_init ': True,  # use if imu is passed
+                'queue_size': 2,
+
             }],
             remappings=[('scan', '/lidar/scan_filtered'),
-                        # ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation
+                        ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation
                         ('odom', '/odom/rtabmap_icp'),
                         ('odom_last_frame', '/rtabmap_icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
                         ]
@@ -102,7 +104,7 @@ def generate_launch_description():
     rf2o_odometry_node = Node(
             package='rf2o_laser_odometry',
             executable='rf2o_laser_odometry_node',
-            name='rf2o_laser_odometry',
+            # name='rf2o_laser_odometry',
             output='screen',
             parameters=[{
                 'laser_scan_topic': '/lidar/scan_filtered',
