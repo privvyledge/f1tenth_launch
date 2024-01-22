@@ -40,6 +40,8 @@ def generate_launch_description():
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion')
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom')
     launch_ekf_map = LaunchConfiguration('launch_ekf_map')
+    odom_frequency = LaunchConfiguration('odom_frequency')
+    map_frequency = LaunchConfiguration('map_frequency')
     log_level = LaunchConfiguration('log_level')
 
     # Declare default launch arguments
@@ -94,6 +96,16 @@ def generate_launch_description():
     launch_ekf_map_la = DeclareLaunchArgument(
             'launch_ekf_map',
             default_value='True',
+            description='Whether to launch the global/map EKF/UKF node.'
+    )
+    odom_frequency_la = DeclareLaunchArgument(
+            'odom_frequency',
+            default_value='100.0',
+            description='Whether to launch the global/map EKF/UKF node.'
+    )
+    map_frequency_la = DeclareLaunchArgument(
+            'map_frequency',
+            default_value='10.0',
             description='Whether to launch the global/map EKF/UKF node.'
     )
     declare_use_composition_cmd = DeclareLaunchArgument(
@@ -182,8 +194,8 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                     'use_ekf_odom': launch_ekf_odom,
                     'use_ekf_map': launch_ekf_map,
-                    'odom_frequency': 100.0,
-                    'map_frequency': 10.0,
+                    'odom_frequency': odom_frequency,
+                    'map_frequency': map_frequency,
                 }.items()
         )
     #
@@ -223,6 +235,8 @@ def generate_launch_description():
         launch_sensor_fusion_la,
         launch_ekf_odom_la,
         launch_ekf_map_la,
+        map_frequency_la,
+        odom_frequency_la,
         declare_use_composition_cmd,
         declare_autostart_cmd,
         declare_use_respawn_cmd,
