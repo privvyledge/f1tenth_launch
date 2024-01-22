@@ -1,3 +1,12 @@
+# due to issues with the realsense driver, if pointclouds/depths are required, either use some other node e.g depth or stereo to pointcloud
+# align depth should also be set to False, otherwise the whole system fails
+# if pointclouds/depths are required specifically from the realsense driver then set FPS of color and depth to 15 but this causes
+# the infrared images to not publish. Set FPS >= 30 for infrared images.
+# if not using infra images, set depth.emitter_enabled=1 so depth is more accurate otherwise 0
+# i.e if using stereo, set depth resolution and fps to 848x480x90 and depth_module.emitter_enabled: 0
+# if using color and depth, set resolution and fps of rgb and depth to 640x480x15 and depth_module.emitter_enabled: 1
+
+# todo: pass resolution, fps and depth_module.emitter_enabled in the launch file
 /**:
   ros__parameters:
 #    device_type: d435i

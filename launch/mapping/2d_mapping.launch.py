@@ -25,9 +25,9 @@ def IfEqualsCondition(arg_name: str, value: str):
 def generate_launch_description():
     # Parameters
     lifecycle_nodes = ['map_saver']
-    use_sim_time = True
+    use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = True
-    save_map_timeout = 2.0
+    save_map_timeout = 2000.0
     free_thresh_default = 0.25
     occupied_thresh_default = 0.65
     offline_mapping = LaunchConfiguration('offline_mapping')
@@ -42,6 +42,10 @@ def generate_launch_description():
     slam_toolbox_pkg_prefix = get_package_share_directory('slam_toolbox')
 
     # parameters
+    use_sim_time_la = DeclareLaunchArgument(
+                'use_sim_time', default_value='True',
+                description='Use simulation or ROSBAG clock if true'),
+
     offline_mapping_param_file = os.path.join(
         f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping_offline.yaml"
     )
@@ -71,7 +75,7 @@ def generate_launch_description():
 
     with_rviz_param = DeclareLaunchArgument(
         'with_rviz',
-        default_value='True',
+        default_value='False',
         description='Launch rviz in addition to other nodes'
     )
 
@@ -139,7 +143,8 @@ def generate_launch_description():
     offline_slam_launch = Node(
             condition=IfCondition([offline_mapping]),
             parameters=[
-                offline_mapping_param_file
+                offline_mapping_param_file,
+                {'use_sim_time': use_sim_time}
             ],
             package='slam_toolbox',
             executable='sync_slam_toolbox_node',
@@ -150,10 +155,11 @@ def generate_launch_description():
     online_slam_launch = Node(
             condition=IfCondition(PythonExpression(['not ', offline_mapping])),
             parameters=[
-                offline_mapping_param_file
+                online_mapping_param_file,
+                {'use_sim_time': use_sim_time}
             ],
             package='slam_toolbox',
-            executable='sync_slam_toolbox_node',
+            executable='async_slam_toolbox_node',
             name='slam_toolbox',
             output='screen'
     )
@@ -167,13 +173,17 @@ def generate_launch_description():
     )
 
     # Nodes launching commands
+    # the map saver node doesn't work, might need to setup yaml path for map_server. Use rosservices instead, e.g:
+    # ros2 run nav2_map_server map_saver_cli -f /f1tenth/data/maps/raslab
+    # ros2 service call /slam_toolbox/serialize_map slam_toolbox/SerializePoseGraph "{filename: '/f1tenth/data/maps/raslab'}"
     start_map_saver_server_cmd = Node(
             package='nav2_map_server',
             executable='map_saver_server',
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
             parameters=[
-                {'map_topic': map_file_name},
+                {'map_topic': 'map'},
+                {'map_url': map_file_name},
                 {'save_map_timeout': save_map_timeout},
                 {'free_thresh_default': free_thresh_default},
                 {'occupied_thresh_default': occupied_thresh_default},
@@ -190,6 +200,7 @@ def generate_launch_description():
                         {'node_names': lifecycle_nodes}])
 
     return LaunchDescription([
+        use_sim_time_la,
         declare_offline_mapping,
         # with_joy_param,
         with_rviz_param,

@@ -3,11 +3,18 @@
 Todo: add vesc imu and include rotations
 Todo: switch to new style
 """
+import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.substitutions import Command
+from launch_ros.descriptions import ParameterFile, ParameterValue
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
+    urdf_path = os.path.join(get_package_share_directory('f1tenth_launch'), 'urdf/f1tenth.urdf.xacro')
+
     lidar_static_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
@@ -20,7 +27,21 @@ def generate_launch_description():
     #         executable='static_transform_publisher',
     #         name='static_baselink_to_camera',
     #         arguments=['0.24115', '0.0', '0.0961', '0.0', '0.0', '0.0', 'base_link', 'camera_link']
-    # )  # Realsense
+    # )
+
+    # todo: pass base_link to camera_bottom_screw as an argument
+    # set use_nominal_extrinsics:=True to use ideal dimensions instead of the calibrated dimensions.
+    # Useful for simulations, e.g Gazebo
+    robot_state_publisher_node = Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='realsense_state_publisher',
+            parameters=[{
+                'robot_description': ParameterValue(Command(['xacro ', str(urdf_path), ' ',
+                                                             'use_nominal_extrinsics:=False']), value_type=str)
+            }],
+            output='screen'
+    )  # Realsense
 
     vesc_imu_static_tf_node = Node(
             package='tf2_ros',
@@ -39,6 +60,7 @@ def generate_launch_description():
     ld = LaunchDescription([
         lidar_static_tf_node,
         # camera_static_tf_node,
+        robot_state_publisher_node,
         vesc_imu_static_tf_node,
         base_footprint_tf_node,
     ])

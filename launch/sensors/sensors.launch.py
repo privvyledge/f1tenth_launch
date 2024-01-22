@@ -91,7 +91,7 @@ def generate_launch_description():
                 'publish_tf': False,
                 'wait_for_transform': 0.1,
                 'wait_imu_to_init ': True,  # use if imu is passed
-                'queue_size': 2,
+                'queue_size': 1,
 
             }],
             remappings=[('scan', '/lidar/scan_filtered'),
@@ -194,7 +194,7 @@ def generate_launch_description():
                         package='stereo_image_proc',
                         plugin='stereo_image_proc::DisparityNode',
                         parameters=[{
-                            'approximate_sync': 'True',
+                            'approximate_sync': 'False',
                             'use_system_default_qos': 'False',
                             'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
                             'prefilter_size': '9',
@@ -224,7 +224,7 @@ def generate_launch_description():
                         package='stereo_image_proc',
                         plugin='stereo_image_proc::PointCloudNode',
                         parameters=[{
-                            'approximate_sync': 'True',
+                            'approximate_sync': 'False',
                             'avoid_point_cloud_padding': 'False',
                             'use_color': 'False',
                             'use_system_default_qos': 'False',

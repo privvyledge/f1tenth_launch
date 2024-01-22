@@ -59,7 +59,7 @@ def generate_launch_description():
             description='Whether or not to remove the gravity vector.')
     use_madgwick_filter_la = DeclareLaunchArgument(
             'use_madgwick_filter',
-            default_value='True',
+            default_value='False',
             description='Whether or not to use the Madgwick Filter. Uses the complementary filter if False.')
 
     ld = LaunchDescription([imu_frame_la, input_topic_la, output_topic_la,

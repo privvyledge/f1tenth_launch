@@ -103,7 +103,7 @@ def generate_launch_description():
             description='whether to use ekf. If false uses ukf instead')
 
     declare_node_name = DeclareLaunchArgument(
-            'node_name', default_value='ekf_node',
+            'node_name', default_value='ekf_odom_node',
             description='ekf_node, ukf_node')
 
     # Specify actions/nodes

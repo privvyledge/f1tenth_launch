@@ -23,7 +23,6 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 
 def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
-    urdf_path = os.path.join(get_package_share_directory('f1tenth_launch'), 'urdf/f1tenth.urdf.xacro')
 
     # Create the launch configuration variables
     config_file = LaunchConfiguration('config_file')
@@ -144,26 +143,12 @@ def generate_launch_description():
                 'output_topic': '/camera/imu/filtered',
                 'remove_gravity_vector': 'True',
                 'node_name': 'realsense_imu_filter',
-                'use_madgwick_filter': 'True',
+                'use_madgwick_filter': 'False',
             }.items()
-    )
-
-    # set use_nominal_extrinsics:=True to use ideal dimensions instead of the calibrated dimensions.
-    # Useful for simulations, e.g Gazebo
-    robot_state_publisher_node = Node(
-            package='robot_state_publisher',
-            executable='robot_state_publisher',
-            name='realsense_state_publisher',
-            parameters=[{
-                'robot_description': ParameterValue(Command(['xacro ', str(urdf_path), ' ',
-                                             'use_nominal_extrinsics:=False']), value_type=str)
-            }],
-            output='screen'
     )
 
     ld.add_action(realsense_node)
     ld.add_action(realsense_imu_node)
     ld.add_action(imu_filter_node)
-    ld.add_action(robot_state_publisher_node)
 
     return ld

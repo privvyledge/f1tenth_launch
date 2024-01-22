@@ -54,7 +54,7 @@ def generate_launch_description():
             description='Whether to start the joystick node.')
     declare_launch_imu_filter = DeclareLaunchArgument(
             'launch_imu_filter',
-            default_value='True',
+            default_value='False',
             description='Whether to start the joystick node.')
 
     ld = LaunchDescription([joy_la, vesc_la, mux_la,
@@ -137,7 +137,7 @@ def generate_launch_description():
                 'output_topic': '/vehicle/sensors/imu/data',
                 'remove_gravity_vector': 'False',
                 'node_name': 'vesc_imu_filter',
-                'use_madgwick_filter': 'True',
+                'use_madgwick_filter': 'False',
             }.items()
     )
 
