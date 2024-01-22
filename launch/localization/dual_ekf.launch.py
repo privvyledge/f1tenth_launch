@@ -82,7 +82,7 @@ def generate_launch_description():
             description='Sensor fusion frequency')
 
     declare_map_frequency_la = DeclareLaunchArgument(
-            'map_frequency', default_value='10.0',
+            'map_frequency', default_value='30.0',
             description='Sensor fusion frequency')
 
     declare_odom_node_name = DeclareLaunchArgument(
@@ -91,7 +91,7 @@ def generate_launch_description():
 
     declare_map_node_name = DeclareLaunchArgument(
             'map_node_name', default_value='ekf_map_node',
-            description='ekf_node, ukf_node'),
+            description='ekf_node, ukf_node')
 
     declare_log_level_cmd = DeclareLaunchArgument(
             'log_level', default_value='info',
@@ -99,19 +99,7 @@ def generate_launch_description():
 
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
-        PushRosNamespace(
-                condition=IfCondition(use_namespace),
-                namespace=namespace),
-
-        # Node(
-        #         condition=IfCondition(use_composition),
-        #         name='nav2_container',
-        #         package='rclcpp_components',
-        #         executable='component_container_isolated',
-        #         parameters=[configured_params, {'autostart': autostart}],
-        #         arguments=['--ros-args', '--log-level', log_level],
-        #         remappings=remappings,
-        #         output='screen'),
+        PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
 
         # Local/odom
         IncludeLaunchDescription(
@@ -145,7 +133,7 @@ def generate_launch_description():
                     'use_namespace': use_namespace,
                     'namespace': namespace,
                 }.items()
-        ),
+        )
     ])
 
     # Create the launch description

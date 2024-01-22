@@ -5,6 +5,7 @@ This nodes sets up local and global localization.
 * Launch AMCL localizer
 * Launch slam_toolbox localizer
 * (optional) Launch particle_filter localizer
+* Launch RTABMap localizer
 * todo: Get arguments for downstream components, e.g. IMU filter, LIDAR filter and other configuration variables.
 * Launch Kalman Filter (EKF or UKF) nodes
 
@@ -42,6 +43,7 @@ def generate_launch_description():
     launch_ekf_map = LaunchConfiguration('launch_ekf_map')
     odom_frequency = LaunchConfiguration('odom_frequency')
     map_frequency = LaunchConfiguration('map_frequency')
+    launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer')
     log_level = LaunchConfiguration('log_level')
 
     # Declare default launch arguments
@@ -105,8 +107,13 @@ def generate_launch_description():
     )
     map_frequency_la = DeclareLaunchArgument(
             'map_frequency',
-            default_value='10.0',
+            default_value='30.0',
             description='Whether to launch the global/map EKF/UKF node.'
+    )
+    launch_rtabmap_localizer_la = DeclareLaunchArgument(
+            'launch_rtabmap_localizer',
+            default_value='True',
+            description='Whether to launch the RTABMaps global localizer node.'
     )
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value='False',
@@ -187,7 +194,7 @@ def generate_launch_description():
 
     ekf_nodes = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
-                        [f1tenth_launch_pkg_prefix, 'launch/localization', 'ekf_odom.launch.py']
+                        [f1tenth_launch_pkg_prefix, 'launch/localization', 'dual_ekf.launch.py']
                 )),
                 condition=IfCondition([launch_sensor_fusion]),
                 launch_arguments={
@@ -198,6 +205,31 @@ def generate_launch_description():
                     'map_frequency': map_frequency,
                 }.items()
         )
+
+    rtabmap_localizer_node = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(PathJoinSubstitution(
+                        [f1tenth_launch_pkg_prefix, 'launch/mapping', '3d_mapping.launch.py']
+                )),
+                condition=IfCondition([launch_rtabmap_localizer]),
+                launch_arguments={
+                    'use_sim_time': use_sim_time,
+                    'use_stereo': True,
+                    'localization': True,
+                    'queue_size': '10',
+                    'approx_sync': True,
+                    'publish_map_tf': False,
+                    'wait_imu_to_init': True,
+                    'imu_topic': '/vehicle/sensors/imu/raw',
+                    'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),
+                    'rtabmap_args': '--RGBD/LoopClosureReextractFeatures true '
+                                    '--Vis/MinInliers 15 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
+                                    '--GFTT/QualityLevel 0.00001 --Stereo/MinDisparity 0 --Stereo/MaxDisparity 64 '
+                                    '--Vis/BundleAdjustment 1 --Vis/CorNNDR 0.6 --Vis/CorGuessWinSize 20 '
+                                    '--Vis/PnPFlags 0 --Vis/CorType 1 --Reg/Force3DoF true --Rtabmap/DetectionRate 10 '
+                                    '--Optimizer/Slam2D true --Optimizer/GravitySigma 0',
+                }.items()
+        )
+
     #
     # imu_filter_node = IncludeLaunchDescription(
     #         PythonLaunchDescriptionSource(
@@ -237,6 +269,7 @@ def generate_launch_description():
         launch_ekf_map_la,
         map_frequency_la,
         odom_frequency_la,
+        launch_rtabmap_localizer_la,
         declare_use_composition_cmd,
         declare_autostart_cmd,
         declare_use_respawn_cmd,
@@ -244,6 +277,7 @@ def generate_launch_description():
         load_nodes,
         slam_toolbox_localizer_node,
         ekf_nodes,
+        rtabmap_localizer_node,
         # imu_filter_node,
         # laser_filter_node,
     ])

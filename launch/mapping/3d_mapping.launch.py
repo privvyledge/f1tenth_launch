@@ -6,9 +6,9 @@ Fuses stereo images, IMU, ekf_odom
 #   $ ros2 launch velodyne_pointcloud velodyne_transform_node-VLP16-launch.py
 #
 #   SLAM:
-#   $ ros2 launch rtabmap_examples vlp16.launch.py
+#   $ ros2 launch f1tenth_launch 3d_mapping.launch.py
 
-
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -18,13 +18,17 @@ from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
+from ament_index_python import get_package_share_directory
 
 
 def generate_launch_description():
+    f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
+
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_stereo = LaunchConfiguration('use_stereo')
     localization = LaunchConfiguration('localization')
     queue_size = LaunchConfiguration('queue_size')
+    approx_sync = LaunchConfiguration('approx_sync')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     lidar_frame_id = LaunchConfiguration('lidar_frame_id')
     wait_imu_to_init = LaunchConfiguration('wait_imu_to_init')
@@ -33,9 +37,14 @@ def generate_launch_description():
     gps_topic = LaunchConfiguration('gps_topic')
     database_path = LaunchConfiguration('database_path')
     rtabmap_args = LaunchConfiguration('rtabmap_args')
+    rtabmap_viz_view = LaunchConfiguration('rtabmap_viz_view')
+    rviz_view = LaunchConfiguration('rviz_view')
 
     # /camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
-    depth_topic = '/camera/depth/image_rect_raw'
+    depth_topic = LaunchConfiguration('depth_topic')
+
+    database_file = os.path.join(
+            f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db')
 
     return LaunchDescription([
 
@@ -72,10 +81,28 @@ def generate_launch_description():
                 'imu_topic', default_value='/camera/imu/filtered',
                 description='Used with VIO approaches and for SLAM graph optimization (gravity constraints). '),
 
-        DeclareLaunchArgument('database_path', default_value='/f1tenth/data/maps/rtabmap/rtabmap.db',
+        DeclareLaunchArgument(
+                'depth_topic', default_value='/camera/depth/image_rect_raw',
+                description='Raw unaligned depth topic to subscribe to. E.g "/camera/depth/image_rect_raw", '
+                            '"/camera/depth_registered/image_rect", '
+                            '"/camera/realigned_depth_to_color/image_raw"'),
+
+        DeclareLaunchArgument(
+                'approx_sync', default_value='True',
+                description='Synchronize topics'),
+
+        DeclareLaunchArgument(
+                'rtabmap_viz_view', default_value='False',
+                description='Whether to start RTABMAP viz'),
+
+        DeclareLaunchArgument(
+                'rviz_view', default_value='True',
+                description='Whether to start Rviz'),
+
+        DeclareLaunchArgument('database_path', default_value=database_file,
                               description='Where is the map saved/loaded.'),
 
-        # todo: might use parameters instead of args later (http://wiki.ros.org/rtabmap_ros/Tutorials/Advanced%20Parameter%20Tuning#Change_Parameters)
+        # todo: use parameters instead of args (http://wiki.ros.org/rtabmap_ros/Tutorials/Advanced%20Parameter%20Tuning#Change_Parameters)
         DeclareLaunchArgument('rtabmap_args', default_value='-d '
                                                             '--RGBD/LoopClosureReextractFeatures true '
                                                             '--Vis/MinInliers 15 '
@@ -105,7 +132,7 @@ def generate_launch_description():
         # Generate point cloud from unaligned depth.
         Node(
                 package='rtabmap_util', executable='point_cloud_xyz', output='screen',
-                parameters=[{'approx_sync': True}],
+                parameters=[{'approx_sync': approx_sync}],
                 remappings=[('depth/image', '/camera/depth/image_rect_raw'),
                             ('depth/camera_info', '/camera/depth/camera_info'),
                             ('cloud', '/camera/cloud_from_depth')]),
@@ -193,10 +220,10 @@ def generate_launch_description():
                     'scan_topic': '/lidar/scan_filtered',
                     # 'scan_cloud_topic': '/lidar/point_cloud',
 
-                    'approx_sync': 'true',
+                    'approx_sync': approx_sync,
 
-                    'rtabmap_viz': 'true',
-                    'rviz': 'true',
+                    'rtabmap_viz': rtabmap_viz_view,
+                    'rviz': rviz_view,
                     # 'rviz_cfg': '',
                     'use_sim_time': use_sim_time,
                 }.items()
