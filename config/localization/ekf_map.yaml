@@ -7,6 +7,7 @@
     transform_timeout: 0.0
     print_diagnostics: false
     debug: false
+#    debug_out_file: /path/to/debug/file.txt
     permit_corrected_publication: false
     publish_acceleration: true
     publish_tf: true
@@ -18,7 +19,7 @@
     base_link_frame: base_link
     world_frame: map
 
-    pose0: /amcl_pose  # amcl_pose
+    pose0: /amcl_pose
     pose0_config: [ true,  true,  false,
                     false, false, true,
                     false, false, false,
@@ -30,15 +31,15 @@
 #    pose0_rejection_threshold: 2.0
     pose0_nodelay: false
 
-    pose1: /slam_toolbox/pose  # slam_toolbox pose
+    pose1: /slam_toolbox/pose
     pose1_config: [ true,  true,  false,
                     false, false, true,
                     false, false, false,
                     false, false, false,
                     false, false, false ]
-    pose1_differential: true
+    pose1_differential: false
     pose1_relative: false
-    pose1_queue_size: 5
+    pose1_queue_size: 2
 #    pose1_rejection_threshold: 2.0
     pose1_nodelay: false
 
@@ -50,7 +51,7 @@
                     false, false, false ]
     pose2_differential: false
     pose2_relative: true
-    pose2_queue_size: 5
+    pose2_queue_size: 2
     #    pose2_rejection_threshold: 2.0
     pose2_nodelay: false
 
@@ -81,7 +82,7 @@
                    false, false, false,
                    false, false, false,
                    false, false, false ]
-    odom1_queue_size: 10
+    odom1_queue_size: 2
     odom1_differential: true
     odom1_relative: false
     #odom1_pose_rejection_threshold: 1.0
@@ -119,6 +120,13 @@
     #                0.0,  0.0,  0.0,
     #                0.0,  0.0,  0.0]
     use_control: false
+    stamped_control: false
+    control_timeout: 0.2
+    control_config: [true, false, false, false, false, true]
+    acceleration_limits: [10.0, 0.0, 0.0, 0.0, 0.0, 3.0]
+    deceleration_limits: [10.0, 0.0, 0.0, 0.0, 0.0, 3.0]
+    acceleration_gains: [3.0, 0.0, 0.0, 0.0, 0.0, 3.0]
+    deceleration_gains: [3.0, 0.0, 0.0, 0.0, 0.0, 3.0]
 
     process_noise_covariance: [ 0.05, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                 0.0,    0.05, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,

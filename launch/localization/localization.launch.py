@@ -12,10 +12,10 @@ This nodes sets up local and global localization.
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, SetEnvironmentVariable
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
-from launch_ros.substitutions import FindPackageShare, PythonExpression
+from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode, ParameterFile
@@ -150,7 +150,8 @@ def generate_launch_description():
             condition=IfCondition([launch_slam_toolbox_localizer]),
             launch_arguments={
                 'use_sim_time': use_sim_time,
-                # 'params_file': '',
+                'params_file': os.path.join(
+                            f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_slam.yaml'),
             }.items()
     )
 

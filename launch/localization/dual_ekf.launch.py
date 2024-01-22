@@ -32,7 +32,10 @@ def generate_launch_description():
                 name=node_name,
                 output='screen',
                 parameters=[ekf_odom_config_file],
-                remappings=[('odometry/filtered', 'odometry/local')]
+                remappings=[
+                    ('odometry/filtered', 'odometry/local'),
+                    ('accel/filtered', 'accel/local'),
+                ]
         ),
         Node(
                 package='robot_localization',
@@ -40,7 +43,10 @@ def generate_launch_description():
                 name=node_name,
                 output='screen',
                 parameters=[ekf_map_config_file],
-                remappings=[('odometry/filtered', 'odometry/global')]
+                remappings=[
+                    ('odometry/filtered', 'odometry/global'),
+                    ('accel/filtered', 'accel/global'),
+                ]
         ),
     ])
 

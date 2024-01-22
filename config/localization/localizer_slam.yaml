@@ -16,7 +16,7 @@ slam_toolbox:
     scan_topic: /lidar/scan_filtered
     mode: localization
 
-    # if you'd like to start localizing on bringup in a map and pose
+    # if you'd like to start localizing on bringup in a map and pose. todo: replace in launch file
     map_file_name: "/f1tenth_ws/src/f1tenth_launch/data/maps/raslab"
     map_start_pose: [0.0, 0.0, 0.0]
 

@@ -31,6 +31,7 @@ def generate_launch_description():
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
     use_ekf = LaunchConfiguration('use_ekf')  # ekf_node, ukf_node
+    frequency = LaunchConfiguration('frequency')
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -102,6 +103,10 @@ def generate_launch_description():
             'use_ekf', default_value='True',
             description='whether to use ekf. If false uses ukf instead')
 
+    declare_frequency_la = DeclareLaunchArgument(
+            'frequency', default_value='100.0',
+            description='Sensor fusion frequency')
+
     declare_node_name = DeclareLaunchArgument(
             'node_name', default_value='ekf_odom_node',
             description='ekf_node, ukf_node')
@@ -128,9 +133,12 @@ def generate_launch_description():
                 executable='ekf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': 30.0}],
+                parameters=[configured_params, {'frequency': frequency}],
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=[('odometry/filtered', 'odometry/local')]
+                remappings=[
+                    ('odometry/filtered', 'odometry/local'),
+                    ('accel/filtered', 'accel/local'),
+                ]
         ),
 
         Node(
@@ -139,9 +147,12 @@ def generate_launch_description():
                 executable='ukf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': 30.0}],
+                parameters=[configured_params, {'frequency': frequency}],
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=[('odometry/filtered', 'odometry/local')]
+                remappings=[
+                    ('odometry/filtered', 'odometry/local'),
+                    ('accel/filtered', 'accel/local'),
+                ]
         ),
     ])
 
@@ -160,6 +171,7 @@ def generate_launch_description():
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
     ld.add_action(declare_kf_type)
+    ld.add_action(declare_frequency_la)
     ld.add_action(declare_node_name)
 
     # Add the actions to launch all of the navigation nodes

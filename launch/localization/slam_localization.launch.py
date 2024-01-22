@@ -8,7 +8,6 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     # Get path to files and directories
-    nav2_pkg_prefix = get_package_share_directory('nav2_bringup')
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
 
     # declare launch configurations
