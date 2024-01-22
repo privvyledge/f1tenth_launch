@@ -37,6 +37,9 @@ def generate_launch_description():
     params_file = LaunchConfiguration('params_file')
     map_yaml_file = LaunchConfiguration('map')
     launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer')
+    launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion')
+    launch_ekf_odom = LaunchConfiguration('launch_ekf_odom')
+    launch_ekf_map = LaunchConfiguration('launch_ekf_map')
     log_level = LaunchConfiguration('log_level')
 
     # Declare default launch arguments
@@ -77,6 +80,21 @@ def generate_launch_description():
             'launch_slam_toolbox_localizer',
             default_value='True',
             description='Whether to launch slam toolbox\'s localizer'
+    )
+    launch_sensor_fusion_la = DeclareLaunchArgument(
+            'launch_sensor_fusion',
+            default_value='True',
+            description='Whether to launch either EKF/UKF node.'
+    )
+    launch_ekf_odom_la = DeclareLaunchArgument(
+            'launch_ekf_odom',
+            default_value='True',
+            description='Whether to launch the local/odom EKF/UKF node.'
+    )
+    launch_ekf_map_la = DeclareLaunchArgument(
+            'launch_ekf_map',
+            default_value='True',
+            description='Whether to launch the global/map EKF/UKF node.'
     )
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value='False',
@@ -155,20 +173,26 @@ def generate_launch_description():
             }.items()
     )
 
-    ekf_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    os.path.join(f1tenth_launch_pkg_prefix,
-                                 'launch/localization/dual_ekf.launch.py')
-            )
-    )
-
-
-    imu_filter_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    os.path.join(f1tenth_launch_pkg_prefix,
-                                 'launch/filters/imu_filter.launch.py')
-            )
-    )
+    ekf_nodes = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(PathJoinSubstitution(
+                        [f1tenth_launch_pkg_prefix, 'launch/localization', 'ekf_odom.launch.py']
+                )),
+                condition=IfCondition([launch_sensor_fusion]),
+                launch_arguments={
+                    'use_sim_time': use_sim_time,
+                    'use_ekf_odom': launch_ekf_odom,
+                    'use_ekf_map': launch_ekf_map,
+                    'odom_frequency': 100.0,
+                    'map_frequency': 10.0,
+                }.items()
+        )
+    #
+    # imu_filter_node = IncludeLaunchDescription(
+    #         PythonLaunchDescriptionSource(
+    #                 os.path.join(f1tenth_launch_pkg_prefix,
+    #                              'launch/filters/imu_filter.launch.py')
+    #         )
+    # )
 
     # laser_filter_node = Node(
     #         package="laser_filters",
@@ -196,13 +220,16 @@ def generate_launch_description():
         localization_param,
         map_file_la,
         launch_slam_toolbox_localizer_la,
+        launch_sensor_fusion_la,
+        launch_ekf_odom_la,
+        launch_ekf_map_la,
         declare_use_composition_cmd,
         declare_autostart_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         load_nodes,
         slam_toolbox_localizer_node,
-        # ekf_node,
+        ekf_nodes,
         # imu_filter_node,
         # laser_filter_node,
     ])

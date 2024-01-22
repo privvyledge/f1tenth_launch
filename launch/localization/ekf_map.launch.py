@@ -58,11 +58,11 @@ def generate_launch_description():
             description='whether to use ekf. If false uses ukf instead')
 
     declare_frequency_la = DeclareLaunchArgument(
-            'frequency', default_value='100.0',
+            'frequency', default_value='10.0',
             description='Sensor fusion frequency')
 
     declare_node_name = DeclareLaunchArgument(
-            'node_name', default_value='ekf_odom_node',
+            'node_name', default_value='ekf_map_node',
             description='ekf_node, ukf_node')
 
     declare_log_level_cmd = DeclareLaunchArgument(
@@ -94,7 +94,7 @@ def generate_launch_description():
                 parameters=[
                     params_file,
                     {'frequency': frequency},
-                    {'use_sim_time', use_sim_time}
+                    {'use_sim_time': use_sim_time}
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[
@@ -112,7 +112,7 @@ def generate_launch_description():
                 parameters=[
                     params_file,
                     {'frequency': frequency},
-                    {'use_sim_time', use_sim_time}
+                    {'use_sim_time': use_sim_time}
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[

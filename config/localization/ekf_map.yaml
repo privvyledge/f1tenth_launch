@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    frequency: 30.0
+    frequency: 10.0
     sensor_timeout: 0.13
     two_d_mode: true
     transform_time_offset: 0.0
@@ -27,7 +27,7 @@
                     false, false, false ]
     pose0_differential: true
     pose0_relative: false
-    pose0_queue_size: 5
+    pose0_queue_size: 2
 #    pose0_rejection_threshold: 2.0
     pose0_nodelay: false
 
@@ -37,7 +37,7 @@
                     false, false, false,
                     false, false, false,
                     false, false, false ]
-    pose1_differential: false
+    pose1_differential: true
     pose1_relative: false
     pose1_queue_size: 2
 #    pose1_rejection_threshold: 2.0
@@ -71,7 +71,7 @@
                     true, true, false,
                     false, false, true,
                     false, false, false ]
-    odom0_queue_size: 2
+    odom0_queue_size: 10
     odom0_nodelay: false
     odom0_differential: false
     odom0_relative: false
@@ -97,7 +97,7 @@
     imu0_nodelay: false
     imu0_differential: false
     imu0_relative: true
-    imu0_queue_size: 2
+    imu0_queue_size: 10
     imu0_remove_gravitational_acceleration: true
     imu0_gravitational_acceleration: 9.806665
 
@@ -110,7 +110,7 @@
     imu1_nodelay: false
     imu1_differential: false  # false
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
-    imu1_queue_size: 15
+    imu1_queue_size: 50
     imu1_remove_gravitational_acceleration: false  # false
     imu1_gravitational_acceleration: 9.80665
 
