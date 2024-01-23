@@ -129,14 +129,14 @@ def generate_launch_description():
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
                                           ' --udebug and --delete_db_on_start/-d'),
 
-        # Generate point cloud from unaligned depth.
+        # Generate point cloud from unaligned depth. Todo: Move point cloud publishing to a different launch file
         Node(
                 package='rtabmap_util', executable='point_cloud_xyz', output='screen',
                 parameters=[
                     {'approx_sync': approx_sync},
                     {'use_sim_time': use_sim_time},
                 ],
-                remappings=[('depth/image', '/camera/depth/image_rect_raw'),
+                remappings=[('depth/image', depth_topic),
                             ('depth/camera_info', '/camera/depth/camera_info'),
                             ('cloud', '/camera/cloud_from_depth')]),
 

@@ -103,12 +103,12 @@ def generate_launch_description():
     odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency',
             default_value='100.0',
-            description='Whether to launch the global/map EKF/UKF node.'
+            description='Local/odom EKF/UKF node update/publish frequency.'
     )
     map_frequency_la = DeclareLaunchArgument(
             'map_frequency',
             default_value='30.0',
-            description='Whether to launch the global/map EKF/UKF node.'
+            description='Global/map EKF/UKF node update/publish frequency.'
     )
     launch_rtabmap_localizer_la = DeclareLaunchArgument(
             'launch_rtabmap_localizer',
@@ -279,7 +279,7 @@ def generate_launch_description():
         load_nodes,
         slam_toolbox_localizer_node,
         ekf_nodes,
-        rtabmap_localizer_node,
+        #rtabmap_localizer_node,
         # imu_filter_node,
         # laser_filter_node,
     ])

@@ -49,10 +49,18 @@ def generate_launch_description():
     # )
 
     depth_sensor_name = 'realsense'
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    approx_sync = LaunchConfiguration('approx_sync')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
 
     # Launch Arguments
+    use_sim_time_la = DeclareLaunchArgument(
+            'use_sim_time', default_value='False',
+            description='Use simulation (Gazebo) clock if true')
+    approx_sync_la = DeclareLaunchArgument(
+            'approx_sync', default_value='True',
+            description='Synchronize topics')
     lidar_la = DeclareLaunchArgument('lidar_config',
                                      default_value=lidar_config,
                                      description='Path to the YDLIDAR parameters file to use.')
@@ -70,7 +78,7 @@ def generate_launch_description():
                                                         description='Whether to publish a PointCloud2 message from a depth image.')
 
     # Create Launch Description
-    ld = LaunchDescription([lidar_la, depth_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la])
+    ld = LaunchDescription([use_sim_time_la, approx_sync_la, lidar_la, depth_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la])
 
     # Nodes
     lidar_node = IncludeLaunchDescription(
@@ -240,6 +248,57 @@ def generate_launch_description():
             output='screen',
     )
 
+    stereo_and_depth_image_processing_node = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(PathJoinSubstitution(
+                        [f1tenth_launch_dir, 'launch/sensors', 'stereo_and_depth_image_processing.launch.py']
+                )),
+                # condition=LaunchConfigurationEquals('mapping', 'realsense'),
+                # condition=IfCondition([imu_only]),
+                launch_arguments={
+                    'queue_size': '10',  # default: 10
+                    'approx_sync': approx_sync,
+                    'use_sim_time': use_sim_time,
+                    #
+                    # 'frame_id': 'base_link',
+                    # # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
+                    # 'vo_frame_id': 'odom',
+                    # 'map_frame_id': 'map',
+                    # 'publish_tf_map': publish_map_tf,
+                    # 'publish_tf_odom': 'false',
+
+                    # 'stereo': use_stereo,
+                    # 'depth': PythonExpression(['not ', use_stereo]),
+                    # 'localization': localization,
+                    # 'visual_odometry': 'false',  # odometry from images, eg stereo or RGB-D
+                    # 'icp_odometry': 'false',  # odometry from laserscans or PointClouds
+                    # 'subscribe_scan': 'true',
+                    # 'subscribe_scan_cloud': 'false',
+                    #
+                    # 'odom_topic': '/odometry/local',
+                    # 'odom_args': '',
+                    #
+                    # 'imu_topic': imu_topic,
+                    # 'wait_imu_to_init': wait_imu_to_init,
+                    #
+                    # 'stereo_namespace': '/camera',
+                    # 'left_image_topic': '/camera/infra1/image_rect_raw',
+                    # 'right_image_topic': '/camera/infra2/image_rect_raw',
+                    # 'left_camera_info_topic': '/camera/infra1/camera_info',
+                    # 'right_camera_info_topic': '/camera/infra2/camera_info',
+                    #
+                    # 'rgb_topic': '/camera/color/image_raw',
+                    # 'depth_topic': depth_topic,
+                    # 'camera_info_topic': '/camera/color/camera_info',
+                    #
+                    # 'scan_topic': '/lidar/scan_filtered',
+                    # # 'scan_cloud_topic': '/lidar/point_cloud',
+                    #
+                    # 'rtabmap_viz': rtabmap_viz_view,
+                    # 'rviz': rviz_view,
+                    # # 'rviz_cfg': '',
+                }.items()
+        )
+
     # Add nodes to launch description
     ld.add_action(lidar_node)
 
@@ -253,4 +312,5 @@ def generate_launch_description():
 
     ld.add_action(depth_image_to_pointcloud_xyz_node)
     ld.add_action(stereo_to_pointcloud_node)
+    ld.add_action(stereo_and_depth_image_processing_node)
     return ld

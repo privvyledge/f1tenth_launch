@@ -77,7 +77,7 @@ def generate_launch_description():
             default_value="cmd_vel",
             description="cmd_vel topic (for remmaping)")
     map_subscribe_transient_local_cmd = DeclareLaunchArgument(
-            "map_subscribe_transient_local", default_value="False",
+            "map_subscribe_transient_local", default_value="True",
             description="Whether to set the map subscriber QoS to transient local")
 
     lifecycle_nodes = [
