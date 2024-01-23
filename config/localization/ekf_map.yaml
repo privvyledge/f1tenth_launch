@@ -43,7 +43,7 @@
 #    pose1_rejection_threshold: 2.0
     pose1_nodelay: false
 
-    pose2: /rtabmap/localization_pose  # /rtabmap/localization_pose
+    pose2: /localization_pose  # /rtabmap/localization_pose
     pose2_config: [ true,  true,  true,
                     true, true, true,
                     false, false, false,

@@ -213,15 +213,17 @@ def generate_launch_description():
                 condition=IfCondition([launch_rtabmap_localizer]),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
-                    'use_stereo': True,
-                    'localization': True,
+                    'use_stereo': 'False',
+                    'localization': 'True',
                     'queue_size': '10',
-                    'approx_sync': True,
-                    'publish_map_tf': False,
-                    'wait_imu_to_init': True,
+                    'approx_sync': 'True',
+                    'publish_map_tf': 'False',
+                    'wait_imu_to_init': 'True',
                     'imu_topic': '/vehicle/sensors/imu/raw',
+                    'rtabmap_viz_view': 'True',
+                    'rviz_view': 'True',
                     'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),
-                    'rtabmap_args': '--RGBD/LoopClosureReextractFeatures true '
+                    'rtabmap_args': '--Mem/IncrementalMemory false --Mem/InitWMWithAllNodes true '
                                     '--Vis/MinInliers 15 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
                                     '--GFTT/QualityLevel 0.00001 --Stereo/MinDisparity 0 --Stereo/MaxDisparity 64 '
                                     '--Vis/BundleAdjustment 1 --Vis/CorNNDR 0.6 --Vis/CorGuessWinSize 20 '

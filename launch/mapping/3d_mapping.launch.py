@@ -123,7 +123,7 @@ def generate_launch_description():
                                                             '--Vis/CorType 1 '
                                                             # '--Odom/KeyFrameThr 0.6'
                                                             '--Reg/Force3DoF true '
-                                                            '--Rtabmap/DetectionRate 10 '
+                                                            '--Rtabmap/DetectionRate 10 '  # set to 0 to use image rate
                                                             '--Optimizer/Slam2D true '
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
@@ -132,7 +132,10 @@ def generate_launch_description():
         # Generate point cloud from unaligned depth.
         Node(
                 package='rtabmap_util', executable='point_cloud_xyz', output='screen',
-                parameters=[{'approx_sync': approx_sync}],
+                parameters=[
+                    {'approx_sync': approx_sync},
+                    {'use_sim_time': use_sim_time},
+                ],
                 remappings=[('depth/image', '/camera/depth/image_rect_raw'),
                             ('depth/camera_info', '/camera/depth/camera_info'),
                             ('cloud', '/camera/cloud_from_depth')]),
@@ -140,9 +143,12 @@ def generate_launch_description():
         # Generate aligned depth to color camera from the point cloud above
         Node(
                 package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
-                parameters=[{'decimation': 2,
-                             'fixed_frame_id': 'camera_link',
-                             'fill_holes_size': 1}],
+                parameters=[
+                    {'decimation': 2,
+                     'fixed_frame_id': 'camera_link',
+                     'fill_holes_size': 1},
+                    {'use_sim_time': use_sim_time},
+                            ],
                 remappings=[('camera_info', '/camera/color/camera_info'),
                             ('cloud', '/camera/cloud_from_depth'),
                             ('image_raw', '/camera/realigned_depth_to_color/image_raw')]),
@@ -156,6 +162,9 @@ def generate_launch_description():
                     # Driver itself
                     ComposableNode(
                             package='depth_image_proc',
+                            parameters=[
+                                {'use_sim_time': use_sim_time}
+                            ],
                             plugin='depth_image_proc::RegisterNode',
                             name='depthimage_register_node',
                             remappings=[('depth/image_rect', '/camera/depth/image_rect_raw'),
