@@ -100,7 +100,7 @@ def generate_launch_description():
                 'wait_for_transform': 0.1,
                 'wait_imu_to_init ': True,  # use if imu is passed
                 'queue_size': 1,
-
+                'use_sim_time': use_sim_time,
             }],
             remappings=[('scan', '/lidar/scan_filtered'),
                         ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation
@@ -121,6 +121,7 @@ def generate_launch_description():
                 'base_frame_id': 'base_link',
                 'odom_frame_id': 'odom',
                 'init_pose_from_topic': '',
+                'use_sim_time': use_sim_time,
                 'freq': 10.0}],
     )
 
@@ -137,6 +138,7 @@ def generate_launch_description():
                 'odom_frame': 'odom_laser_scan_matcher',
                 'map_frame': 'map',
                 'init_pose_from_topic': '',
+                'use_sim_time': use_sim_time,
                 'freq': 20.0}],
             remappings=[('scan', '/lidar/scan'),
                         ('odom', '/odom/laser_scan_matcher')]
@@ -159,94 +161,95 @@ def generate_launch_description():
     depth_to_laserscan_node = Node(
             package='depthimage_to_laserscan',
             executable='depthimage_to_laserscan_node',
-            name='depthimage_to_laserscan_node',
+            # name='depthimage_to_laserscan_node',
             output='screen',
             parameters=[{'scan_time': 0.0333},
+                        {'use_sim_time': use_sim_time},
                         {'output_frame': "camera_link"},
-                        {'range_min': 0.45},
+                        {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
             arguments=['depth:=/camera/depth/image_rect_raw',
                        'depth_camera_info:=/camera/depth/camera_info',
                        'scan:=/scan/depth_image'])
 
-    # ################# Depth Image to PointCloud
-    depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
-            condition=IfCondition([depthimage_to_pointcloud]),
-            name='depth_image_container',
-            namespace='',
-            package='rclcpp_components',
-            executable='component_container',
-            composable_node_descriptions=[
-                # Driver itself
-                ComposableNode(
-                        package='depth_image_proc',
-                        plugin='depth_image_proc::PointCloudXyzNode',
-                        name='point_cloud_xyz_node',
-                        remappings=[('image_rect', '/camera/depth/image_rect_raw'),  # or aligned depth
-                                    ('camera_info', '/camera/depth/camera_info'),
-                                    ('image', '/camera/depth/converted_image')]
-                ),
-            ],
-            output='screen',
-    )
+    # # ################# Depth Image to PointCloud
+    # depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
+    #         condition=IfCondition([depthimage_to_pointcloud]),
+    #         name='depth_image_container',
+    #         namespace='',
+    #         package='rclcpp_components',
+    #         executable='component_container',
+    #         composable_node_descriptions=[
+    #             # Driver itself
+    #             ComposableNode(
+    #                     package='depth_image_proc',
+    #                     plugin='depth_image_proc::PointCloudXyzNode',
+    #                     name='point_cloud_xyz_node',
+    #                     remappings=[('image_rect', '/camera/depth/image_rect_raw'),  # or aligned depth
+    #                                 ('camera_info', '/camera/depth/camera_info'),
+    #                                 ('image', '/camera/depth/converted_image')]
+    #             ),
+    #         ],
+    #         output='screen',
+    # )
 
-    stereo_to_pointcloud_node = ComposableNodeContainer(
-            condition=IfCondition([stereo_to_pointcloud]),
-            name='stereo_image_container',
-            namespace='',
-            package='rclcpp_components',
-            executable='component_container',
-            composable_node_descriptions=[
-                ComposableNode(
-                        condition=IfCondition([stereo_to_pointcloud]),
-                        package='stereo_image_proc',
-                        plugin='stereo_image_proc::DisparityNode',
-                        parameters=[{
-                            'approximate_sync': 'False',
-                            'use_system_default_qos': 'False',
-                            'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
-                            'prefilter_size': '9',
-                            'prefilter_cap': '31',
-                            'correlation_window_size': '15',
-                            'min_disparity': '0',
-                            'disparity_range': '64',
-                            'texture_threshold': '10',
-                            'speckle_size': '100',
-                            'speckle_range': '4',
-                            'disp12_max_diff': '0',
-                            'uniqueness_ratio': '15.0',
-                            'P1': '200.0',
-                            'P2': '400.0',
-                            'full_dp': 'False',
-                            'queue_size': '1',
-                        }],
-                        remappings=[
-                            ('left/image_rect', '/camera/infra1/image_rect_raw'),
-                            ('left/camera_info', '/camera/infra1/camera_info'),
-                            ('right/image_rect', '/camera/infra2/image_rect_raw'),
-                            ('right/camera_info', '/camera/infra2/camera_info'),
-                        ]
-                ),
-                ComposableNode(
-                        condition=IfCondition([stereo_to_pointcloud]),
-                        package='stereo_image_proc',
-                        plugin='stereo_image_proc::PointCloudNode',
-                        parameters=[{
-                            'approximate_sync': 'False',
-                            'avoid_point_cloud_padding': 'False',
-                            'use_color': 'False',
-                            'use_system_default_qos': 'False',
-                            'queue_size': '1',
-                        }],
-                        remappings=[
-                            ('left/camera_info', '/camera/infra1/camera_info'),
-                            ('right/camera_info', '/camera/infra2/camera_info'),
-                            ('left/image_rect_color', '/camera/infra1/image_rect_raw'),
-                        ]
-                ),
-            ],
-            output='screen',
-    )
+    # stereo_to_pointcloud_node = ComposableNodeContainer(
+    #         condition=IfCondition([stereo_to_pointcloud]),
+    #         name='stereo_image_container',
+    #         namespace='',
+    #         package='rclcpp_components',
+    #         executable='component_container',
+    #         composable_node_descriptions=[
+    #             ComposableNode(
+    #                     condition=IfCondition([stereo_to_pointcloud]),
+    #                     package='stereo_image_proc',
+    #                     plugin='stereo_image_proc::DisparityNode',
+    #                     parameters=[{
+    #                         'approximate_sync': 'False',
+    #                         'use_system_default_qos': 'False',
+    #                         'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
+    #                         'prefilter_size': '9',
+    #                         'prefilter_cap': '31',
+    #                         'correlation_window_size': '15',
+    #                         'min_disparity': '0',
+    #                         'disparity_range': '64',
+    #                         'texture_threshold': '10',
+    #                         'speckle_size': '100',
+    #                         'speckle_range': '4',
+    #                         'disp12_max_diff': '0',
+    #                         'uniqueness_ratio': '15.0',
+    #                         'P1': '200.0',
+    #                         'P2': '400.0',
+    #                         'full_dp': 'False',
+    #                         'queue_size': '1',
+    #                     }],
+    #                     remappings=[
+    #                         ('left/image_rect', '/camera/infra1/image_rect_raw'),
+    #                         ('left/camera_info', '/camera/infra1/camera_info'),
+    #                         ('right/image_rect', '/camera/infra2/image_rect_raw'),
+    #                         ('right/camera_info', '/camera/infra2/camera_info'),
+    #                     ]
+    #             ),
+    #             ComposableNode(
+    #                     condition=IfCondition([stereo_to_pointcloud]),
+    #                     package='stereo_image_proc',
+    #                     plugin='stereo_image_proc::PointCloudNode',
+    #                     parameters=[{
+    #                         'approximate_sync': 'False',
+    #                         'avoid_point_cloud_padding': 'False',
+    #                         'use_color': 'False',
+    #                         'use_system_default_qos': 'False',
+    #                         'queue_size': '1',
+    #                     }],
+    #                     remappings=[
+    #                         ('left/camera_info', '/camera/infra1/camera_info'),
+    #                         ('right/camera_info', '/camera/infra2/camera_info'),
+    #                         ('left/image_rect_color', '/camera/infra1/image_rect_raw'),
+    #                     ]
+    #             ),
+    #         ],
+    #         output='screen',
+    # )
 
     stereo_and_depth_image_processing_node = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
@@ -255,7 +258,7 @@ def generate_launch_description():
                 # condition=LaunchConfigurationEquals('mapping', 'realsense'),
                 # condition=IfCondition([imu_only]),
                 launch_arguments={
-                    'queue_size': 1,  # default: 10
+                    'queue_size': '1',  # default: 10
                     'approx_sync': approx_sync,
                     'use_sim_time': use_sim_time,
                     #
@@ -310,7 +313,7 @@ def generate_launch_description():
     # ld.add_action(realsense_imu_node)
     ld.add_action(depth_to_laserscan_node)
 
-    ld.add_action(depth_image_to_pointcloud_xyz_node)
-    ld.add_action(stereo_to_pointcloud_node)
+    # ld.add_action(depth_image_to_pointcloud_xyz_node)
+    # ld.add_action(stereo_to_pointcloud_node)
     ld.add_action(stereo_and_depth_image_processing_node)
     return ld

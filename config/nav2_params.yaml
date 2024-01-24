@@ -275,9 +275,9 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 12.0  # 3.0
+          raytrace_max_range: 12.0  # 3.0. Raytrace range should be higher than obstacle range
           raytrace_min_range: 0.0
-          obstacle_max_range: 12.0 # 2.5
+          obstacle_max_range: 10.0 # 2.5
           obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -293,6 +293,7 @@ local_costmap:
 #    ros__parameters:
 #      use_sim_time: False
 
+# todo: add stvl layer (https://answers.ros.org/question/346886/clear-obstacles-of-obstacle-layer-of-costmap/)
 global_costmap:
   global_costmap:
     ros__parameters:
@@ -300,7 +301,7 @@ global_costmap:
       publish_frequency: 10.0
       global_frame: map
       robot_base_frame: base_link
-      map_topic: /map
+#      map_topic: map
       use_sim_time: False
       footprint: "[ [0.3302, 0.1016], [0.3302, -0.1016], [0.0, -0.1016], [0.0, 0.1016] ]"
 #      robot_radius: 0.22
@@ -308,7 +309,7 @@ global_costmap:
       footprint_padding: 0.08  # 0.03
       resolution: 0.05
       track_unknown_space: false # true
-      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "inflation_layer"]  # obstacle_layer: 2d, voxel_layer: 3d
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -320,21 +321,21 @@ global_costmap:
         enabled: True
         observation_sources: scan #pointcloud
         footprint_clearing_enabled: true
-        max_obstacle_height: 10.0  # 2.0
+        max_obstacle_height: 4.0  # 2.0
         combination_method: 1
         scan:
           topic: /lidar/scan_filtered
-          obstacle_max_range: 12.0 # 30.0
+          obstacle_max_range: 10.0 # 30.0
           obstacle_min_range: 0.0
-          raytrace_max_range: 12.0 # 30.0
+          raytrace_max_range: 12.0 # 30.0. Raytrace range should be higher than obstacle range
           raytrace_min_range: 0.0
           max_obstacle_height: 10.0
           min_obstacle_height: 0.0
           clearing: True
           marking: True
           data_type: "LaserScan"
-          inf_is_valid: false
-          expected_update_rate: 0.13  # 0.1 (average for YDLidar is 8.626)
+          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
           observation_persistence: 0.5
 #        pointcloud:
 #          topic: /camera/depth/color/points  # todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
@@ -358,20 +359,50 @@ global_costmap:
         z_voxels: 16
         unknown_threshold: 15
         mark_threshold: 0
-        observation_sources: pointcloud
+        observation_sources: scan pointcloud pointcloud_clearing
         combination_method: 1
+        scan:
+          topic: /scan/depth_image
+          obstacle_max_range: 4.0 #
+          obstacle_min_range: 0.0
+          raytrace_max_range: 5.0 # Raytrace range should be higher than obstacle range
+          raytrace_min_range: 0.0
+          max_obstacle_height: 2.0
+          min_obstacle_height: 0.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          expected_update_rate: 0.2  # 0.1 (average rate for laserscan from realsense depthimage is 16 Hz or 0.0625s) so give more tolerance
+          observation_persistence: 0.5
         pointcloud: # no frame set, uses frame from message
           topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
           max_obstacle_height: 2.0
-          min_obstacle_height: 0.05
-          obstacle_max_range: 5.0
+          min_obstacle_height: 0.1
+          obstacle_max_range: 4.0
           obstacle_min_range: 0.0
-          raytrace_max_range: 5.0
+          raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
           raytrace_min_range: 0.0
-          expected_update_rate: 0.2
-          clearing: True
-          marking: True
+          expected_update_rate: 0.6
+          clearing: False
+          marking: True  # to insert valid obstacles "min_obstacle_height" above the  ground
           data_type: "PointCloud2"
+          publish_voxel_map: False  # to visualize voxels in Rviz
+          observation_persistence: 0.5
+        pointcloud_clearing:
+          topic: /camera/downsampled_cloud_from_depth  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+          max_obstacle_height: 0.5
+          min_obstacle_height: 0.0  # or -1.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
+          raytrace_min_range: 0.0
+          expected_update_rate: 0.6
+          clearing: True  # to clear the ground
+          marking: False
+          data_type: "PointCloud2"
+          publish_voxel_map: False  # to visualize voxels in Rviz
+          observation_persistence: 0.5
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         enabled: true
