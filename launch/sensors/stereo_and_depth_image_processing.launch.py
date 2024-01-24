@@ -232,13 +232,14 @@ def generate_launch_description():
                 ],
                 remappings=[
                     ('depth/image', depth_image_topic),
-                    ('disparity/image', '/disparity'),
+                    #('disparity/image', '/disparity'),
                     ('depth/camera_info', '/camera/depth/camera_info'),
-                    ('disparity/camera_info', '/camera/infra1/camera_info'),
+                    #('disparity/camera_info', '/camera/infra1/camera_info'),
                     ('cloud', '/camera/downsampled_cloud_from_depth')])
 
     # ######### RTabMap depth to pointcloud to depth
     rtabmap_obstacle_and_floor_detection_node = Node(
+            name='rtabmap_obstacle_and_floor_detection_node',
             condition=IfCondition([detect_ground_and_obstacles]),
             package='rtabmap_util', executable='obstacles_detection', output='screen',
             parameters=[
@@ -255,6 +256,7 @@ def generate_launch_description():
 
     # to register depth to a different frame
     rtabmap_pointcloud_to_depth = Node(
+                name='rtabmap_pointcloud_to_depth',
                 condition=IfCondition([register_depth]),
                 package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
                 parameters=[

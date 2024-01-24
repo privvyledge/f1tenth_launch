@@ -261,6 +261,7 @@ def generate_launch_description():
                     'queue_size': '1',  # default: 10
                     'approx_sync': approx_sync,
                     'use_sim_time': use_sim_time,
+                    'depthimage_to_pointcloud': 'True',
                     #
                     # 'frame_id': 'base_link',
                     # # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
