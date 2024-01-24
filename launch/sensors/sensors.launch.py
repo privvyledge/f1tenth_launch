@@ -255,7 +255,7 @@ def generate_launch_description():
                 # condition=LaunchConfigurationEquals('mapping', 'realsense'),
                 # condition=IfCondition([imu_only]),
                 launch_arguments={
-                    'queue_size': '10',  # default: 10
+                    'queue_size': 1,  # default: 10
                     'approx_sync': approx_sync,
                     'use_sim_time': use_sim_time,
                     #

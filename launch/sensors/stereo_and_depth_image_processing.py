@@ -4,8 +4,25 @@ Could also take in a disparity or depth image.
 
 Uses the following packages:
     * Stereo_image_proc: http://wiki.ros.org/stereo_image_proc
-    * Depth_image_proc: http://wiki.ros.org/depth_image_proc?distro=noetic
+    * Depth_image_proc: http://wiki.ros.org/depth_image_proc?distro=noetic | https://github.com/ros-perception/image_pipeline/tree/humble/depth_image_proc/launch
     * Rtabmap_util: http://wiki.ros.org/rtabmap_util
+
+Performance Analysis using CPU from fastest to lowest:
+    Summary, use depth nodes as they are faster (>8Hz vs <1Hz for depth), but use stereo nodes with GPU
+    1. rtabmap_depth_to_pointcloud_xyz (>10 Hz). Due to voxelization
+    2. rtabmap_obstacle_and_floor_detection_node (>6 Hz). Due to voxelization of rtabmap_depth_to_pointcloud_xyz
+    3. depth_image_to_pointcloud_xyz_node (3 Hz)
+    4. rtabmap_pointcloud_to_depth (3 Hz)
+    5. depth_image_proc_registration_node (2 Hz)
+    6. rtabmap_disparity_to_depth (>1 Hz). Depends on the rate at which disparity is published)
+    7. stereo_to_dipsarity (>3 Hz)
+    8. stereo_to_pointcloud (0.5 Hz)
+
+Todo:
+    * decimate/downsample images (color or depth first) then use stereo_image_proc
+        (http://wiki.ros.org/image_proc?distro=noetic#image_proc.2Fdiamondback.image_proc.2Fcrop_decimate |
+         https://www.robotandchisel.com/2020/09/01/navigation2/ |
+         https://github.com/ros-perception/image_pipeline/blob/humble/image_proc/launch/image_proc.launch.py)
 """
 
 # Using stereo image proc
@@ -52,10 +69,10 @@ def generate_launch_description():
                 'approx_sync', default_value='True',
                 description='Synchronize topics')
     queue_size_la = DeclareLaunchArgument(
-                'queue_size', default_value='1',  # 10000 for mapping, 10 for localization
+                'queue_size', default_value='1',
                 description='')
     use_stereo_la = DeclareLaunchArgument(
-                'use_stereo', default_value='True',
+                'use_stereo', default_value='False',
                 description='Whether to use Stereo image')
     use_depth_la = DeclareLaunchArgument(
             'use_depth', default_value='True',
@@ -64,13 +81,13 @@ def generate_launch_description():
             'detect_ground_and_obstacles', default_value='True',
             description='Whether to detect and isolate the floor plane and obstacles from raw pointclouds.')
     register_depth_la = DeclareLaunchArgument(
-            'register_depth', default_value='False',
+            'register_depth', default_value='True',
             description='Whether to register depth to a different frame')
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
                                                     default_value='False',
                                                     description='Whether to publish a PointCloud2 message from stereo images.')
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='False',
+                                                        default_value='True',
                                                         description='Whether to publish a PointCloud2 message from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
             'left_image_topic', default_value='/camera/infra1/image_rect_raw',
@@ -111,21 +128,21 @@ def generate_launch_description():
                         plugin='stereo_image_proc::DisparityNode',
                         parameters=[{
                             'approximate_sync': approx_sync,
-                            'use_system_default_qos': 'False',
-                            'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
-                            'prefilter_size': '9',
-                            'prefilter_cap': '31',
-                            'correlation_window_size': '15',
-                            'min_disparity': '0',
-                            'disparity_range': '64',
-                            'texture_threshold': '10',
-                            'speckle_size': '100',
-                            'speckle_range': '4',
-                            'disp12_max_diff': '0',
-                            'uniqueness_ratio': '15.0',
-                            'P1': '200.0',
-                            'P2': '400.0',
-                            'full_dp': 'False',
+                            'use_system_default_qos': True,
+                            'stereo_algorithm': 0,  # 0: block matching, 1: semi-global block matching
+                            'prefilter_size': 9,
+                            'prefilter_cap': 31,
+                            'correlation_window_size': 15,
+                            'min_disparity': 0,
+                            'disparity_range': 64,
+                            'texture_threshold': 10,
+                            'speckle_size': 100,
+                            'speckle_range': 4,
+                            'disp12_max_diff': 0,
+                            'uniqueness_ratio': 15.0,
+                            'P1': 200.0,
+                            'P2': 400.0,
+                            'full_dp': False,
                             'queue_size': queue_size,
                             'use_sim_time': use_sim_time,
                         }],
@@ -142,9 +159,9 @@ def generate_launch_description():
                         plugin='stereo_image_proc::PointCloudNode',
                         parameters=[{
                             'approximate_sync': approx_sync,
-                            'avoid_point_cloud_padding': 'False',
-                            'use_color': 'False',
-                            'use_system_default_qos': 'False',
+                            'avoid_point_cloud_padding': False,
+                            'use_color': False,
+                            'use_system_default_qos': True,
                             'queue_size': queue_size,
                             'use_sim_time': use_sim_time,
                         }],
@@ -152,6 +169,7 @@ def generate_launch_description():
                             ('left/camera_info', '/camera/infra1/camera_info'),
                             ('right/camera_info', '/camera/infra2/camera_info'),
                             ('left/image_rect_color', left_image_topic),
+                            ('points', '/camera/points_from_stereo_proc'),
                         ]
                 ),
             ],
@@ -190,7 +208,7 @@ def generate_launch_description():
                         name='point_cloud_xyz_node',
                         remappings=[('image_rect', depth_image_topic),  # or aligned depth
                                     ('camera_info', '/camera/depth/camera_info'),
-                                    ('image', '/camera/depth/converted_image')]
+                                    ('points', '/camera/points_from_depth_proc')]
                 ),
             ],
             output='screen',
@@ -223,7 +241,7 @@ def generate_launch_description():
             condition=IfCondition([detect_ground_and_obstacles]),
             package='rtabmap_util', executable='obstacles_detection', output='screen',
             parameters=[
-                {'frame_id': 'base_link'},
+                {'frame_id': 'base_link'},  # 'camera_link', 'base_link'
                 {'queue_size': queue_size},
                 {'approx_sync': approx_sync},
                 {'use_sim_time': use_sim_time},
@@ -239,7 +257,7 @@ def generate_launch_description():
                 condition=IfCondition([register_depth]),
                 package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
                 parameters=[
-                    {'decimation': 4, # 2
+                    {'decimation': 4,  # 2
                      'fixed_frame_id': 'camera_link',
                      'fill_holes_size': 1},
                     {'use_sim_time': use_sim_time},
@@ -251,7 +269,7 @@ def generate_launch_description():
 
     depth_image_proc_registration_node = ComposableNodeContainer(
                 condition=IfCondition([register_depth]),
-                name='depth_image_container',
+                name='depth_registration_container',  # todo: add to depth_image_container
                 namespace='',
                 package='rclcpp_components',
                 executable='component_container',
