@@ -383,7 +383,7 @@ global_costmap:
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
           raytrace_min_range: 0.0
-          expected_update_rate: 0.6
+          expected_update_rate: 2.0
           clearing: False
           marking: True  # to insert valid obstacles "min_obstacle_height" above the  ground
           data_type: "PointCloud2"
@@ -397,7 +397,7 @@ global_costmap:
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
           raytrace_min_range: 0.0
-          expected_update_rate: 0.6
+          expected_update_rate: 2.0
           clearing: True  # to clear the ground
           marking: False
           data_type: "PointCloud2"

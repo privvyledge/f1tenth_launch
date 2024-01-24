@@ -217,6 +217,7 @@ def generate_launch_description():
     # ######### RTabMap depth to pointcloud to depth
     rtabmap_depth_to_pointcloud_xyz = Node(
                 condition=IfCondition([depthimage_to_pointcloud]),
+                name='rtabmap_depth_to_pointcloud_xyz',
                 package='rtabmap_util', executable='point_cloud_xyz', output='screen',
                 parameters=[
                     {'decimation': 4},  # 1 to disable decimation

@@ -251,12 +251,12 @@ def generate_launch_description():
     #         ]
     # )
 
-    laser_filter_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    os.path.join(f1tenth_launch_pkg_prefix,
-                                 'launch/filters/laser_filter.launch.py')
-            )
-    )
+    # laser_filter_node = IncludeLaunchDescription(
+    #         PythonLaunchDescriptionSource(
+    #                 os.path.join(f1tenth_launch_pkg_prefix,
+    #                              'launch/filters/laser_filter.launch.py')
+    #         )
+    # )
 
     # Create Launch Description and add nodes to the launch description
     ld = LaunchDescription([
