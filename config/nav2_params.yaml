@@ -7,10 +7,17 @@ bt_navigator:
     odom_topic: /odometry/local # /odom
     bt_loop_duration: 10
     default_server_timeout: 20
+#    # The following Values should be overwritten by the Launchfile.
+#    bt_xml_filename: "navigate_w_replanning_and_recovery.xml"
+#    default_bt_xml_filename: "navigate_w_replanning_and_recovery.xml"
+#    default_bt_xml_filename: /f1tenth_ws/src/f1tenth_launch/config/nav2_bt_config.xml
+#    default_nav_to_pose_bt_xml: /field_r1tenth_wssrc/field_robot/config/nav2_bt_config.xml
+#    default_nav_through_poses_bt_xml: /f1tenth_ws/src/f1tenth_launch/config/nav2_bt_config.xml
     # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
     # nav2_bt_navigator/navigate_to_pose_w_replanning_and_recovery.xml
     # nav2_bt_navigator/navigate_through_poses_w_replanning_and_recovery.xml
     # They can be set here or via a RewrittenYaml remap from a parent launch file to Nav2.
+
 #    enable_groot_monitoring: True
 #    groot_zmq_publisher_port: 1666
 #    groot_zmq_server_port: 1667
@@ -88,7 +95,7 @@ controller_server:
     failure_tolerance: 0.0 # -1.0 makes it infinite, 0 to disable, and any positive value (0.3) for the appropriate timeout
     odom_topic: "/odometry/local"
     progress_checker_plugins: "progress_checker" # "progress_checker" for Humble and older, ["progress_checker"] otherwise
-    goal_checker_plugins: ["goal_checker"] # "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
+    goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
     controller_plugins: ["FollowPath"]
 
     # Progress checker parameters
@@ -103,7 +110,7 @@ controller_server:
     #  xy_goal_tolerance: 0.25
     #  yaw_goal_tolerance: 0.25
     #  stateful: True
-    goal_checker:  # general_goal_checker
+    general_goal_checker:  # general_goal_checker
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25 # 0.5, 0.25
       yaw_goal_tolerance: 0.25 # 0.5, 0.25
@@ -373,7 +380,7 @@ global_costmap:
           marking: True
           data_type: "LaserScan"
           inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
-          expected_update_rate: 0.2  # 0.1 (average rate for laserscan from realsense depthimage is 16 Hz or 0.0625s) so give more tolerance
+#          expected_update_rate: 5.0  # 0.1 (average rate for laserscan from realsense depthimage is 16 Hz or 0.0625s) so give more tolerance
           observation_persistence: 0.5
         pointcloud: # no frame set, uses frame from message
           topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
@@ -383,7 +390,7 @@ global_costmap:
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
           raytrace_min_range: 0.0
-          expected_update_rate: 2.0
+#          expected_update_rate: 5.0
           clearing: False
           marking: True  # to insert valid obstacles "min_obstacle_height" above the  ground
           data_type: "PointCloud2"
@@ -397,7 +404,7 @@ global_costmap:
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0  # raytrace range shoulg be higher than obstacle range
           raytrace_min_range: 0.0
-          expected_update_rate: 2.0
+#          expected_update_rate: 5.0
           clearing: True  # to clear the ground
           marking: False
           data_type: "PointCloud2"
@@ -526,9 +533,9 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["backup", "drive_on_heading", "assisted_teleop", "wait"]  # ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
-#    spin:
-#      plugin: "nav2_behaviors/Spin"
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
     backup:
       plugin: "nav2_behaviors/BackUp"
     drive_on_heading:
@@ -568,11 +575,11 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false  # scale velocities proportionally if any axis is outside of acceleration range to follow same vector, if possible
     feedback: "OPEN_LOOP"  # Type of feedback for current speed. Open loop uses the last smoothed output. Closed loop uses robot odometry
-    max_velocity: [1.0, 0.0, 3.0]  # Maximum velocities, ordered [Vx, Vy, Vw]
-    min_velocity: [-1.0, 0.0, -3.0]  # Minimum velocities, ordered [Vx, Vy, Vw]
+    max_velocity: [1.5, 0.0, 3.0]  # Maximum velocities, ordered [Vx, Vy, Vw]
+    min_velocity: [-1.5, 0.0, -3.0]  # Minimum velocities, ordered [Vx, Vy, Vw]
     deadband_velocity: [0.3, 0.0, 0.0]  # A deadband of velocities below which they should be zero-ed out for sending to the robot base controller, ordered [Vx, Vy, Vw]
     velocity_timeout: 1.0  # Time (s) after which if no new velocity commands are received to zero out and stop
     max_accel: [3.0, 0.0, 2.0] # Maximum acceleration, ordered [Ax, Ay, Aw]
     max_decel: [-3.0, 0.0, -2.0]  # Maximum deceleration, ordered [Ax, Ay, Aw]
     odom_topic: "/odometry/local"  # Topic of odometry to use for estimating current velocities
-    odom_duration: 0.1  # Period of time (s) to sample odometry information in for velocity estimation
+    odom_duration: 0.02  # (0.1) Period of time (s) to sample odometry information in for velocity estimation

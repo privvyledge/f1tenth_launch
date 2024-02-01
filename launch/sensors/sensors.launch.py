@@ -168,9 +168,15 @@ def generate_launch_description():
                         {'output_frame': "camera_link"},
                         {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
-            arguments=['depth:=/camera/depth/image_rect_raw',
-                       'depth_camera_info:=/camera/depth/camera_info',
-                       'scan:=/scan/depth_image'])
+            remappings=[
+                ('depth', '/camera/depth/image_rect_raw'),
+                ('depth_camera_info', '/camera/depth/camera_info'),
+                ('scan', '/scan/from_depth_image')
+            ],
+            # arguments=['depth:=/camera/depth/image_rect_raw',
+            #            'depth_camera_info:=/camera/depth/camera_info',
+            #            'scan:=/scan/from_depth_image']
+    )
 
     # # ################# Depth Image to PointCloud
     # depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(

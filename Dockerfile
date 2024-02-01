@@ -1,4 +1,3 @@
-# todo: fix xforwarding issue
 # todo: fix Realsense issues: color image, gyro, accel, point clouds, GPU
 # todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
 # todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
@@ -120,12 +119,14 @@ RUN cd "$BUILD_HOME/src" && rm -rf f1tenth_system && git clone https://github.co
 
 #################################################### (Optional) Setup ROS Nav
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-behaviortree-cpp-v3 \
+    ros-${ROS_DISTRO}-nav2-msgs \
     ros-${ROS_DISTRO}-navigation2 \
     ros-${ROS_DISTRO}-nav2-bringup && \
     sudo rm -rf /var/lib/apt/lists/*
-# RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+# RUN  sudo apt remove ros-humble-navigation2 ros-humble-nav2* && sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
 #    ros-${ROS_DISTRO}-gazebo-ros-pkgs && \
-#    cd "$BUILD_HOME/src" && git clone https://github.com/ros-planning/navigation2.git -b ${ROS_DISTRO}-devel && \
+#    cd "$BUILD_HOME/src" && git clone --recursive https://github.com/ros-planning/navigation2.git -b ${ROS_DISTRO} && \
 #    sudo rm -rf /var/lib/apt/lists/*
 
 #################################################### (Optional) Setup SLAM toolbox. Use galactic and above (or noetic) to get pose
@@ -202,17 +203,27 @@ RUN git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git 
 WORKDIR /sdks
 
 # Install Acados.
+#ARCHITECTURES: "" (Recommended), ARMV8A_ARM_CORTEX_A57-TX2, ARMV8A_ARM_CORTEX_A76-ORIN, X64_AUTOMATIC, GENERIC
+# Could remove the -DBLASFEO_TARGET specification and should be automatically detected
 ARG TX2_ARCHITECTURE=ARMV8A_ARM_CORTEX_A57
 ARG ORIN_ARCHITECTURE=ARMV8A_ARM_CORTEX_A76
-ARG ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE=$TX2_ARCHITECTURE
-ARG ACADOS_OPENMP_PARALLELIZATION_ENABLED=OFF
+ARG ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE=${TX2_ARCHITECTURE}
+ARG ACADOS_OPENMP_PARALLELIZATION_ENABLED=ON
+ARG ACADOS_NUM_THREADS=2
 RUN mkdir -p "/sdks/" && cd "/sdks/" && \
     export ACADOS_ROOT='/sdks/acados' && export ACADOS_PATH=${ACADOS_ROOT} && export ACADOS_SOURCE_DIR=${ACADOS_ROOT} && \
     git clone https://github.com/acados/acados.git && cd acados && \
     git submodule update --recursive --init && \
     mkdir build && cd build && \
-    cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_OSQP=ON -DACADOS_INSTALL_DIR=${ACADOS_ROOT} -DBLASFEO_TARGET=${ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE} -DACADOS_WITH_OPENMP=${ACADOS_OPENMP_PARALLELIZATION_ENABLED} .. && \
-    make install -j$(nproc) && \
+    cmake \
+        -DACADOS_WITH_QPOASES=ON \
+        -DACADOS_WITH_OSQP=ON \
+        -DACADOS_INSTALL_DIR=${ACADOS_ROOT} \
+        -DBLASFEO_TARGET=${ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE} \
+        -DCMAKE_BUILD_TYPE=release \
+        -DACADOS_NUM_THREADS=${ACADOS_NUM_THREADS} \
+        -DACADOS_WITH_OPENMP=${ACADOS_OPENMP_PARALLELIZATION_ENABLED} .. && \
+    sudo make install -j$(nproc) && \
     python3 -m pip install -e ${ACADOS_ROOT}/interfaces/acados_template && \
     curl https://sh.rustup.rs -sSf | sh -s -- -y && \
     source $HOME/.cargo/env && cd ../bin && \
@@ -243,13 +254,13 @@ RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linu
     mkdir build && \
     cd build && \
     cmake \
-      -DBUILD_EXAMPLES=true \
+       -DBUILD_EXAMPLES=true \
 	   -DFORCE_RSUSB_BACKEND=true \
 	   -DBUILD_WITH_CUDA=true \
 	   -DCMAKE_BUILD_TYPE=release \
 	   -DBUILD_PYTHON_BINDINGS=bool:true \
 	   -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-      -DBUILD_GRAPHICAL_EXAMPLES=true \
+       -DBUILD_GRAPHICAL_EXAMPLES=true \
 	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
 	   ../ && \
     make -j$(($(nproc)-1)) && \
@@ -289,17 +300,54 @@ RUN cd ${BUILD_HOME}/src && wget https://github.com/IntelRealSense/realsense-ros
     mv realsense-ros-${REALSENSE_ROS_VERSION}/ realsense-ros && \
     rm ${REALSENSE_ROS_VERSION}.zip
 
+##--------------------------------
+## Setup NVIDIA Isaac packages
+##--------------------------------
+#RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+#    python3-distutils \
+#    libboost-all-dev \
+#    libboost-dev \
+#    libpcl-dev \
+#    libode-dev \
+#    lcov \
+#    python3-zmq \
+#    libxaw7-dev \
+#    libgraphicsmagick++1-dev \
+#    graphicsmagick-libmagick-dev-compat \
+#    libceres-dev \
+#    libsuitesparse-dev \
+#    libncurses5-dev \
+#    libassimp-dev \
+#    libyaml-cpp-dev \
+#    libpcap-dev \
+#    && sudo rm -rf /var/lib/apt/lists/* \
+#    && sudo apt-get clean
+#
+## Add Isaac apt repository
+#RUN wget -qO - https://isaac.download.nvidia.com/isaac-ros/repos.key | apt-key add - && \
+#    grep -qxF 'deb https://isaac.download.nvidia.com/isaac-ros/ubuntu/main focal main' /etc/apt/sources.list || \
+#    echo 'deb https://isaac.download.nvidia.com/isaac-ros/ubuntu/main focal main' | tee -a /etc/apt/sources.list
+#
+## Add Nvidia Isaac dependencies to Rosdep
+#RUN curl -o /etc/ros/rosdep/sources.list.d/nvidia-isaac.yaml https://isaac.download.nvidia.com/isaac-ros/extra_rosdeps.yaml \
+#    && echo "yaml file:///etc/ros/rosdep/sources.list.d/nvidia-isaac.yaml" | tee /etc/ros/rosdep/sources.list.d/00-nvidia-isaac.list
+#
+#RUN cd ${BUILD_HOME}/src && git clone https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common.git
+
 #--------------------------------
 # Build ROS workspace
 # The '--event-handlers console_direct+ --base-paths',  ' -DCMAKE_LIBRARY_PATH' and ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"' flags are needed by ZED
 # The ' -DCMAKE_BUILD_TYPE=Release' flag is for all of them, especially Autoware
 #--------------------------------
+# Silence setup.py and easy_install deprecation warnings caused by colcon and setuptools (https://github.com/colcon/colcon-core/issues/454#issuecomment-1142649390)
+ENV PYTHONWARNINGS=ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::pkg_resources
+
 WORKDIR $BUILD_HOME
 RUN sudo apt update && \
     source /opt/ros/${ROS_DISTRO}/setup.bash && \
     rosdep update && \
 #    rosdep install --from-paths src/autoware/src --ignore-src -r -y && \
-    rosdep install --from-paths src --ignore-src -r -y && \
+    rosdep install --from-paths src --ignore-src -r -y --skip-keys "rf2o_laser_odometry" && \
     colcon build --symlink-install --event-handlers console_direct+ --base-paths src --cmake-args ' -DCMAKE_BUILD_TYPE=Release' ' -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs' ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"'
 
 #-----------------------------

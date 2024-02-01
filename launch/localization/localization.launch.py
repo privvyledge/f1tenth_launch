@@ -112,7 +112,7 @@ def generate_launch_description():
     )
     launch_rtabmap_localizer_la = DeclareLaunchArgument(
             'launch_rtabmap_localizer',
-            default_value='True',
+            default_value='False',
             description='Whether to launch the RTABMaps global localizer node.'
     )
     declare_use_composition_cmd = DeclareLaunchArgument(
@@ -219,9 +219,9 @@ def generate_launch_description():
                     'approx_sync': 'True',
                     'publish_map_tf': 'False',
                     'wait_imu_to_init': 'True',
-                    'imu_topic': '/vehicle/sensors/imu/raw',
+                    'imu_topic': '/vehicle/sensors/imu/raw',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
                     'rtabmap_viz_view': 'True',
-                    'rviz_view': 'True',
+                    'rviz_view': 'False',
                     'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),
                     'rtabmap_args': '--Mem/IncrementalMemory false --Mem/InitWMWithAllNodes true '
                                     '--Vis/MinInliers 15 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
@@ -279,7 +279,7 @@ def generate_launch_description():
         load_nodes,
         slam_toolbox_localizer_node,
         ekf_nodes,
-        #rtabmap_localizer_node,
+        rtabmap_localizer_node,
         # imu_filter_node,
         # laser_filter_node,
     ])

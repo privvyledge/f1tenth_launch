@@ -1,4 +1,5 @@
 """
+Todo: add boolean flag to launch the vehicle_interface, sensors, etc. so that online mapping can be launched alone
 Todo: launch joystick in a separate package, i.e vehicle_bringup
 Todo: pass arguments to mapper
 Todo: load from ROSBAG
@@ -44,7 +45,7 @@ def generate_launch_description():
     # parameters
     use_sim_time_la = DeclareLaunchArgument(
                 'use_sim_time', default_value='True',
-                description='Use simulation or ROSBAG clock if true'),
+                description='Use simulation or ROSBAG clock if true')
 
     offline_mapping_param_file = os.path.join(
         f1tenth_launch_pkg_prefix, "config/mapping/2d_mapping_offline.yaml"

@@ -261,14 +261,17 @@ def generate_launch_description():
                 package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
                 parameters=[
                     {'decimation': 4,  # 2
-                     'fixed_frame_id': 'camera_link',
+                     'fixed_frame_id': 'camera_link',  # camera_link, base_link, odom
                      'fill_holes_size': 1},
                     {'use_sim_time': use_sim_time},
                     {'queue_size': queue_size},
+                    {'approx', approx_sync}
                             ],
                 remappings=[('camera_info', '/camera/color/camera_info'),
                             ('cloud', '/camera/downsampled_cloud_from_depth'),
-                            ('image_raw', '/camera/realigned_depth_to_color/image_raw')])
+                            ('image', '/camera/realigned_depth_to_color/depthimage'),
+                            ('image_raw', '/camera/realigned_depth_to_color/depthimage_raw')
+                            ])
 
     depth_image_proc_registration_node = ComposableNodeContainer(
                 condition=IfCondition([register_depth]),
