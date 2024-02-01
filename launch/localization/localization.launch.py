@@ -162,7 +162,7 @@ def generate_launch_description():
                         package='nav2_amcl',
                         executable='amcl',
                         name='amcl',
-                        output='screen',
+                        output={'both': 'log'},
                         respawn=use_respawn,
                         respawn_delay=2.0,
                         parameters=[configured_params],
@@ -215,16 +215,17 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                     'use_stereo': 'False',
                     'localization': 'True',
-                    'queue_size': '10',
+                    'queue_size': '100',
                     'approx_sync': 'True',
                     'publish_map_tf': 'False',
                     'wait_imu_to_init': 'True',
-                    'imu_topic': '/vehicle/sensors/imu/raw',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
+                    'imu_topic': '/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
                     'rtabmap_viz_view': 'True',
                     'rviz_view': 'False',
                     'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),
                     'rtabmap_args': '--Mem/IncrementalMemory false --Mem/InitWMWithAllNodes true '
-                                    '--Vis/MinInliers 15 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
+                                    '--RGBD/LoopClosureReextractFeatures false '
+                                    '--Vis/MinInliers 10 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
                                     '--GFTT/QualityLevel 0.00001 --Stereo/MinDisparity 0 --Stereo/MaxDisparity 64 '
                                     '--Vis/BundleAdjustment 1 --Vis/CorNNDR 0.6 --Vis/CorGuessWinSize 20 '
                                     '--Vis/PnPFlags 0 --Vis/CorType 1 --Reg/Force3DoF true --Rtabmap/DetectionRate 10 '

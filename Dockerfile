@@ -1,10 +1,9 @@
+# Todo: setup RTABMAP based 2D LaserScan + Realsense global localization
 # todo: fix Realsense issues: color image, gyro, accel, point clouds, GPU
 # todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
 # todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
 # Todo: setup Nvidia ISAAC ROS vSLAM
-# Todo: setup RTABMAP based 2D LaserScan + Realsense global localization
 # todo: setup particle filter
-# todo: setup micro ros
 # pull base image (Autoware or OSRF ROS2 or Dusty-NV)
 FROM ghcr.io/autowarefoundation/autoware-universe:humble-latest-cuda-arm64
 

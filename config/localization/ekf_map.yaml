@@ -49,9 +49,9 @@
                     false, false, false,
                     false, false, false,
                     false, false, false ]
-    pose2_differential: false
-    pose2_relative: true
-    pose2_queue_size: 2
+    pose2_differential: true
+    pose2_relative: false
+    pose2_queue_size: 1
     #    pose2_rejection_threshold: 2.0
     pose2_nodelay: false
 
