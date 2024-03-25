@@ -115,7 +115,7 @@ def generate_launch_description():
             condition=IfCondition(PythonExpression(['not ', imu_only])),
             package='realsense2_camera',
             namespace='camera',
-            name='camera',
+            # name='',
             executable='realsense2_camera_node',
             parameters=[configured_params, {"pointcloud.enable": True}],
             output='screen',
@@ -141,11 +141,13 @@ def generate_launch_description():
             launch_arguments={
                 'input_topic': '/camera/imu',
                 'output_topic': '/camera/imu/filtered',
-                'remove_gravity_vector': 'True',
+                'remove_gravity_vector': 'False',  # True
                 'node_name': 'realsense_imu_filter',
                 'use_madgwick_filter': 'False',
+                'remove_imu_bias': 'True',
+                'use_sim_time': 'False',
             }.items()
-    )
+    )  # todo: launch with realsense GroupAction so they have the same namespace
 
     ld.add_action(realsense_node)
     ld.add_action(realsense_imu_node)

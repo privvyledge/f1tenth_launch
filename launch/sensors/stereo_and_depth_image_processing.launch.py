@@ -265,7 +265,7 @@ def generate_launch_description():
                      'fill_holes_size': 1},
                     {'use_sim_time': use_sim_time},
                     {'queue_size': queue_size},
-                    {'approx', approx_sync}
+                    {'approx': approx_sync}
                             ],
                 remappings=[('camera_info', '/camera/color/camera_info'),
                             ('cloud', '/camera/downsampled_cloud_from_depth'),

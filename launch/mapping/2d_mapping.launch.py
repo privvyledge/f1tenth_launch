@@ -5,6 +5,7 @@ Todo: pass arguments to mapper
 Todo: load from ROSBAG
 Todo: refer to https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/slam_launch.py
 Todo: add argument to select online/offline mapping
+Todo: either launch odom ekf here or include this file in a higher level bringup file
 """
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription

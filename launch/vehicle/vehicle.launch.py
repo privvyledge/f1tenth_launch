@@ -1,3 +1,6 @@
+"""
+Todo: move joy launching (with mux and teleop_twist/ackermann) to another launch file.
+"""
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.substitutions import Command
@@ -138,6 +141,8 @@ def generate_launch_description():
                 'remove_gravity_vector': 'False',
                 'node_name': 'vesc_imu_filter',
                 'use_madgwick_filter': 'False',
+                'remove_imu_bias': 'True',
+                'use_sim_time': 'False',
             }.items()
     )
 

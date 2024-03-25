@@ -166,6 +166,7 @@ def generate_launch_description():
             parameters=[{'scan_time': 0.0333},
                         {'use_sim_time': use_sim_time},
                         {'output_frame': "camera_link"},
+                        # {'scan_height': 1},
                         {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
             remappings=[

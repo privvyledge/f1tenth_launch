@@ -47,7 +47,7 @@ def generate_launch_description():
                                name='ydlidar_ros2_driver_node',
                                output='screen',
                                emulate_tty=True,
-                               parameters=[LaunchConfiguration('lidar_config')],
+                               parameters=[lidar_config],
                                namespace='lidar')
 
     laserscan_filter = IncludeLaunchDescription(

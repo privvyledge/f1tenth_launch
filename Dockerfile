@@ -1,11 +1,14 @@
-# Todo: setup RTABMAP based 2D LaserScan + Realsense global localization
-# todo: fix Realsense issues: color image, gyro, accel, point clouds, GPU
-# todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2
+# todo: fix Realsense issues: color image, gyro, accel, point clouds, GPU [done]
+# todo: switch to a dusty_nv container https://github.com/dusty-nv/jetson-containers/blob/master/packages/ros/Dockerfile.ros2 or Nvidia ISAAC ROS or Mine
 # todo: setup NVIDIA ISAAC NVBLOX (mapping) and map localizer
 # Todo: setup Nvidia ISAAC ROS vSLAM
 # todo: setup particle filter
-# pull base image (Autoware or OSRF ROS2 or Dusty-NV)
-FROM ghcr.io/autowarefoundation/autoware-universe:humble-latest-cuda-arm64
+# todo: install Autoware dev tools manually since we're not using their container or modify setup-dev-env and ansible scripts
+# pull base image
+# Autoware: https://github.com/autowarefoundation/autoware/pkgs/container/autoware-universe/versions?filters%5Bversion_type%5D=tagged
+# or OSRF ROS2 or Dusty-NV
+#FROM ghcr.io/autowarefoundation/autoware-openadk:latest-humble-devel-cuda
+FROM privvyledge/r36.2.0-ros-humble-ml:latest
 
 # Set up the shell
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -43,7 +46,11 @@ ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 
 ENV NVIDIA_DRIVER_CAPABILITIES all
-#ENV NVIDIA_VISIBLE_DEVICES all  # causes graphical failures
+# todo: test with newer images
+ENV NVIDIA_VISIBLE_DEVICES all  # causes graphical failures
+
+# Install Sudo
+RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y sudo
 
 # Install packages
 RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
@@ -73,12 +80,12 @@ RUN sudo apt-get update -y && DEBIAN_FRONTEND="noninteractive" sudo apt-get inst
     python3-numpy \
     python3-rosdep \
     python3-matplotlib \
-    python3-opencv \
+#    python3-opencv \
     python3-pil \
     python3-yaml \
     python3-tk \
     python3-pyqt5 \
-    libopencv-dev \
+#    libopencv-dev \
     libssl-dev \
     libusb-1.0-0-dev \
     libgtk-3-dev \
@@ -149,19 +156,20 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
 
 #################################################### Setup Autonomous bringup packages.
 RUN cd "$BUILD_HOME/src" && git clone https://github.com/privvyledge/f1tenth_launch.git -b ${ROS_DISTRO}-dev && \
-    git clone https://github.com/privvyledge/trajectory_following_ros2.git
+    git clone https://github.com/privvyledge/trajectory_following_ros2.git && \
+    git clone https://github.com/privvyledge/f1tenth_autoware_launch_py.git
 
 #################################################### Setup Laser filters/pipeline.
 #RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
 #    ros-${ROS_DISTRO}-laser-pipeline ros-${ROS_DISTRO}-laser-filters  && \
 #    rm -rf /var/lib/apt/lists/*
-RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-filters && \
+RUN cd "$BUILD_HOME/src" && sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-filters && \
     git clone https://github.com/ros-perception/laser_filters.git -b ros2
 
 #################################################### Setup depth image to laser scan. No need as its already in the container
-#RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
-#    ros-${ROS_DISTRO}-depth-image-to-laserscan  && \
-#    sudo rm -rf /var/lib/apt/lists/*
+RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-depthimage-to-laserscan  && \
+    sudo rm -rf /var/lib/apt/lists/*
 # RUN #cd "$BUILD_HOME/src" && git clone https://github.com/ros-perception/depthimage_to_laserscan.git -b ros2 && \
 #    cd laser_filters && rosdep install -q -y -r --from-paths src --ignore-src
 
@@ -172,13 +180,6 @@ RUN cd "$BUILD_HOME/src" && DEBIAN_FRONTEND="noninteractive" sudo apt-get instal
 #################################################### Setup rf2o laser odometry
 RUN cd "$BUILD_HOME/src" && git clone https://github.com/MAPIRlab/rf2o_laser_odometry.git
 
-#################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
-#RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap.git && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel && \
-#    cd rtabmap_ros && rosdep install -q -y -r --from-paths src --ignore-src
-RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
-    ros-${ROS_DISTRO}-rtabmap* && \
-    sudo rm -rf /var/lib/apt/lists/*
-
 #################################################### Setup Image Proc (e.g PointClouds from depth or stereo images)
 RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-image-pipeline && \
@@ -187,17 +188,26 @@ RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install
 #-------------------------------------------------
 # Setup MicroROS (https://github.com/micro-ROS/micro_ros_setup.git | https://micro.ros.org/docs/tutorials/core/first_application_linux/)
 #-------------------------------------------------
-RUN git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup && \
+RUN git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git micro_ros_setup && \
     python3 -m pip install pyserial
 
 #-------------------------------------------------
-# Setup Autoware. Todo: use main branch when done
+# Setup Autoware.
 #-------------------------------------------------
-#ARG AUTOWARE_DIR='src'
-#ARG AUTOWARE_FOLDER_NAME='autoware_gokart'
-#RUN git clone -b gokart_devel https://github.com/privvyledge/autoware.gokart.git ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME} && \
-#    mkdir -p ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/src && \
-#    vcs import src/${AUTOWARE_FOLDER_NAME}/src < ${AUTOWARE_DIR}/${AUTOWARE_FOLDER_NAME}/autoware.repos
+ARG AUTOWARE_DIR='src'
+ARG AUTOWARE_FOLDER_NAME='autoware_f1tenth'
+RUN git clone https://github.com/privvyledge/autoware.f1tenth.git && cd autoware.f1tenth && mkdir src  && \
+    vcs import src < autoware.repos && \
+    chmod +x install_autoware_dependencies.sh && ./install_autoware_dependencies.sh
+
+#### Setup Tensorrt YOLOX (https://github.com/autowarefoundation/autoware/tree/main/ansible/roles/artifacts). Note should be done automatically but just in case
+RUN mkdir -p ~/autoware_data/tensorrt_yolox/ && wget -P ~/autoware_data/tensorrt_yolox/ \
+       https://awf.ml.dev.web.auto/perception/models/yolox-tiny.onnx \
+       https://awf.ml.dev.web.auto/perception/models/yolox-sPlus-opt.onnx \
+       https://awf.ml.dev.web.auto/perception/models/yolox-sPlus-opt.EntropyV2-calibration.table \
+       https://awf.ml.dev.web.auto/perception/models/object_detection_yolox_s/v1/yolox-sPlus-T4-960x960-pseudo-finetune.onnx \
+       https://awf.ml.dev.web.auto/perception/models/object_detection_yolox_s/v1/yolox-sPlus-T4-960x960-pseudo-finetune.EntropyV2-calibration.table \
+       https://awf.ml.dev.web.auto/perception/models/label.txt
 
 WORKDIR /sdks
 
@@ -206,7 +216,7 @@ WORKDIR /sdks
 # Could remove the -DBLASFEO_TARGET specification and should be automatically detected
 ARG TX2_ARCHITECTURE=ARMV8A_ARM_CORTEX_A57
 ARG ORIN_ARCHITECTURE=ARMV8A_ARM_CORTEX_A76
-ARG ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE=${TX2_ARCHITECTURE}
+ARG ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE=${ORIN_ARCHITECTURE}
 ARG ACADOS_OPENMP_PARALLELIZATION_ENABLED=ON
 ARG ACADOS_NUM_THREADS=2
 RUN mkdir -p "/sdks/" && cd "/sdks/" && \
@@ -218,14 +228,14 @@ RUN mkdir -p "/sdks/" && cd "/sdks/" && \
         -DACADOS_WITH_QPOASES=ON \
         -DACADOS_WITH_OSQP=ON \
         -DACADOS_INSTALL_DIR=${ACADOS_ROOT} \
-        -DBLASFEO_TARGET=${ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE} \
+#        -DBLASFEO_TARGET=${ACADO_BLASFEO_TARGET_CPU_ARCHITECHTURE} \
         -DCMAKE_BUILD_TYPE=release \
         -DACADOS_NUM_THREADS=${ACADOS_NUM_THREADS} \
         -DACADOS_WITH_OPENMP=${ACADOS_OPENMP_PARALLELIZATION_ENABLED} .. && \
     sudo make install -j$(nproc) && \
     python3 -m pip install -e ${ACADOS_ROOT}/interfaces/acados_template && \
-    curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-    source $HOME/.cargo/env && cd ../bin && \
+#    curl https://sh.rustup.rs -sSf | sh -s -- -y && source $HOME/.cargo/env && \
+    sudo apt update && sudo apt install -y rustc cargo && cd ../bin && \
     git clone https://github.com/acados/tera_renderer.git && cd tera_renderer && $HOME/.cargo/bin/cargo build --verbose --release && \
     cp target/release/t_renderer ${ACADOS_ROOT}/bin
 
@@ -245,7 +255,7 @@ RUN cd "$BUILD_HOME/src" && git clone https://github.com/YDLIDAR/ydlidar_ros2_dr
 
 # todo: set envs above instead of exporting
 # branches R/2542, master, development, etc
-ARG LIBREALSENSE_BRANCH="R/2542"
+ARG LIBREALSENSE_BRANCH="master"
 RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
     export CUDACXX=/usr/local/cuda/bin/nvcc && export PATH=${PATH}:/usr/local/cuda/bin && \
     cd /sdks && git clone --branch ${LIBREALSENSE_BRANCH} --depth=1 https://github.com/IntelRealSense/librealsense && \
@@ -263,9 +273,9 @@ RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linu
 	   -DPYTHON_INSTALL_DIR=$(python3 -c 'import sys; print(f"/usr/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages")') \
 	   ../ && \
     make -j$(($(nproc)-1)) && \
-    sudo make install && \
-    cd ../ && \
-    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
+    sudo make install
+#    cd ../ && \
+#    sudo cp ./config/99-realsense-libusb.rules /etc/udev/rules.d/
 
 #ARG LIBREALSENSE_VERSION="2.54.2"
 #RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib && \
@@ -293,11 +303,19 @@ RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/targets/aarch64-linu
 
 # Install realsense ros
 # RUN sudo apt install -y --no-install-recommends ros-${ROS_DISTRO}-realsense2-*
-ARG REALSENSE_ROS_VERSION=4.54.1
-RUN cd ${BUILD_HOME}/src && wget https://github.com/IntelRealSense/realsense-ros/archive/refs/tags/${REALSENSE_ROS_VERSION}.zip && \
-    unzip ${REALSENSE_ROS_VERSION}.zip && \
-    mv realsense-ros-${REALSENSE_ROS_VERSION}/ realsense-ros && \
-    rm ${REALSENSE_ROS_VERSION}.zip
+#ARG REALSENSE_ROS_VERSION=4.54.1
+#RUN cd ${BUILD_HOME}/src && wget https://github.com/IntelRealSense/realsense-ros/archive/refs/tags/${REALSENSE_ROS_VERSION}.zip && \
+#    unzip ${REALSENSE_ROS_VERSION}.zip && \
+#    mv realsense-ros-${REALSENSE_ROS_VERSION}/ realsense-ros && \
+#    rm ${REALSENSE_ROS_VERSION}.zip
+
+RUN cd ${BUILD_HOME}/src && git clone https://github.com/IntelRealSense/realsense-ros.git
+
+#################################################### Setup RTAB-Map (which also publishes odometry from laser_scan)
+RUN cd "$BUILD_HOME/src" && git clone https://github.com/introlab/rtabmap.git && git clone https://github.com/introlab/rtabmap_ros.git -b ${ROS_DISTRO}-devel
+#RUN sudo apt-get update && DEBIAN_FRONTEND="noninteractive" sudo apt-get install -y --no-install-recommends \
+#    ros-${ROS_DISTRO}-rtabmap* && \
+#    sudo rm -rf /var/lib/apt/lists/*
 
 ##--------------------------------
 ## Setup NVIDIA Isaac packages
@@ -342,20 +360,25 @@ RUN cd ${BUILD_HOME}/src && wget https://github.com/IntelRealSense/realsense-ros
 ENV PYTHONWARNINGS=ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::pkg_resources
 
 WORKDIR $BUILD_HOME
+#ARG MAKEFLAGS="-j4 -l4"
 RUN sudo apt update && \
+    sudo rosdep init && rosdep update && \
     source /opt/ros/${ROS_DISTRO}/setup.bash && \
-    rosdep update && \
-#    rosdep install --from-paths src/autoware/src --ignore-src -r -y && \
-    rosdep install --from-paths src --ignore-src -r -y --skip-keys "rf2o_laser_odometry" && \
-    colcon build --symlink-install --event-handlers console_direct+ --base-paths src --cmake-args ' -DCMAKE_BUILD_TYPE=Release' ' -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs' ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"'
+    rosdep install --from-paths src --ignore-src -r -y --skip-keys "rf2o_laser_odometry librealsense2 realsense2_camera libopencv-dev" && \
+    colcon build --symlink-install --event-handlers console_direct+ --base-paths src --cmake-args '  -Wno-dev' ' --no-warn-unused-cli' ' -DBUILD_ACCELERATE_GPU_WITH_GLSL=ON' ' -DCMAKE_BUILD_TYPE=Release' ' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON' ' -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs' ' -DCMAKE_CXX_FLAGS="-Wl,--allow-shlib-undefined"  -DDOWNLOAD_ARTIFACTS=ON'
 
 #-----------------------------
 # Setup microros agent, i.e create_agent_ws, then build_agent. Modified to skip rosdep keys and specify colcon build arguments
 #-----------------------------
 RUN bash -c 'source install/setup.bash; \
-             EXTERNAL_SKIP="lio_sam fast_lio"; \
+             EXTERNAL_SKIP="lio_sam fast_lio rf2o_laser_odometry librealsense2 realsense2_camera libopencv-dev"; \
              ros2 run micro_ros_setup create_agent_ws.sh; \
              ros2 run micro_ros_setup build_agent.sh'
+
+#--------------------------------
+# Todo: run the following. See (https://autowarefoundation.github.io/autoware-documentation/release-v1.0_beta/how-to-guides/others/advanced-usage-of-colcon/#changing-the-default-configuration-of-colcon)
+#--------------------------------
+
 
 #-----------------------------
 # Setup environment variables
@@ -366,6 +389,7 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> ~/.bashrc && \
     echo "source ${BUILD_HOME}/install/setup.bash" >> ~/.bashrc && \
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
+    echo "export CYCLONEDDS_URI=file://$BUILD_HOME/src/autoware.f1tenth/cyclone_dds/cyclonedds_config.xml" >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/targets/aarch64-linux/lib/stubs:/opt/ros/${ROS_DISTRO}/install/lib' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64' >> ~/.bashrc && \
@@ -376,6 +400,8 @@ RUN echo 'alias build="colcon build --symlink-install  --event-handlers console_
     echo 'export ACADOS_PATH=${ACADOS_ROOT}' >> ~/.bashrc && \
     echo 'export ACADOS_SOURCE_DIR=${ACADOS_ROOT}' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${ACADOS_ROOT}/lib' >> ~/.bashrc && \
+    echo "export RCUTILS_COLORIZED_OUTPUT=1" >> ~/.bashrc && \
+    echo 'export RCUTILS_CONSOLE_OUTPUT_FORMAT="[{severity} {time}] [{name}]: {message} ({function_name}() at {file_name}:{line_number})"' >> ~/.bashrc && \
     echo "source /usr/share/colcon_cd/function/colcon_cd.sh" >> ~/.bashrc && \
     echo "export _colcon_cd_root=${ROS_ROOT}" >> ~/.bashrc && \
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc

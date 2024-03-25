@@ -128,7 +128,7 @@
     #odom0_pose_rejection_threshold: 1.0
     #odom0_twist_rejection_threshold: 0.5
 
-    odom1: /odom/rtabmap_icp  # /odom/rtabmap_icp, /odom/rf2o
+#    odom1: /odom/rtabmap_icp  # /odom/rtabmap_icp, /odom/rf2o
     odom1_config: [true,  true,  false,  # true, true,
                    false, false, true,
                    false, false, false,  # true, true

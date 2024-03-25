@@ -10,10 +10,12 @@
 /**:
   ros__parameters:
 #    device_type: d435i
-#    camera_name: 'camera'
-#    camera_namespace: 'camera'
-    initial_reset: false
-#    base_frame_id: camera_link
+    camera_name: ''
+    camera_namespace: 'camera'
+#    initial_reset: false
+##    base_frame_id: camera_link
+
+    accelerate_gpu_with_glsl: true
 
     enable_sync: true
     enable_depth: true
@@ -24,30 +26,31 @@
     enable_confidence: true
     enable_gyro: true
     enable_accel: true
-    enable_pose: true
-    enable_rgbd: false
+#    enable_pose: false
+#    enable_rgbd: false
     pointcloud.enable: true
 
-    depth_module.profile: 640x480x15  # 640x480x60, 848x480x30, 1280x720x30
-    rgb_camera.profile: 640x480x15  # 640x480x60, 848x480x30, 1280x720x30
-    rgb_camera.color_format: bgr8
-    rgb_camera:
-      enable_auto_exposure: true
-#    align_depth.enable: true
-    depth_module.emitter_enabled: 0
+    depth_module.profile: 848x480x60  # 640x480x60, 848x480x30, 1280x720x30
+    rgb_camera.profile: 848x480x60  # 640x480x60, 848x480x30, 1280x720x30
+#    rgb_camera.color_format: bgr8
+#    rgb_camera:
+#      enable_auto_exposure: true
+    align_depth.enable: true
+    depth_module.emitter_enabled: 1  # set to 0 if using infra
 #    depth_module.infra_format: bgr8
-    depth_module.enable_auto_exposure: true
-    pointcloud.ordered_pc: false
-    pointcloud.stream_filter: 2
-    pointcloud.allow_no_texture_points: false
-    colorizer.enable: false
+#    depth_module.enable_auto_exposure: true
+#    pointcloud.ordered_pc: false
+    pointcloud.stream_filter: 0
+#    pointcloud.allow_no_texture_points: false
+#    colorizer.enable: false
 
-    gyro_fps: 200 # 200, 400
+    gyro_fps: 400 # 200, 400
     accel_fps: 200 # 100, 200
     unite_imu_method: 2
 
     publish_tf: true
     tf_publish_rate: 30.0
 
-#    enable_pointcloud: true
-#    dense_pointcloud: true
+    # setup sensor QoS
+    gyro_qos: DEFAULT
+    accel_qos: DEFAULT
