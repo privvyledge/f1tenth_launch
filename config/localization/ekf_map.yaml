@@ -101,7 +101,7 @@
     imu0_remove_gravitational_acceleration: true
     imu0_gravitational_acceleration: 9.806665
 
-    imu1: /camera/imu/filtered
+    imu1: /camera/camera/imu/filtered
     imu1_config: [ false, false, false,
                    true,  true,  true,  # false x3
                    false, false, false,

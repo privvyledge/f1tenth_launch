@@ -170,12 +170,12 @@ def generate_launch_description():
                         {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
             remappings=[
-                ('depth', '/camera/depth/image_rect_raw'),
-                ('depth_camera_info', '/camera/depth/camera_info'),
+                ('depth', '/camera/camera/depth/image_rect_raw'),
+                ('depth_camera_info', '/camera/camera/depth/camera_info'),
                 ('scan', '/scan/from_depth_image')
             ],
-            # arguments=['depth:=/camera/depth/image_rect_raw',
-            #            'depth_camera_info:=/camera/depth/camera_info',
+            # arguments=['depth:=/camera/camera/depth/image_rect_raw',
+            #            'depth_camera_info:=/camera/camera/depth/camera_info',
             #            'scan:=/scan/from_depth_image']
     )
 
@@ -192,9 +192,9 @@ def generate_launch_description():
     #                     package='depth_image_proc',
     #                     plugin='depth_image_proc::PointCloudXyzNode',
     #                     name='point_cloud_xyz_node',
-    #                     remappings=[('image_rect', '/camera/depth/image_rect_raw'),  # or aligned depth
-    #                                 ('camera_info', '/camera/depth/camera_info'),
-    #                                 ('image', '/camera/depth/converted_image')]
+    #                     remappings=[('image_rect', '/camera/camera/depth/image_rect_raw'),  # or aligned depth
+    #                                 ('camera_info', '/camera/camera/depth/camera_info'),
+    #                                 ('image', '/camera/camera/depth/converted_image')]
     #             ),
     #         ],
     #         output='screen',
@@ -231,10 +231,10 @@ def generate_launch_description():
     #                         'queue_size': '1',
     #                     }],
     #                     remappings=[
-    #                         ('left/image_rect', '/camera/infra1/image_rect_raw'),
-    #                         ('left/camera_info', '/camera/infra1/camera_info'),
-    #                         ('right/image_rect', '/camera/infra2/image_rect_raw'),
-    #                         ('right/camera_info', '/camera/infra2/camera_info'),
+    #                         ('left/image_rect', '/camera/camera/infra1/image_rect_raw'),
+    #                         ('left/camera_info', '/camera/camera/infra1/camera_info'),
+    #                         ('right/image_rect', '/camera/camera/infra2/image_rect_raw'),
+    #                         ('right/camera_info', '/camera/camera/infra2/camera_info'),
     #                     ]
     #             ),
     #             ComposableNode(
@@ -249,9 +249,9 @@ def generate_launch_description():
     #                         'queue_size': '1',
     #                     }],
     #                     remappings=[
-    #                         ('left/camera_info', '/camera/infra1/camera_info'),
-    #                         ('right/camera_info', '/camera/infra2/camera_info'),
-    #                         ('left/image_rect_color', '/camera/infra1/image_rect_raw'),
+    #                         ('left/camera_info', '/camera/camera/infra1/camera_info'),
+    #                         ('right/camera_info', '/camera/camera/infra2/camera_info'),
+    #                         ('left/image_rect_color', '/camera/camera/infra1/image_rect_raw'),
     #                     ]
     #             ),
     #         ],
@@ -292,14 +292,14 @@ def generate_launch_description():
                     # 'wait_imu_to_init': wait_imu_to_init,
                     #
                     # 'stereo_namespace': '/camera',
-                    # 'left_image_topic': '/camera/infra1/image_rect_raw',
-                    # 'right_image_topic': '/camera/infra2/image_rect_raw',
-                    # 'left_camera_info_topic': '/camera/infra1/camera_info',
-                    # 'right_camera_info_topic': '/camera/infra2/camera_info',
+                    # 'left_image_topic': '/camera/camera/infra1/image_rect_raw',
+                    # 'right_image_topic': '/camera/camera/infra2/image_rect_raw',
+                    # 'left_camera_info_topic': '/camera/camera/infra1/camera_info',
+                    # 'right_camera_info_topic': '/camera/camera/infra2/camera_info',
                     #
-                    # 'rgb_topic': '/camera/color/image_raw',
+                    # 'rgb_topic': '/camera/camera/color/image_raw',
                     # 'depth_topic': depth_topic,
-                    # 'camera_info_topic': '/camera/color/camera_info',
+                    # 'camera_info_topic': '/camera/camera/color/camera_info',
                     #
                     # 'scan_topic': '/lidar/scan_filtered',
                     # # 'scan_cloud_topic': '/lidar/point_cloud',

@@ -293,7 +293,7 @@ local_costmap:
         observation_sources: rgbd1_mark rgbd1_clear
         rgbd1_mark:
           data_type: PointCloud2
-          topic: /camera/depth/color/points
+          topic: /camera/camera/depth/color/points
           marking: true
           clearing: false
           obstacle_range: 3.0          # meters
@@ -308,7 +308,7 @@ local_costmap:
         rgbd1_clear:
           enabled: true
           data_type: PointCloud2
-          topic: /camera/depth/color/points
+          topic: /camera/camera/depth/color/points
           marking: false
           clearing: true
           max_z: 7.0                  # default 0, 20.0 meters
@@ -333,7 +333,7 @@ local_costmap:
         observation_sources: rgbd
         rgbd:
           data_type: PointCloud2
-          topic: /camera/depth/color/points
+          topic: /camera/camera/depth/color/points
           marking: true
           min_obstacle_height: 0.1
           max_obstacle_height: 2.0
@@ -386,7 +386,7 @@ local_costmap:
 #        observation_sources: pointcloud pointcloud_clearing
 #        combination_method: 1
 #        pointcloud: # no frame set, uses frame from message
-#          topic: /camera/depth/color/points  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+#          topic: /camera/camera/depth/color/points  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
 #          max_obstacle_height: 2.0
 #          min_obstacle_height: 0.05
 #          obstacle_max_range: 5.0
@@ -400,7 +400,7 @@ local_costmap:
 #          publish_voxel_map: False  # to visualize voxels in Rviz
 #          observation_persistence: 0.5
 #        pointcloud_clearing:
-#          topic: /camera/depth/color/points  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+#          topic: /camera/camera/depth/color/points  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
 #          max_obstacle_height: 0.5
 #          min_obstacle_height: 0.0  # or -1.0
 #          obstacle_max_range: 4.0
@@ -493,7 +493,7 @@ global_costmap:
         publish_voxel_map: true
         observation_sources: pointcloud pointcloud_clearing
         pointcloud: # no frame set, uses frame from message
-          topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+          topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
           max_obstacle_height: 2.0
           min_obstacle_height: 0.05
           obstacle_max_range: 5.0
@@ -507,7 +507,7 @@ global_costmap:
           publish_voxel_map: False  # to visualize voxels in Rviz
           #          observation_persistence: 0.5
         pointcloud_clearing:
-          topic: /camera/downsampled_cloud_from_depth  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+          topic: /camera/downsampled_cloud_from_depth  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
           max_obstacle_height: 0.5
           min_obstacle_height: 0.0  # or -1.0
           obstacle_max_range: 4.0
@@ -534,7 +534,7 @@ global_costmap:
 #        observation_sources: pointcloud pointcloud_clearing
 #        combination_method: 1
 #        pointcloud: # no frame set, uses frame from message
-#          topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+#          topic: /camera/downsampled_cloud_from_depth  # (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
 #          max_obstacle_height: 2.0
 #          min_obstacle_height: 0.05
 #          obstacle_max_range: 5.0
@@ -548,7 +548,7 @@ global_costmap:
 #          publish_voxel_map: False  # to visualize voxels in Rviz
 ##          observation_persistence: 0.5
 #        pointcloud_clearing:
-#          topic: /camera/downsampled_cloud_from_depth  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/depth/color/points) todo: pass from launch file (/camera/depth/color/points, /camera/cloud_from_depth, )
+#          topic: /camera/downsampled_cloud_from_depth  # todo: use ground/obstacle pointcloud (/camera/downsampled_cloud_from_depth | /camera/obstacles_from_cloud | /camera/camera/depth/color/points) todo: pass from launch file (/camera/camera/depth/color/points, /camera/cloud_from_depth, )
 #          max_obstacle_height: 0.5
 #          min_obstacle_height: 0.0  # or -1.0
 #          obstacle_max_range: 4.0

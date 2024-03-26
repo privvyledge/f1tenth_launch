@@ -219,7 +219,7 @@ def generate_launch_description():
                     'approx_sync': 'True',
                     'publish_map_tf': 'False',
                     'wait_imu_to_init': 'True',
-                    'imu_topic': '/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
+                    'imu_topic': '/camera/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
                     'rtabmap_viz_view': 'True',
                     'rviz_view': 'False',
                     'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),

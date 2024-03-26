@@ -40,7 +40,7 @@ def generate_launch_description():
     rtabmap_viz_view = LaunchConfiguration('rtabmap_viz_view')
     rviz_view = LaunchConfiguration('rviz_view')
 
-    # /camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
+    # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
 
     database_file = os.path.join(
@@ -78,12 +78,12 @@ def generate_launch_description():
                 description=''),
 
         DeclareLaunchArgument(
-                'imu_topic', default_value='/camera/imu/filtered',
+                'imu_topic', default_value='/camera/camera/imu/filtered',
                 description='Used with VIO approaches and for SLAM graph optimization (gravity constraints). '),
 
         DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/depth/image_rect_raw',
-                description='Raw unaligned depth topic to subscribe to. E.g "/camera/depth/image_rect_raw", '
+                'depth_topic', default_value='/camera/camera/depth/image_rect_raw',
+                description='Raw unaligned depth topic to subscribe to. E.g "/camera/camera/depth/image_rect_raw", '
                             '"/camera/depth_registered/image_rect", '
                             '"/camera/realigned_depth_to_color/image_raw"'),
 
@@ -137,7 +137,7 @@ def generate_launch_description():
                     {'use_sim_time': use_sim_time},
                 ],
                 remappings=[('depth/image', depth_topic),
-                            ('depth/camera_info', '/camera/depth/camera_info'),
+                            ('depth/camera_info', '/camera/camera/depth/camera_info'),
                             ('cloud', '/camera/cloud_from_depth')]),
 
         # Generate aligned depth to color camera from the point cloud above
@@ -149,7 +149,7 @@ def generate_launch_description():
                      'fill_holes_size': 1},
                     {'use_sim_time': use_sim_time},
                             ],
-                remappings=[('camera_info', '/camera/color/camera_info'),
+                remappings=[('camera_info', '/camera/camera/color/camera_info'),
                             ('cloud', '/camera/cloud_from_depth'),
                             ('image_raw', '/camera/realigned_depth_to_color/image_raw')]),
 
@@ -167,9 +167,9 @@ def generate_launch_description():
                             ],
                             plugin='depth_image_proc::RegisterNode',
                             name='depthimage_register_node',
-                            remappings=[('depth/image_rect', '/camera/depth/image_rect_raw'),
-                                        ('depth/camera_info', '/camera/depth/camera_info'),
-                                        ('rgb/camera_info', '/camera/color/camera_info'),
+                            remappings=[('depth/image_rect', '/camera/camera/depth/image_rect_raw'),
+                                        ('depth/camera_info', '/camera/camera/depth/camera_info'),
+                                        ('rgb/camera_info', '/camera/camera/color/camera_info'),
                                         ('depth_registered/image_rect', '/camera/depth_registered/image_rect'),
                                         ('depth_registered/camera_info', '/camera/depth_registered/camera_info')
                                         ]
@@ -178,7 +178,7 @@ def generate_launch_description():
                 output='screen',
         ),
 
-        # Nodes to launch. todo: use ekf_odom odometry instead
+        # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py
         IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
@@ -216,15 +216,15 @@ def generate_launch_description():
                     'imu_topic': imu_topic,
                     'wait_imu_to_init': wait_imu_to_init,
 
-                    'stereo_namespace': '/camera',
-                    'left_image_topic': '/camera/infra1/image_rect_raw',
-                    'right_image_topic': '/camera/infra2/image_rect_raw',
-                    'left_camera_info_topic': '/camera/infra1/camera_info',
-                    'right_camera_info_topic': '/camera/infra2/camera_info',
+                    'stereo_namespace': '/camera/camera',
+                    'left_image_topic': '/camera/camera/infra1/image_rect_raw',
+                    'right_image_topic': '/camera/camera/infra2/image_rect_raw',
+                    'left_camera_info_topic': '/camera/camera/infra1/camera_info',
+                    'right_camera_info_topic': '/camera/camera/infra2/camera_info',
 
-                    'rgb_topic': '/camera/color/image_raw',
+                    'rgb_topic': '/camera/camera/color/image_raw',
                     'depth_topic': depth_topic,
-                    'camera_info_topic': '/camera/color/camera_info',
+                    'camera_info_topic': '/camera/camera/color/camera_info',
 
                     'scan_topic': '/lidar/scan_filtered',
                     # 'scan_cloud_topic': '/lidar/point_cloud',

@@ -90,19 +90,19 @@ def generate_launch_description():
                                                         default_value='True',
                                                         description='Whether to publish a PointCloud2 message from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/infra1/image_rect_raw',
+            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
             description='')
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/infra2/image_rect_raw',
+            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
             description='')
     rgb_image_topic_la = DeclareLaunchArgument(
-            'rgb_image_topic', default_value='/camera/color/image_raw',
+            'rgb_image_topic', default_value='/camera/camera/color/image_raw',
             description='')
     depth_image_topic_la = DeclareLaunchArgument(
-                'depth_image_topic', default_value='/camera/depth/image_rect_raw',
+                'depth_image_topic', default_value='/camera/camera/depth/image_rect_raw',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/depth_from_disparity"'
-                            '"/camera/depth/image_rect_raw", '
+                            '"/camera/camera/depth/image_rect_raw", '
                             '"/camera/depth_registered/image_rect", '
                             '"/camera/realigned_depth_to_color/image_raw"')
 
@@ -148,9 +148,9 @@ def generate_launch_description():
                         }],
                         remappings=[
                             ('left/image_rect', left_image_topic),
-                            ('left/camera_info', '/camera/infra1/camera_info'),
+                            ('left/camera_info', '/camera/camera/infra1/camera_info'),
                             ('right/image_rect', right_image_topic),
-                            ('right/camera_info', '/camera/infra2/camera_info'),
+                            ('right/camera_info', '/camera/camera/infra2/camera_info'),
                         ]
                 ),
                 ComposableNode(
@@ -166,8 +166,8 @@ def generate_launch_description():
                             'use_sim_time': use_sim_time,
                         }],
                         remappings=[
-                            ('left/camera_info', '/camera/infra1/camera_info'),
-                            ('right/camera_info', '/camera/infra2/camera_info'),
+                            ('left/camera_info', '/camera/camera/infra1/camera_info'),
+                            ('right/camera_info', '/camera/camera/infra2/camera_info'),
                             ('left/image_rect_color', left_image_topic),
                             ('points', '/camera/points_from_stereo_proc'),
                         ]
@@ -207,7 +207,7 @@ def generate_launch_description():
                         plugin='depth_image_proc::PointCloudXyzNode',
                         name='point_cloud_xyz_node',
                         remappings=[('image_rect', depth_image_topic),  # or aligned depth
-                                    ('camera_info', '/camera/depth/camera_info'),
+                                    ('camera_info', '/camera/camera/depth/camera_info'),
                                     ('points', '/camera/points_from_depth_proc')]
                 ),
             ],
@@ -233,8 +233,8 @@ def generate_launch_description():
                 remappings=[
                     ('depth/image', depth_image_topic),
                     #('disparity/image', '/disparity'),
-                    ('depth/camera_info', '/camera/depth/camera_info'),
-                    #('disparity/camera_info', '/camera/infra1/camera_info'),
+                    ('depth/camera_info', '/camera/camera/depth/camera_info'),
+                    #('disparity/camera_info', '/camera/camera/infra1/camera_info'),
                     ('cloud', '/camera/downsampled_cloud_from_depth')])
 
     # ######### RTabMap depth to pointcloud to depth
@@ -267,7 +267,7 @@ def generate_launch_description():
                     {'queue_size': queue_size},
                     {'approx': approx_sync}
                             ],
-                remappings=[('camera_info', '/camera/color/camera_info'),
+                remappings=[('camera_info', '/camera/camera/color/camera_info'),
                             ('cloud', '/camera/downsampled_cloud_from_depth'),
                             ('image', '/camera/realigned_depth_to_color/depthimage'),
                             ('image_raw', '/camera/realigned_depth_to_color/depthimage_raw')
@@ -290,8 +290,8 @@ def generate_launch_description():
                             plugin='depth_image_proc::RegisterNode',
                             name='depthimage_register_node',
                             remappings=[('depth/image_rect', depth_image_topic),
-                                        ('depth/camera_info', '/camera/depth/camera_info'),
-                                        ('rgb/camera_info', '/camera/color/camera_info'),
+                                        ('depth/camera_info', '/camera/camera/depth/camera_info'),
+                                        ('rgb/camera_info', '/camera/camera/color/camera_info'),
                                         ('depth_registered/image_rect', '/camera/depth_registered/image_rect'),
                                         ('depth_registered/camera_info', '/camera/depth_registered/camera_info')
                                         ]
