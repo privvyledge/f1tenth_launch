@@ -18,9 +18,9 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
     imu_filter_param_file = os.path.join(
-            f1tenth_launch_pkg_prefix, "config/imu_filter.yaml")
+            f1tenth_launch_pkg_prefix, "config/filters/imu_filter.yaml")
     imu_corrector_param_file_path = os.path.join(
-            f1tenth_launch_pkg_prefix, "config/imu_corrector.yaml")
+            f1tenth_launch_pkg_prefix, "config/filters/imu_corrector.yaml")
 
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace')
