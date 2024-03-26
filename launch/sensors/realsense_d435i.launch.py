@@ -115,7 +115,7 @@ def generate_launch_description():
             condition=IfCondition(PythonExpression(['not ', imu_only])),
             package='realsense2_camera',
             namespace='camera',
-            # name='',
+            name='camera',
             executable='realsense2_camera_node',
             parameters=[configured_params, {"pointcloud.enable": True}],
             output='screen',
@@ -139,9 +139,9 @@ def generate_launch_description():
             )),
             condition=IfCondition([launch_imu_filter]),
             launch_arguments={
-                'input_topic': '/camera/imu',
-                'output_topic': '/camera/imu/filtered',
-                'remove_gravity_vector': 'False',  # True
+                'input_topic': '/camera/camera/imu',
+                'output_topic': '/camera/camera/imu/filtered',
+                'remove_gravity_vector': 'True',  # True
                 'node_name': 'realsense_imu_filter',
                 'use_madgwick_filter': 'False',
                 'remove_imu_bias': 'True',

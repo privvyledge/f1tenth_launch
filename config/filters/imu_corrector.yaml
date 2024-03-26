@@ -12,4 +12,4 @@
     timer_callback_interval_sec: 0.005  # [sec]
     straight_motion_ang_vel_upper_limit: 0.0  # [rad/s]. upper limit of yaw angular velocity, beyond which motion is not considered straight
 
-    base_link: "camera_link"
+#    base_link: "camera_link"
