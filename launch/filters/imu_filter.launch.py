@@ -1,6 +1,7 @@
 """
 Todo: make the remapped names dynamic
-TOdo: add Autoware's complementary filter before Madgwick or Complemetary filter
+TOdo: add Autoware's complementary filter before Madgwick or Complemetary filter [done]
+Todo: make imu corrector frame dynamic
 """
 
 import os
@@ -27,13 +28,19 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     imu_corrector_params_file = LaunchConfiguration('imu_corrector_params_file')
 
-    # The parent frame to be used in publish_tf.
+    # The parent frame to be used in publish_tf of the Madgwick or Complementary filter.
     # Should be set to the frame_id of the raw imu message (e.g imu_link) or base_link
     imu_frame = LaunchConfiguration('imu_frame')
     imu_frame_la = DeclareLaunchArgument(
             'imu_frame',
             default_value='',
-            description='Frame ID for the IMU message.')
+            description='Frame ID for the IMU message of the Madgwick or Complementary filter.')
+
+    imu_corrector_frame = LaunchConfiguration('imu_frame')
+    imu_corrector_frame_la = DeclareLaunchArgument(
+            'imu_corrector_frame',
+            default_value='base_link',
+            description='Frame ID for the IMU message of the IMU corrector/bias remover.')
 
     # Whether to publish a TF transform that represents the orientation of the IMU,
     # using the frame specified in fixed_frame as the parent frame and the frame
@@ -100,7 +107,7 @@ def generate_launch_description():
 
     ld = LaunchDescription([declare_namespace_cmd, declare_use_namespace_cmd, declare_use_sim_time_cmd,
                             declare_imu_corrector_params_file_cmd,
-                            imu_frame_la, input_topic_la, output_topic_la,
+                            imu_frame_la, imu_corrector_frame_la, input_topic_la, output_topic_la,
                             remove_gravity_vector_la, node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
 
     imu_filter_with_correction_node = GroupAction(
@@ -111,7 +118,7 @@ def generate_launch_description():
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
-                SetParameter(name='base_link', value='camera_link'),  # todo: put this in the imu_parameter file
+                SetParameter(name='base_link', value=imu_corrector_frame),
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst="imu/bias_removed"),
                 SetRemap(src='imu/data', dst=output_topic),

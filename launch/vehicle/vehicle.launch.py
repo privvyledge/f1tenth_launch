@@ -142,6 +142,7 @@ def generate_launch_description():
                 'node_name': 'vesc_imu_filter',
                 'use_madgwick_filter': 'False',
                 'remove_imu_bias': 'True',
+                'imu_corrector_frame': 'imu_link',  # todo: test with camera_imu_optical_frame and compare
                 'use_sim_time': 'False',
             }.items()
     )

@@ -145,6 +145,7 @@ def generate_launch_description():
                 'node_name': 'realsense_imu_filter',
                 'use_madgwick_filter': 'False',
                 'remove_imu_bias': 'True',
+                'imu_corrector_frame': 'camera_imu_optical_frame',  # todo: test with imu_link and compare
                 'use_sim_time': 'False',
             }.items()
     )  # todo: launch with realsense GroupAction so they have the same namespace
