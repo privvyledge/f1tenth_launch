@@ -313,15 +313,15 @@ def generate_launch_description():
     # Add nodes to launch description
     ld.add_action(lidar_node)
 
-    ld.add_action(rtabmap_icp_odometry)
-    ld.add_action(rf2o_odometry_node)
-    # ld.add_action(laser_scan_matcher_node)
+    # ld.add_action(rtabmap_icp_odometry)
+    # ld.add_action(rf2o_odometry_node)
+    # # ld.add_action(laser_scan_matcher_node)
 
     ld.add_action(realsense_node)
     # ld.add_action(realsense_imu_node)
     ld.add_action(depth_to_laserscan_node)
 
-    # ld.add_action(depth_image_to_pointcloud_xyz_node)
-    # ld.add_action(stereo_to_pointcloud_node)
-    ld.add_action(stereo_and_depth_image_processing_node)
+    # # ld.add_action(depth_image_to_pointcloud_xyz_node)
+    # # ld.add_action(stereo_to_pointcloud_node)
+    # ld.add_action(stereo_and_depth_image_processing_node)  # todo: test the performance on Jetson Orins
     return ld
