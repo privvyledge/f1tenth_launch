@@ -239,7 +239,7 @@ def generate_launch_description():
 
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'teleop.launch.py'])
+                    PathJoinSubstitution([f1tenth_launch_bringup_dir, 'teleop.launch.py'])
             ),
             launch_arguments={
                 "launch_joystick": launch_joystick,
