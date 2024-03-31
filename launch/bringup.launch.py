@@ -34,6 +34,10 @@ def generate_launch_description():
     nav2_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'nav2_params.yaml')
     map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
+    offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
+    online_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_online.yaml")
+    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
     namespace = LaunchConfiguration('namespace')
@@ -58,6 +62,14 @@ def generate_launch_description():
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
+    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
+    launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
+    offline_mapping_2d_param_file = LaunchConfiguration('offline_mapping_2d_param_file',
+                                                        default=offline_mapping_2d_param_file_path)
+    online_mapping_2d_param_file = LaunchConfiguration('online_mapping_2d_param_file',
+                                                       default=online_mapping_2d_param_file_path)
+    map_2d_file = LaunchConfiguration('default_2d_map_file', default=default_2d_map_file_path)
+    rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
     # Setup Remappings/renamings
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -173,6 +185,30 @@ def generate_launch_description():
                                             default_value=rviz_config_file,
                                             description="The path to the rviz configuration file.")
 
+    launch_2d_mapping_arg = DeclareLaunchArgument('launch_2d_mapping',
+                                                  default_value=launch_2d_mapping,
+                                                  description="Enable 2D mapping.")
+    launch_3d_mapping_arg = DeclareLaunchArgument('launch_3d_mapping',
+                                                  default_value=launch_3d_mapping,
+                                                  description="Enable 3D mapping.")
+
+    offline_mapping_2d_param_file_la = DeclareLaunchArgument('offline_mapping_2d_param_file',
+                                                             default_value=offline_mapping_2d_param_file,
+                                                             description="Path to the config file for the "
+                                                                         "offline 2D mapping node.")
+
+    online_mapping_2d_param_file_la = DeclareLaunchArgument('online_mapping_2d_param_file',
+                                                            default_value=online_mapping_2d_param_file,
+                                                            description="Path to the config file for the "
+                                                                        "online 2D mapping node.")
+    map_2d_file_la = DeclareLaunchArgument('map_2d_file',
+                                           default_value=map_2d_file,
+                                           description="Path to the save the 2D map.")
+
+    rtabmap_database_file_la = DeclareLaunchArgument('rtabmap_database_file',
+                                                     default_value=rtabmap_database_file,
+                                                     description="Path to the config file for the 3D mapping node.")
+
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
@@ -196,6 +232,12 @@ def generate_launch_description():
         launch_navigation_arg,
         launch_visualization_arg,
         rviz_config_arg,
+        launch_2d_mapping_arg,
+        launch_3d_mapping_arg,
+        offline_mapping_2d_param_file_la,
+        online_mapping_2d_param_file_la,
+        map_2d_file_la,
+        rtabmap_database_file_la
     ]
 
     ''' Launch Nodes '''
@@ -289,10 +331,27 @@ def generate_launch_description():
                             os.path.join(f1tenth_launch_dir, 'mapping', '2d_mapping.launch.py')),
                         condition=IfCondition(slam),
                         launch_arguments={'namespace': namespace,
+                                          'use_namespace': use_namespace,
                                           'use_sim_time': use_sim_time,
                                           'autostart': autostart,
+                                          'use_composition': use_composition,
                                           'use_respawn': use_respawn,
-                                          'params_file': params_file}.items())  # todo
+                                          "launch_joystick": 'False',
+                                          "launch_sensors": 'False',
+                                          "launch_vehicle": 'False',
+                                          "launch_tfs": 'False',
+                                          "launch_localization": 'True',
+                                          "launch_local_localization": 'True',
+                                          "launch_global_localization": 'False',
+                                          "launch_visualization": 'False',
+                                          "rviz_config_file": rviz_config_file,
+                                          "launch_2d_mapping": launch_2d_mapping,
+                                          "launch_3d_mapping": launch_3d_mapping,
+                                          "offline_mapping_2d_param_file": offline_mapping_2d_param_file,
+                                          "online_mapping_2d_param_file": online_mapping_2d_param_file,
+                                          "map_2d_file": map_2d_file,
+                                          "rtabmap_database_file": rtabmap_database_file,
+                                          }.items())
             ]
     )
 
@@ -301,7 +360,7 @@ def generate_launch_description():
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
-                            PathJoinSubstitution([f1tenth_launch_dir, 'nav2_navigation.launch.py'])),
+                            PathJoinSubstitution([f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
                         condition=IfCondition(launch_navigation),
                         launch_arguments={'namespace': namespace,
                                           'use_sim_time': use_sim_time,

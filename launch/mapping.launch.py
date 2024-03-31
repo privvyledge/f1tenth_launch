@@ -30,8 +30,7 @@ def generate_launch_description():
     sensor_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'sensors')
     localization_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'localization')
 
-    # Setup default directories. # offline_mapping_2d_param_file, online_mapping_2d_param_file, map_2d_file, rviz_cfg_path_param
-    nav2_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'nav2_params.yaml')
+    # Setup default directories.
     map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
     offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
@@ -42,15 +41,11 @@ def generate_launch_description():
     # Setup launch configuration variables
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
-    slam = LaunchConfiguration('slam', default=False)
     map_yaml_file = LaunchConfiguration('map', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
-    params_file = LaunchConfiguration('params_file',
-                                      default=nav2_params_file_path)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
-    log_level = LaunchConfiguration('log_level')
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
     launch_sensors = LaunchConfiguration('launch_sensors', default=True)
     launch_vehicle = LaunchConfiguration('launch_vehicle', default=True)
@@ -69,38 +64,6 @@ def generate_launch_description():
     map_2d_file = LaunchConfiguration('default_2d_map_file', default=default_2d_map_file_path)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
-    # Setup Remappings/renamings
-    # Map fully qualified names to relative ones so the node's namespace can be prepended.
-    # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
-    # https://github.com/ros/geometry2/issues/32
-    # https://github.com/ros/robot_state_publisher/pull/30
-    # TODO(orduno) Substitute with `PushNodeRemapping`
-    #              https://github.com/ros2/launch_ros/issues/56
-    remappings = [('/tf', 'tf'),
-                  ('/tf_static', 'tf_static')]
-
-    # Create our own temporary YAML files that include substitutions
-    param_substitutions = {
-        'use_sim_time': use_sim_time,
-        'yaml_filename': map_yaml_file}
-
-    # It only applies when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
-
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=params_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
-
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
@@ -115,11 +78,6 @@ def generate_launch_description():
             default_value=use_namespace,
             description='Whether to apply a namespace to the navigation stack')
 
-    declare_slam_cmd = DeclareLaunchArgument(
-            'slam',
-            default_value=slam,
-            description='Whether to run SLAM')
-
     declare_map_yaml_cmd = DeclareLaunchArgument(
             'map',
             default_value=map_yaml_file,
@@ -129,11 +87,6 @@ def generate_launch_description():
             'use_sim_time',
             default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
-
-    declare_params_file_cmd = DeclareLaunchArgument(
-            'params_file',
-            default_value=params_file,
-            description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value=autostart,
@@ -209,10 +162,8 @@ def generate_launch_description():
         stdout_linebuf_envvar,
         declare_namespace_cmd,
         declare_use_namespace_cmd,
-        declare_slam_cmd,
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
-        declare_params_file_cmd,
         declare_autostart_cmd,
         declare_use_composition_cmd,
         declare_use_respawn_cmd,
