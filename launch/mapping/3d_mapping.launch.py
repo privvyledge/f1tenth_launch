@@ -62,7 +62,7 @@ def generate_launch_description():
                 description=''),
 
         DeclareLaunchArgument(
-                'queue_size', default_value='10000',  # 10000 for mapping, 10 for localization
+                'queue_size', default_value='10000',  # 10000 (50) for offline (online) mapping, 10 for localization
                 description=''),
 
         DeclareLaunchArgument(

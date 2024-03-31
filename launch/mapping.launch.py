@@ -1,16 +1,16 @@
 """
-Todo:
-    * Setup mapping launch
-    * Setup composable nodes
-    * Setup nav2_navigation individual subsystem launching
+Launches (optionally): 2D mapping (online or offline), 3D mapping (online or offline).
+    Can also choose GPU/CPU mode
 """
 import os
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch_ros.descriptions import ParameterFile
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, \
+    EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
+    SetEnvironmentVariable
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
@@ -30,10 +30,14 @@ def generate_launch_description():
     sensor_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'sensors')
     localization_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'localization')
 
-    # Setup default directories
+    # Setup default directories. # offline_mapping_2d_param_file, online_mapping_2d_param_file, map_2d_file, rviz_cfg_path_param
     nav2_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'nav2_params.yaml')
     map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
+    offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
+    online_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_online.yaml")
+    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
     namespace = LaunchConfiguration('namespace')
@@ -43,11 +47,10 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     params_file = LaunchConfiguration('params_file',
                                       default=nav2_params_file_path)
-    autostart = LaunchConfiguration('autostart')
-    use_composition = LaunchConfiguration('use_composition')
-    use_respawn = LaunchConfiguration('use_respawn')
+    autostart = LaunchConfiguration('autostart', default='True')
+    use_composition = LaunchConfiguration('use_composition', default='True')
+    use_respawn = LaunchConfiguration('use_respawn', default='False')
     log_level = LaunchConfiguration('log_level')
-
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
     launch_sensors = LaunchConfiguration('launch_sensors', default=True)
     launch_vehicle = LaunchConfiguration('launch_vehicle', default=True)
@@ -55,9 +58,16 @@ def generate_launch_description():
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
+    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
+    launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
+    offline_mapping_2d_param_file = LaunchConfiguration('offline_mapping_2d_param_file',
+                                                        default=offline_mapping_2d_param_file_path)
+    online_mapping_2d_param_file = LaunchConfiguration('online_mapping_2d_param_file',
+                                                       default=online_mapping_2d_param_file_path)
+    map_2d_file = LaunchConfiguration('default_2d_map_file', default=default_2d_map_file_path)
+    rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
     # Setup Remappings/renamings
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -126,15 +136,15 @@ def generate_launch_description():
             description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_autostart_cmd = DeclareLaunchArgument(
-            'autostart', default_value='true',
+            'autostart', default_value=autostart,
             description='Automatically startup the nav2 stack')
 
     declare_use_composition_cmd = DeclareLaunchArgument(
-            'use_composition', default_value='True',
+            'use_composition', default_value=use_composition,
             description='Whether to use composed bringup')
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
-            'use_respawn', default_value='False',
+            'use_respawn', default_value=use_respawn,
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
 
     declare_log_level_cmd = DeclareLaunchArgument(
@@ -163,15 +173,36 @@ def generate_launch_description():
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
-    launch_navigation_arg = DeclareLaunchArgument('launch_navigation',
-                                                           default_value=launch_navigation,
-                                                           description="Launch the navigation.")
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
     rviz_config_arg = DeclareLaunchArgument('rviz_config_file',
                                             default_value=rviz_config_file,
                                             description="The path to the rviz configuration file.")
+
+    launch_2d_mapping_arg = DeclareLaunchArgument('launch_2d_mapping',
+                                                  default_value=launch_2d_mapping,
+                                                  description="Enable 2D mapping.")
+    launch_3d_mapping_arg = DeclareLaunchArgument('launch_3d_mapping',
+                                                  default_value=launch_3d_mapping,
+                                                  description="Enable 3D mapping.")
+
+    offline_mapping_2d_param_file_la = DeclareLaunchArgument('offline_mapping_2d_param_file',
+                                                             default_value=offline_mapping_2d_param_file,
+                                                             description="Path to the config file for the "
+                                                                         "offline 2D mapping node.")
+
+    online_mapping_2d_param_file_la = DeclareLaunchArgument('online_mapping_2d_param_file',
+                                                            default_value=online_mapping_2d_param_file,
+                                                            description="Path to the config file for the "
+                                                                        "online 2D mapping node.")
+    map_2d_file_la = DeclareLaunchArgument('map_2d_file',
+                                           default_value=map_2d_file,
+                                           description="Path to the save the 2D map.")
+
+    rtabmap_database_file_la = DeclareLaunchArgument('rtabmap_database_file',
+                                                     default_value=rtabmap_database_file,
+                                                     description="Path to the config file for the 3D mapping node.")
 
     # Add launch arguments to a list
     launch_args = [
@@ -193,160 +224,88 @@ def generate_launch_description():
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
-        launch_navigation_arg,
         launch_visualization_arg,
         rviz_config_arg,
+        launch_2d_mapping_arg,
+        launch_3d_mapping_arg,
+        offline_mapping_2d_param_file_la,
+        online_mapping_2d_param_file_la,
+        map_2d_file_la,
+        rtabmap_database_file_la
     ]
 
     ''' Launch Nodes '''
-    component_container_node = Node(
-            condition=IfCondition(use_composition),
-            name='f1tenth_container',
-            package='rclcpp_components',
-            executable='component_container_isolated',
-            parameters=[configured_params, {'autostart': autostart}],
-            arguments=['--ros-args', '--log-level', log_level],
-            remappings=remappings,
-            output='screen')
+    use_sim_time_string = use_sim_time.perform(LaunchContext())  # todo: check data type
 
-    joystick_launch = IncludeLaunchDescription(
+    teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
+                    PathJoinSubstitution([vehicle_include_dir, 'teleop.launch.py'])
             ),
-            condition=IfCondition(launch_joystick)
-    )
-
-    ackermann_mux_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'ackermann_mux.launch.py'])
-            ),
-            condition=IfCondition(launch_joystick)
-    )
-
-    sensors_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([sensor_include_dir, 'sensors.launch.py'])
-            ),
-            condition=IfCondition(launch_sensors)
-    )
-
-    vehicle_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
-            ),
-            condition=IfCondition(launch_vehicle),
             launch_arguments={
-                "launch_imu_filter": 'True',
-                "launch_ackermann_to_vesc_node": 'True',
-                "launch_vesc_to_odom_node": 'True',
-                "launch_throttle_interpolator_node": 'False'
+                "launch_joystick": launch_joystick,
+                "launch_sensors": launch_sensors,
+                "launch_vehicle": launch_vehicle,
+                "launch_tfs": launch_tfs,
+                "launch_localization": launch_localization,
+                "launch_local_localization": launch_local_localization,
+                "launch_global_localization": launch_global_localization,
+                "launch_visualization": launch_visualization,
+                "rviz_config_file": rviz_config_file,
             }.items()
     )
 
-    tf_launch = IncludeLaunchDescription(
+    mapping_2d_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'static_transformations.launch.py'])
+                    PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '2d_mapping.launch.py'])
             ),
-            condition=LaunchConfigurationEquals('launch_tfs', 'True')
+            condition=IfCondition(launch_2d_mapping),
+            launch_arguments={
+                "offline_mapping": use_sim_time,
+                "use_sim_time": use_sim_time,
+                "offline_mapping_param_file": offline_mapping_2d_param_file,
+                "online_mapping_param_file": online_mapping_2d_param_file,
+                "map_file_path": map_2d_file,
+                "map_topic": 'map',
+                "with_rviz": 'False',
+                "rviz_cfg_path_param": rviz_config_path,
+                "launch_visualization": launch_visualization,
+                "rviz_config_file": rviz_config_file,
+            }.items()
     )
 
-    localization_launch = TimerAction(
-            period=10.0,
-            actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                PathJoinSubstitution([localization_include_dir, 'localization.launch.py'])
-                        ),
-                        condition=IfCondition(launch_localization),
-                        launch_arguments={
-                            "launch_sensor_fusion": 'True',
-                            "launch_ekf_odom": launch_local_localization,
-                            "launch_ekf_map": launch_global_localization,
-                            "launch_slam_toolbox_localizer": 'False',
-                            "launch_rtabmap_localizer": 'False',
-                            "map": map_yaml_file,
-                            "use_sim_time": use_sim_time,
-                        }.items()
-                )
-            ]
-    )
+    mapping_3d_queue_size = '10000'  # offline mapping
+    if use_sim_time_string.lower() == 'false':
+        # online_mapping
+        mapping_3d_queue_size = '50'  # online mapping
 
-    visualization_launch = Node(
-            condition=IfCondition(launch_visualization),
-            package='rviz2',
-            executable='rviz2',
-            name='rviz2',
-            output='screen',
-            arguments=['-d', rviz_config_file],
-            parameters=[{'use_sim_time': LaunchConfiguration("sim")}]
-        )
-    
-    mapping_launch = TimerAction(
-            period=10.0,
-            actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                            os.path.join(f1tenth_launch_dir, 'mapping', '2d_mapping.launch.py')),
-                        condition=IfCondition(slam),
-                        launch_arguments={'namespace': namespace,
-                                          'use_sim_time': use_sim_time,
-                                          'autostart': autostart,
-                                          'use_respawn': use_respawn,
-                                          'params_file': params_file}.items())  # todo
-            ]
-    )
-
-    nav2_navigation_launch = TimerAction(
-            period=12.0,
-            actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                            PathJoinSubstitution([f1tenth_launch_dir, 'nav2_navigation.launch.py'])),
-                        condition=IfCondition(launch_navigation),
-                        launch_arguments={'namespace': namespace,
-                                          'use_sim_time': use_sim_time,
-                                          'autostart': autostart,
-                                          'params_file': params_file,
-                                          'use_composition': use_composition,
-                                          'use_respawn': use_respawn,
-                                          'container_name': 'f1tenth_container'}.items())
-            ]
-    )
-
-    # Group Actions
-    vehicle_bringup_group = GroupAction(
-            actions=[
-                PushRosNamespace(
-                        condition=IfCondition(use_namespace),
-                        namespace=namespace
-                ),
-                SetParameter(name='use_sim_time', value=use_sim_time),
-                joystick_launch, ackermann_mux_launch, sensors_launch, vehicle_launch, tf_launch
-            ]
-    )
-
-    nav2_bringup_group = GroupAction(
-            # condition=IfCondition(),
-            actions=[
-                PushRosNamespace(
-                        condition=IfCondition(use_namespace),
-                        namespace=namespace
-                ),
-                SetParameter(name='use_sim_time', value=use_sim_time),
-
-                mapping_launch,
-
-                localization_launch,
-
-                nav2_navigation_launch,
-            ]
+    mapping_3d_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '3d_mapping.launch.py'])
+            ),
+            condition=IfCondition(launch_3d_mapping),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "use_stereo": 'False',
+                "localization": 'False',
+                "queue_size": mapping_3d_queue_size,
+                "publish_map_tf": 'True',
+                "wait_imu_to_init": 'True',
+                "imu_topic": '/camera/camera/imu/filtered',
+                "depth_topic": '/camera/camera/depth/image_rect_raw',
+                "approx_sync": 'True',
+                "rtabmap_viz_view": 'False',
+                "rviz_view": 'False',
+                "database_path": rtabmap_database_file,
+                "rtabmap_args": None,
+            }.items()
     )
 
     # Add launch arguments and nodes to the launch description
     ld = LaunchDescription(
             launch_args + [
-                component_container_node, visualization_launch,
-                vehicle_bringup_group, nav2_bringup_group,
+                teleop_launch,
+                mapping_2d_node,
+                mapping_3d_node
             ]
     )
     return ld

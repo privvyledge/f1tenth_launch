@@ -36,7 +36,7 @@ def generate_launch_description():
             default_value='',
             description='Frame ID for the IMU message of the Madgwick or Complementary filter.')
 
-    imu_corrector_frame = LaunchConfiguration('imu_frame')
+    imu_corrector_frame = LaunchConfiguration('imu_corrector_frame')
     imu_corrector_frame_la = DeclareLaunchArgument(
             'imu_corrector_frame',
             default_value='base_link',
