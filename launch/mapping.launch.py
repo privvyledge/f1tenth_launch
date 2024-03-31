@@ -296,7 +296,29 @@ def generate_launch_description():
                 "rtabmap_viz_view": 'False',
                 "rviz_view": 'False',
                 "database_path": rtabmap_database_file,
-                "rtabmap_args": None,
+                "rtabmap_args": '-d '
+                                '--RGBD/LoopClosureReextractFeatures true '
+                                '--Vis/MinInliers 15 '
+                                '--Vis/EstimationType 1 '
+                                '--Vis/MaxDepth 0 '
+                                '--GFTT/QualityLevel 0.00001 '
+                                '--Stereo/MinDisparity 0 '
+                                '--Stereo/MaxDisparity 64 '
+                                # '--Vis/RoiRatios "0 0 0 .2" '
+                                # "--Kp/RoiRatios '0 0 0 .2' "
+                                # '--Odom/GuessMotion true '
+                                '--Vis/BundleAdjustment 1 '
+                                # '--OdomF2M/BundleAdjustment 1 '
+                                '--Vis/CorNNDR 0.6 '
+                                '--Vis/CorGuessWinSize 20 '
+                                '--Vis/PnPFlags 0 '
+                                # '--Odom/Strategy 1 '
+                                '--Vis/CorType 1 '
+                                # '--Odom/KeyFrameThr 0.6'
+                                '--Reg/Force3DoF true '
+                                '--Rtabmap/DetectionRate 10 '  # set to 0 to use image rate
+                                '--Optimizer/Slam2D true '
+                                '--Optimizer/GravitySigma 0',
             }.items()
     )
 
