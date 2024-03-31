@@ -96,7 +96,7 @@ def generate_launch_description():
             description='Launch rviz in addition to other nodes'
     )
 
-    rviz_cfg_path_param = DeclareLaunchArgument(
+    rviz_cfg_path_param_la = DeclareLaunchArgument(
             'rviz_cfg_path_param',
             default_value=rviz_cfg_path_param,
             description='Launch RVIZ2 with the specified config file'
@@ -204,7 +204,7 @@ def generate_launch_description():
         online_mapping_param_file_la,
         map_topic_la,
         map_file_path_la,
-        rviz_cfg_path_param,
+        rviz_cfg_path_param_la,
         # vehicle_launch_svl,
         # vehicle_launch_vesc,
         # sensor_launch,
