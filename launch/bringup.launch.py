@@ -324,7 +324,7 @@ def generate_launch_description():
         )
     
     mapping_launch = TimerAction(
-            period=10.0,
+            period=12.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
@@ -356,7 +356,7 @@ def generate_launch_description():
     )
 
     nav2_navigation_launch = TimerAction(
-            period=12.0,
+            period=15.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(

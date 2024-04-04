@@ -100,7 +100,7 @@ def generate_launch_description():
 
     vehicle_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
+                    PathJoinSubstitution([vehicle_include_dir, 'vehicle.launch.py'])
             ),
             condition=IfCondition(launch_vehicle),
             launch_arguments={
