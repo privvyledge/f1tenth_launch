@@ -116,9 +116,11 @@ def generate_launch_description():
                 'output_topic': '/vehicle/sensors/imu/data',
                 'remove_gravity_vector': 'False',
                 'node_name': 'vesc_imu_filter',
+                'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'False',
                 'remove_imu_bias': 'True',
-                'imu_corrector_frame': 'imu_link',  # todo: test with camera_imu_optical_frame and compare
+                'imu_corrector_frame': 'sensor_kit_link',  # camera_imu_optical_frame, sensor_kit_link, base_link
+                'imu_corrector_node_name': 'vesc_imu_bias_removal_node',
                 'use_sim_time': 'False',
             }.items()
     )

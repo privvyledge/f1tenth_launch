@@ -143,12 +143,14 @@ def generate_launch_description():
                 'output_topic': '/camera/camera/imu/filtered',
                 'remove_gravity_vector': 'True',  # True
                 'node_name': 'realsense_imu_filter',
+                'imu_corrector_output_topic': '/camera/camera/imu/bias_removed',
                 'use_madgwick_filter': 'False',
                 'remove_imu_bias': 'True',
-                'imu_corrector_frame': 'camera_imu_optical_frame',  # todo: test with imu_link and compare
+                'imu_corrector_frame': 'sensor_kit_link',  # camera_imu_optical_frame, sensor_kit_link, base_link
+                'imu_corrector_node_name': 'realsense_imu_bias_removal_node',
                 'use_sim_time': 'False',
             }.items()
-    )  # todo: launch with realsense GroupAction so they have the same namespace
+    )
 
     ld.add_action(realsense_node)
     ld.add_action(realsense_imu_node)

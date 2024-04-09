@@ -1,11 +1,9 @@
 """
-Todo: make the remapped names dynamic
-TOdo: add Autoware's complementary filter before Madgwick or Complemetary filter [done]
-Todo: make imu corrector frame dynamic
+Todo: setup imu corrector node name
 """
 
 import os
-from launch import LaunchDescription
+from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
@@ -54,8 +52,10 @@ def generate_launch_description():
 
     input_topic = LaunchConfiguration('input_topic')
     output_topic = LaunchConfiguration('output_topic')
+    imu_corrector_output_topic = LaunchConfiguration('imu_corrector_output_topic')
     remove_gravity_vector = LaunchConfiguration('remove_gravity_vector')
     node_name = LaunchConfiguration('node_name')
+    imu_corrector_node_name = LaunchConfiguration('imu_corrector_node_name')
     use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
     remove_imu_bias = LaunchConfiguration('remove_imu_bias')
 
@@ -84,10 +84,16 @@ def generate_launch_description():
             default_value='',
             description='Raw IMU message')
 
+    imu_corrector_output_topic_la = DeclareLaunchArgument(
+            'imu_corrector_output_topic',
+            default_value='/imu/bias_removed',
+            description='Output topic for the IMU corrector node')
+
     output_topic_la = DeclareLaunchArgument(
             'output_topic',
             default_value='',
             description='Raw IMU message')
+
     remove_gravity_vector_la = DeclareLaunchArgument(
             'remove_gravity_vector',
             default_value='False',
@@ -96,6 +102,10 @@ def generate_launch_description():
             'node_name',
             default_value='imu_filter',
             description='Whether or not to remove the gravity vector.')
+    imu_corrector_node_name_la = DeclareLaunchArgument(
+            'imu_corrector_node_name',
+            default_value='imu_bias_removal_node',
+            description='Name for the IMU bias corrector/removal node.')
     use_madgwick_filter_la = DeclareLaunchArgument(
             'use_madgwick_filter',
             default_value='False',
@@ -108,7 +118,12 @@ def generate_launch_description():
     ld = LaunchDescription([declare_namespace_cmd, declare_use_namespace_cmd, declare_use_sim_time_cmd,
                             declare_imu_corrector_params_file_cmd,
                             imu_frame_la, imu_corrector_frame_la, input_topic_la, output_topic_la,
+                            imu_corrector_output_topic_la, imu_corrector_node_name_la,
                             remove_gravity_vector_la, node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
+
+    # To convert a launch_configuration variable to a string to use with Python functions
+    launch_context = LaunchContext()
+    node_name_string = node_name.perform(launch_context)
 
     imu_filter_with_correction_node = GroupAction(
             condition=IfCondition(remove_imu_bias),
@@ -120,21 +135,34 @@ def generate_launch_description():
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='base_link', value=imu_corrector_frame),
                 # SetParametersFromFile(imu_filter_param_file),
-                SetRemap(src='imu/data_raw', dst="imu/bias_removed"),
+                SetRemap(src='imu/data_raw', dst=imu_corrector_output_topic),
                 SetRemap(src='imu/data', dst=output_topic),
 
-                IncludeLaunchDescription(
-                        XMLLaunchDescriptionSource(  # or FrontendLaunchDescriptionSource
-                                launch_file_path=PathJoinSubstitution([
-                                    FindPackageShare("imu_corrector"), "launch", "imu_corrector.launch.xml",
-                                ]),
-                        ),
-                        launch_arguments={
-                            "input_topic": input_topic,
-                            "output_topic": "imu/bias_removed",
-                            "param_file": imu_corrector_params_file,
-                        }.items()
+                # IncludeLaunchDescription(
+                #         XMLLaunchDescriptionSource(  # or FrontendLaunchDescriptionSource
+                #                 launch_file_path=PathJoinSubstitution([
+                #                     FindPackageShare("imu_corrector"), "launch", "imu_corrector.launch.xml",
+                #                 ]),
+                #         ),
+                #         launch_arguments={
+                #             "input_topic": input_topic,
+                #             "output_topic": imu_corrector_output_topic,
+                #             "param_file": imu_corrector_params_file,
+                #         }.items()
+                # ),
+
+                Node(
+                        package='imu_corrector',
+                        executable='imu_corrector',
+                        name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
+                        output='screen',
+                        parameters=[imu_corrector_params_file],
+                        remappings=[
+                            ('input', input_topic),  # input topic: /vehicle/sensors/imu/raw
+                            ('output', imu_corrector_output_topic),  # output topic: /vehicle/sensors/imu/data
+                        ]
                 ),
+
                 Node(
                         condition=IfCondition([use_madgwick_filter]),
                         package='imu_filter_madgwick',
