@@ -161,11 +161,12 @@ def generate_launch_description():
     depth_to_laserscan_node = Node(
             package='depthimage_to_laserscan',
             executable='depthimage_to_laserscan_node',
-            # name='depthimage_to_laserscan_node',
+            name='depthimage_to_laserscan_node',
             output='screen',
-            parameters=[{'scan_time': 0.0333},
+            parameters=[{'scan_time': 0.0333},  # 1 / (desired_frequency, i.e 30.0 Hz)
                         {'use_sim_time': use_sim_time},
-                        {'output_frame': "camera_link"},
+                        {'output_frame': "camera_link"},  # camera_link, sensor_kit_link
+                        # the default height is the z-origin of the output_frame. Changing seems to have no effect.
                         # {'scan_height': 1},
                         {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
@@ -179,134 +180,28 @@ def generate_launch_description():
             #            'scan:=/scan/from_depth_image']
     )
 
-    # # ################# Depth Image to PointCloud
-    # depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
-    #         condition=IfCondition([depthimage_to_pointcloud]),
-    #         name='depth_image_container',
-    #         namespace='',
-    #         package='rclcpp_components',
-    #         executable='component_container',
-    #         composable_node_descriptions=[
-    #             # Driver itself
-    #             ComposableNode(
-    #                     package='depth_image_proc',
-    #                     plugin='depth_image_proc::PointCloudXyzNode',
-    #                     name='point_cloud_xyz_node',
-    #                     remappings=[('image_rect', '/camera/camera/depth/image_rect_raw'),  # or aligned depth
-    #                                 ('camera_info', '/camera/camera/depth/camera_info'),
-    #                                 ('image', '/camera/camera/depth/converted_image')]
-    #             ),
-    #         ],
-    #         output='screen',
-    # )
-
-    # stereo_to_pointcloud_node = ComposableNodeContainer(
-    #         condition=IfCondition([stereo_to_pointcloud]),
-    #         name='stereo_image_container',
-    #         namespace='',
-    #         package='rclcpp_components',
-    #         executable='component_container',
-    #         composable_node_descriptions=[
-    #             ComposableNode(
-    #                     condition=IfCondition([stereo_to_pointcloud]),
-    #                     package='stereo_image_proc',
-    #                     plugin='stereo_image_proc::DisparityNode',
-    #                     parameters=[{
-    #                         'approximate_sync': 'False',
-    #                         'use_system_default_qos': 'False',
-    #                         'stereo_algorithm': '0',  # 0: block matching, 1: semi-global block matching
-    #                         'prefilter_size': '9',
-    #                         'prefilter_cap': '31',
-    #                         'correlation_window_size': '15',
-    #                         'min_disparity': '0',
-    #                         'disparity_range': '64',
-    #                         'texture_threshold': '10',
-    #                         'speckle_size': '100',
-    #                         'speckle_range': '4',
-    #                         'disp12_max_diff': '0',
-    #                         'uniqueness_ratio': '15.0',
-    #                         'P1': '200.0',
-    #                         'P2': '400.0',
-    #                         'full_dp': 'False',
-    #                         'queue_size': '1',
-    #                     }],
-    #                     remappings=[
-    #                         ('left/image_rect', '/camera/camera/infra1/image_rect_raw'),
-    #                         ('left/camera_info', '/camera/camera/infra1/camera_info'),
-    #                         ('right/image_rect', '/camera/camera/infra2/image_rect_raw'),
-    #                         ('right/camera_info', '/camera/camera/infra2/camera_info'),
-    #                     ]
-    #             ),
-    #             ComposableNode(
-    #                     condition=IfCondition([stereo_to_pointcloud]),
-    #                     package='stereo_image_proc',
-    #                     plugin='stereo_image_proc::PointCloudNode',
-    #                     parameters=[{
-    #                         'approximate_sync': 'False',
-    #                         'avoid_point_cloud_padding': 'False',
-    #                         'use_color': 'False',
-    #                         'use_system_default_qos': 'False',
-    #                         'queue_size': '1',
-    #                     }],
-    #                     remappings=[
-    #                         ('left/camera_info', '/camera/camera/infra1/camera_info'),
-    #                         ('right/camera_info', '/camera/camera/infra2/camera_info'),
-    #                         ('left/image_rect_color', '/camera/camera/infra1/image_rect_raw'),
-    #                     ]
-    #             ),
-    #         ],
-    #         output='screen',
-    # )
-
+    # depth and/or stereo to Pointcloud
     stereo_and_depth_image_processing_node = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_dir, 'launch/sensors', 'stereo_and_depth_image_processing.launch.py']
                 )),
-                # condition=LaunchConfigurationEquals('mapping', 'realsense'),
                 # condition=IfCondition([imu_only]),
                 launch_arguments={
-                    'queue_size': '1',  # default: 10
-                    'approx_sync': approx_sync,
                     'use_sim_time': use_sim_time,
-                    'depthimage_to_pointcloud': 'True',
-                    #
-                    # 'frame_id': 'base_link',
-                    # # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
-                    # 'vo_frame_id': 'odom',
-                    # 'map_frame_id': 'map',
-                    # 'publish_tf_map': publish_map_tf,
-                    # 'publish_tf_odom': 'false',
-
-                    # 'stereo': use_stereo,
-                    # 'depth': PythonExpression(['not ', use_stereo]),
-                    # 'localization': localization,
-                    # 'visual_odometry': 'false',  # odometry from images, eg stereo or RGB-D
-                    # 'icp_odometry': 'false',  # odometry from laserscans or PointClouds
-                    # 'subscribe_scan': 'true',
-                    # 'subscribe_scan_cloud': 'false',
-                    #
-                    # 'odom_topic': '/odometry/local',
-                    # 'odom_args': '',
-                    #
-                    # 'imu_topic': imu_topic,
-                    # 'wait_imu_to_init': wait_imu_to_init,
-                    #
-                    # 'stereo_namespace': '/camera',
-                    # 'left_image_topic': '/camera/camera/infra1/image_rect_raw',
-                    # 'right_image_topic': '/camera/camera/infra2/image_rect_raw',
-                    # 'left_camera_info_topic': '/camera/camera/infra1/camera_info',
-                    # 'right_camera_info_topic': '/camera/camera/infra2/camera_info',
-                    #
-                    # 'rgb_topic': '/camera/camera/color/image_raw',
-                    # 'depth_topic': depth_topic,
-                    # 'camera_info_topic': '/camera/camera/color/camera_info',
-                    #
-                    # 'scan_topic': '/lidar/scan_filtered',
-                    # # 'scan_cloud_topic': '/lidar/point_cloud',
-                    #
-                    # 'rtabmap_viz': rtabmap_viz_view,
-                    # 'rviz': rviz_view,
-                    # # 'rviz_cfg': '',
+                    'approx_sync': approx_sync,
+                    'queue_size': '10',  # default: 10
+                    'depthimage_to_pointcloud': depthimage_to_pointcloud,
+                    'stereo_to_pointcloud': stereo_to_pointcloud,
+                    'left_image_topic': '',
+                    'right_image_topic': '',
+                    'rgb_image_topic': '',
+                    'depth_image_topic': '',
+                    'color_pointcloud': 'True',
+                    'use_image_proc': 'True',
+                    'use_rtabmap': 'False',
+                    'detect_ground_and_obstacles': 'True',
+                    'register_depth': 'False',
+                    'rtabmap_depth_decimation': '1',
                 }.items()
         )
 
@@ -323,5 +218,5 @@ def generate_launch_description():
 
     # # ld.add_action(depth_image_to_pointcloud_xyz_node)
     # # ld.add_action(stereo_to_pointcloud_node)
-    # ld.add_action(stereo_and_depth_image_processing_node)  # todo: test the performance on Jetson Orins
+    ld.add_action(stereo_and_depth_image_processing_node)
     return ld

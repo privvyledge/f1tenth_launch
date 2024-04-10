@@ -275,7 +275,5 @@ def generate_launch_description():
 
     ld.add_action(imu_filter_with_correction_node)
     ld.add_action(imu_filter_without_correction_node)
-    # ld.add_action(imu_madgwick_filter_node)
-    # ld.add_action(imu_complementary_filter_node)
 
     return ld

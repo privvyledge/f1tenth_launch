@@ -1,5 +1,6 @@
 """
 Launches: vehicle driver, joystick driver, mux, and sensors
+Todo: setup loglevel
 """
 import os
 from launch import LaunchDescription
@@ -7,7 +8,7 @@ from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFr
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, LogInfo
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory

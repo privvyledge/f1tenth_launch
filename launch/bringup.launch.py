@@ -3,6 +3,7 @@ Todo:
     * Setup mapping launch
     * Setup composable nodes
     * Setup nav2_navigation individual subsystem launching
+    * seetup loglevel
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -10,7 +11,7 @@ from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFr
 from launch_ros.descriptions import ParameterFile
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable, LogInfo
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
