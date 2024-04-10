@@ -273,56 +273,6 @@ def generate_launch_description():
             ]
     )
 
-    # imu_madgwick_filter_node = Node(
-    #             condition=IfCondition([use_madgwick_filter]),
-    #             package='imu_filter_madgwick',
-    #             executable='imu_filter_madgwick_node',
-    #             name=node_name,
-    #             output='screen',
-    #             parameters=[
-    #                 {'do_bias_estimation': True},
-    #                 {'do_adaptive_gain': True},
-    #                 {'use_mag': False},
-    #                 {'gain_acc': 0.01},
-    #                 {'gain_mag': 0.01},
-    #                 {'fixed_frame': imu_frame},
-    #                 {'world_frame': "enu"},
-    #                 {'remove_gravity_vector': remove_gravity_vector},
-    #                 {'publish_tf': publish_tf},
-    #                 {'reverse_tf': reverse_tf},
-    #             ],  # todo: use parameter file instead
-    #             # parameters=[imu_filter_param_file],
-    #             remappings=[
-    #                 ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-    #                 ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
-    #             ]
-    #         )
-    #
-    # imu_complementary_filter_node = Node(
-    #         condition=IfCondition(PythonExpression(['not ', use_madgwick_filter])),
-    #         package='imu_complementary_filter',
-    #         executable='complementary_filter_node',
-    #         name=node_name,
-    #         output='screen',
-    #         parameters=[
-    #             {'do_bias_estimation': True},
-    #             {'do_adaptive_gain': True},
-    #             {'use_mag': False},
-    #             {'gain_acc': 0.01},
-    #             {'gain_mag': 0.01},
-    #             {'fixed_frame': imu_frame},
-    #             {'world_frame': "enu"},
-    #             {'remove_gravity_vector': remove_gravity_vector},
-    #             {'publish_tf': publish_tf},
-    #             {'reverse_tf': reverse_tf},
-    #         ],  # todo: use parameter file instead
-    #         # parameters=[imu_filter_param_file],
-    #         remappings=[
-    #             ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-    #             ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
-    #         ]
-    # )
-
     ld.add_action(imu_filter_with_correction_node)
     ld.add_action(imu_filter_without_correction_node)
     # ld.add_action(imu_madgwick_filter_node)
