@@ -157,21 +157,24 @@
 
     # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
     # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
-    imu0_remove_gravitational_acceleration: false  # false
+    imu0_remove_gravitational_acceleration: true  # false
     imu0_gravitational_acceleration: 9.80665
 
     imu1: /camera/camera/imu/filtered
     imu1_config: [ false, false, false,
                    true,  true,  true,  # false x3
                    false, false, false,
-                   true,  true,  true,  # , , false
-                   true,  true,  true]  # true, true,
+                   false,  false,  false,  # , , false
+                   false,  false,  false]  # true, true,
     imu1_nodelay: false
     imu1_differential: false  # false
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
     imu1_queue_size: 15
-    imu1_remove_gravitational_acceleration: false  # false
+    imu1_remove_gravitational_acceleration: true  # false
     imu1_gravitational_acceleration: 9.80665
+#    imu1_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
+#    imu1_twist_rejection_threshold: 0.8                #
+#    imu1_linear_acceleration_rejection_threshold: 1.0  #
 
     #initial_state: [0.0,  0.0,  0.0,
     #                0.0,  0.0,  0.0,

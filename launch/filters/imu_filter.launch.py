@@ -98,7 +98,7 @@ def generate_launch_description():
     remove_gravity_vector_la = DeclareLaunchArgument(
             'remove_gravity_vector',
             default_value='False',
-            description='Whether or not to remove the gravity vector.')
+            description='Whether or not to remove the gravity vector. Only valid for the Madgwick Filter')
     node_name_la = DeclareLaunchArgument(
             'node_name',
             default_value='imu_filter',

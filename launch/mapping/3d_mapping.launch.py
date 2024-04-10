@@ -50,7 +50,7 @@ def generate_launch_description():
 
         # Launch arguments
         DeclareLaunchArgument(
-                'use_stereo', default_value='True',
+                'use_stereo', default_value='False',
                 description='Whether to use Stereo or RGB+D'),
 
         DeclareLaunchArgument(
@@ -82,8 +82,10 @@ def generate_launch_description():
                 description='Used with VIO approaches and for SLAM graph optimization (gravity constraints). '),
 
         DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/camera/depth/image_rect_raw',
-                description='Raw unaligned depth topic to subscribe to. E.g "/camera/camera/depth/image_rect_raw", '
+                'depth_topic', default_value='/camera/camera/aligned_depth_to_color/image_raw',
+                description='Raw unaligned depth topic to subscribe to. E.g '
+                            '"/camera/camera/aligned_depth_to_color/image_raw", '
+                            '"/camera/camera/depth/image_rect_raw", '
                             '"/camera/depth_registered/image_rect", '
                             '"/camera/realigned_depth_to_color/image_raw"'),
 
@@ -128,55 +130,6 @@ def generate_launch_description():
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
                                           ' --udebug and --delete_db_on_start/-d'),
-
-        # Generate point cloud from unaligned depth. Todo: Move point cloud publishing to a different launch file
-        Node(
-                package='rtabmap_util', executable='point_cloud_xyz', output='screen',
-                parameters=[
-                    {'approx_sync': approx_sync},
-                    {'use_sim_time': use_sim_time},
-                ],
-                remappings=[('depth/image', depth_topic),
-                            ('depth/camera_info', '/camera/camera/depth/camera_info'),
-                            ('cloud', '/camera/cloud_from_depth')]),
-
-        # Generate aligned depth to color camera from the point cloud above
-        Node(
-                package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
-                parameters=[
-                    {'decimation': 2,
-                     'fixed_frame_id': 'camera_link',
-                     'fill_holes_size': 1},
-                    {'use_sim_time': use_sim_time},
-                            ],
-                remappings=[('camera_info', '/camera/camera/color/camera_info'),
-                            ('cloud', '/camera/cloud_from_depth'),
-                            ('image_raw', '/camera/realigned_depth_to_color/image_raw')]),
-
-        ComposableNodeContainer(
-                name='depth_image_container',
-                namespace='',
-                package='rclcpp_components',
-                executable='component_container',
-                composable_node_descriptions=[
-                    # Driver itself
-                    ComposableNode(
-                            package='depth_image_proc',
-                            parameters=[
-                                {'use_sim_time': use_sim_time}
-                            ],
-                            plugin='depth_image_proc::RegisterNode',
-                            name='depthimage_register_node',
-                            remappings=[('depth/image_rect', '/camera/camera/depth/image_rect_raw'),
-                                        ('depth/camera_info', '/camera/camera/depth/camera_info'),
-                                        ('rgb/camera_info', '/camera/camera/color/camera_info'),
-                                        ('depth_registered/image_rect', '/camera/depth_registered/image_rect'),
-                                        ('depth_registered/camera_info', '/camera/depth_registered/camera_info')
-                                        ]
-                    ),
-                ],
-                output='screen',
-        ),
 
         # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py

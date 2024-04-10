@@ -244,7 +244,7 @@ def generate_launch_description():
                 "imu_topic": '/camera/camera/imu/filtered',
                 "depth_topic": '/camera/camera/depth/image_rect_raw',
                 "approx_sync": 'True',
-                "rtabmap_viz_view": 'False',
+                "rtabmap_viz_view": 'True',
                 "rviz_view": 'False',
                 "database_path": rtabmap_database_file,
                 "rtabmap_args": '-d '

@@ -148,7 +148,7 @@ def generate_launch_description():
             launch_arguments={
                 'input_topic': '/camera/camera/imu',
                 'output_topic': '/camera/camera/imu/filtered',
-                'remove_gravity_vector': 'True',  # True
+                'remove_gravity_vector': 'False',  # True
                 'node_name': 'realsense_imu_filter',
                 'imu_corrector_output_topic': '/camera/camera/imu/bias_removed',
                 'use_madgwick_filter': 'False',

@@ -116,7 +116,7 @@ def generate_launch_description():
             launch_arguments={
                 'input_topic': '/vehicle/sensors/imu/raw',
                 'output_topic': '/vehicle/sensors/imu/data',
-                'remove_gravity_vector': 'True',
+                'remove_gravity_vector': 'False',
                 'node_name': 'vesc_imu_filter',
                 'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'False',
