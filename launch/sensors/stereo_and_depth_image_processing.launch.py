@@ -1,5 +1,6 @@
 """
 Todo:
+    * Setup groupActions for depth and stereo
     * Switch to Components for RTABMap
     * Rename cloud topics from /camera/* to /cloud/*
 
@@ -14,6 +15,7 @@ Uses the following packages:
 Performance Analysis using CPU from fastest to lowest:
     Jetson Orin:
         Summary, all nodes perform at the publish rate of the sensors, e.g >= 30 Hz
+        Image proc nodes are a little faster and better than RTABMaps in terms of quality.
 
     Jetson TX2:
         Summary, use depth nodes as they are faster (>8Hz vs <1Hz for depth), but use stereo nodes with GPU
@@ -71,6 +73,7 @@ def generate_launch_description():
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
     register_depth = LaunchConfiguration('register_depth')
     rtabmap_depth_decimation = LaunchConfiguration('rtabmap_depth_decimation')
+    rtabmap_voxel_size = LaunchConfiguration('rtabmap_voxel_size')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -125,6 +128,10 @@ def generate_launch_description():
     rtabmap_depth_decimation_la = DeclareLaunchArgument(
             'rtabmap_depth_decimation', default_value='1',
             description='Depth image decimation factor when using rtabmap. Set to 1 to disable and publish full cloud.')
+    rtabmap_voxel_size_la = DeclareLaunchArgument(
+            'rtabmap_voxel_size', default_value='0.0',
+            description='Pointcloud voxel size for voxel filtering when using rtabmap. '
+                        'Set to 0.0 to disable and publish full cloud.')
 
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la, queue_size_la,
@@ -133,7 +140,7 @@ def generate_launch_description():
                             rgb_image_topic_la, depth_image_topic_la, color_pointcloud_la,
                             use_image_proc_la, use_rtabmap_la,
                             detect_ground_and_obstacles_la, register_depth_la,
-                            rtabmap_depth_decimation_la])
+                            rtabmap_depth_decimation_la, rtabmap_voxel_size])
 
     # Nodes
     # ########################## Stereo to disparity and pointcloud
@@ -191,7 +198,7 @@ def generate_launch_description():
                             # ('left/camera_info', '/camera/camera/infra1/camera_info'),
                             # ('right/camera_info', '/camera/camera/infra2/camera_info'),
                             # ('left/image_rect_color', left_image_topic),
-                            ('points', '/camera/points_from_stereo_proc'),
+                            ('points2', '/camera/points_from_stereo_proc'),
                         ]
                 ),
             ],
@@ -267,8 +274,8 @@ def generate_launch_description():
                         package='rtabmap_util', executable='point_cloud_xyz', output='screen',
                         parameters=[
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
-                            {'voxel_size': 0.2},  # (m) 0.0 to disable filtering
-                            {'min_depth ': 0.2},  # (m) 0.0 to disable filtering
+                            {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
+                            {'min_depth ': 0.01},  # (m) 0.0 to disable filtering
                             {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
@@ -298,8 +305,8 @@ def generate_launch_description():
                         package='rtabmap_util', executable='point_cloud_xyzrgb', output='screen',
                         parameters=[
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
-                            {'voxel_size': 0.2},  # (m) 0.0 to disable filtering
-                            {'min_depth ': 0.2},  # (m) 0.0 to disable filtering
+                            {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
+                            {'min_depth ': 0.01},  # (m) 0.0 to disable filtering
                             {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
@@ -328,15 +335,18 @@ def generate_launch_description():
             condition=IfCondition(detect_ground_and_obstacles),
             package='rtabmap_util', executable='obstacles_detection', output='screen',
             parameters=[
-                {'frame_id': 'base_footprint'},  # 'camera_link', 'base_link', 'sensor_kit_link', base_footprint
+                {'frame_id': 'base_link'},  # 'camera_link', 'base_link', 'sensor_kit_link', base_footprint
                 {'queue_size': queue_size},
                 {'approx_sync': approx_sync},
                 {'use_sim_time': use_sim_time},
+                {'min_cluster_size': 20},  # Minimum size of the segmented clusters to keep. Default=20
+                {'max_obstacles_height': 5.0},  # Maximum height of obstacles. Default=0.0
             ],
             # remappings=[
             #     ('cloud', '/camera/downsampled_cloud_from_depth'),
             #     ('obstacles', '/camera/obstacles_from_cloud'),
-            #     ('ground', '/camera/ground_from_cloud')
+            #     ('ground', '/camera/ground_from_cloud'),
+            #     ('proj_obstacles', '/camera/camera/projected_obstacles')
             # ]
     )
 
@@ -425,10 +435,17 @@ def generate_launch_description():
                 SetRemap(src='depth_registered/image_rect', dst='/camera/depth_registered/image_rect'),
                 SetRemap(src='depth_registered/camera_info', dst='/camera/depth_registered/camera_info'),
 
+                # rtabmap_obstacle_and_floor_detection_node. Choose one depending on if stereo or depth is being used
+                SetRemap(src='cloud', dst='/camera/points_from_aligned_depth_proc'),
+                # SetRemap(src='cloud', dst='/camera/points_from_stereo_proc'),
+                SetRemap(src='obstacles', dst='/camera/obstacles_from_cloud_proc'),
+                SetRemap(src='ground', dst='/camera/ground_from_cloud_proc'),
+
                 # add nodes
                 stereo_to_pointcloud_node,
                 depth_image_to_pointcloud_xyz_node,
                 depth_image_proc_registration_node,
+                rtabmap_obstacle_and_floor_detection_node,
             ]
     )
 
@@ -440,7 +457,7 @@ def generate_launch_description():
                 SetParameter(name='approx_sync', value=approx_sync),
                 SetParameter(name='queue_size', value=queue_size),
                 SetParameter(name='decimation', value=rtabmap_depth_decimation),
-                SetParameter(name='voxel_size', value=0.2),
+                SetParameter(name='voxel_size', value=rtabmap_voxel_size),
 
                 # Set remapping rules
                 # RTABMAP depth to disparity, Stereo_to_disparity, Disparity_to_pointcloud
@@ -478,7 +495,7 @@ def generate_launch_description():
                 rtabmap_depth_to_pointcloud_xyz,
                 rtabmap_depth_to_pointcloud_xyz_rgb,
                 rtabmap_obstacle_and_floor_detection_node,
-                rtabmap_pointcloud_to_depth
+                rtabmap_pointcloud_to_depth,
             ]
     )
 

@@ -53,6 +53,7 @@ def generate_launch_description():
     approx_sync = LaunchConfiguration('approx_sync')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
+    detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -75,12 +76,17 @@ def generate_launch_description():
                                                     description='Whether to publish a PointCloud2 message from stereo '
                                                                 'images.')
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='True',
+                                                        default_value='False',
                                                         description='Whether to publish a PointCloud2 message from a '
                                                                     'depth image.')
+    detect_ground_and_obstacles_la = DeclareLaunchArgument('detect_ground_and_obstacles',
+                                                           default_value='False',
+                                                           description='Whether to use RTABmaps obstacle detector.')
 
     # Create Launch Description
-    ld = LaunchDescription([use_sim_time_la, approx_sync_la, lidar_la, depth_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la])
+    ld = LaunchDescription([use_sim_time_la, approx_sync_la,
+                            lidar_la, depth_la,
+                            stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la])
 
     # Nodes
     lidar_node = IncludeLaunchDescription(
@@ -170,7 +176,7 @@ def generate_launch_description():
                         {'output_frame': "camera_link"},  # camera_link, sensor_kit_link
                         # the default height is the z-origin of the output_frame. Changing seems to have no effect.
                         # {'scan_height': 1},
-                        {'range_min': 0.1},  # 0.45
+                        {'range_min': 0.01},  # 0.45
                         {'range_max': 10.0}],
             remappings=[
                 ('depth', '/camera/camera/depth/image_rect_raw'),  # /camera/camera/aligned_depth_to_color/image_raw
@@ -184,28 +190,50 @@ def generate_launch_description():
 
     # depth and/or stereo to Pointcloud
     stereo_and_depth_image_processing_node = IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(PathJoinSubstitution(
-                        [f1tenth_launch_dir, 'launch/sensors', 'stereo_and_depth_image_processing.launch.py']
-                )),
-                # condition=IfCondition([imu_only]),
-                launch_arguments={
-                    'use_sim_time': use_sim_time,
-                    'approx_sync': approx_sync,
-                    'queue_size': '10',  # default: 10
-                    'depthimage_to_pointcloud': depthimage_to_pointcloud,
-                    'stereo_to_pointcloud': stereo_to_pointcloud,
-                    'left_image_topic': '/camera/camera/infra1/image_rect_raw',
-                    'right_image_topic': '/camera/camera/infra2/image_rect_raw',
-                    'rgb_image_topic': '/camera/camera/color/image_raw',
-                    'depth_image_topic': '/camera/camera/depth/image_rect_raw',
-                    'color_pointcloud': 'True',
-                    'use_image_proc': 'True',
-                    'use_rtabmap': 'False',
-                    'detect_ground_and_obstacles': 'True',
-                    'register_depth': 'False',
-                    'rtabmap_depth_decimation': '1',
-                }.items()
-        )
+            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                    [f1tenth_launch_dir, 'launch/sensors', 'stereo_and_depth_image_processing.launch.py']
+            )),
+            # condition=IfCondition([imu_only]),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'approx_sync': approx_sync,
+                'queue_size': '1',  # default: 10
+                'depthimage_to_pointcloud': depthimage_to_pointcloud,
+                'stereo_to_pointcloud': stereo_to_pointcloud,
+                'left_image_topic': '/camera/camera/infra1/image_rect_raw',
+                'right_image_topic': '/camera/camera/infra2/image_rect_raw',
+                'rgb_image_topic': '/camera/camera/color/image_raw',
+                'depth_image_topic': '/camera/camera/depth/image_rect_raw',
+                'color_pointcloud': 'True',
+                'use_image_proc': 'True',
+                'use_rtabmap': 'False',
+                'detect_ground_and_obstacles': detect_ground_and_obstacles,
+                'register_depth': 'False',
+                'rtabmap_depth_decimation': '2',  # 1 means no decimation,
+                'rtabmap_voxel_size': '0.1',  # 0.0 means no filtering
+            }.items()
+    )
+
+    # ######### RTabMap depth to pointcloud to depth. Note: use a voxelized pointcloud
+    rtabmap_obstacle_and_floor_detection_node = Node(
+            name='rtabmap_obstacle_and_floor_detection_node',
+            condition=IfCondition(detect_ground_and_obstacles),
+            package='rtabmap_util', executable='obstacles_detection', output='screen',
+            parameters=[
+                {'frame_id': 'base_link'},  # 'camera_link', 'base_link', 'sensor_kit_link', base_footprint
+                {'queue_size': '1'},
+                {'approx_sync': approx_sync},
+                {'use_sim_time': use_sim_time},
+                {'min_cluster_size': 20},  # Minimum size of the segmented clusters to keep. Default=20
+                {'max_obstacles_height': 5.0},  # Maximum height of obstacles. Default=0.0
+            ],
+            remappings=[
+                ('cloud', '/camera/camera/depth/color/points'),
+                ('obstacles', '/camera/camera/obstacles_from_cloud'),
+                ('ground', '/camera/camera/ground_from_cloud'),
+                ('proj_obstacles', '/camera/camera/projected_obstacles')
+            ]
+    )
 
     # Add nodes to launch description
     ld.add_action(lidar_node)
@@ -218,7 +246,6 @@ def generate_launch_description():
     # ld.add_action(realsense_imu_node)
     ld.add_action(depth_to_laserscan_node)
 
-    # # ld.add_action(depth_image_to_pointcloud_xyz_node)
-    # # ld.add_action(stereo_to_pointcloud_node)
     ld.add_action(stereo_and_depth_image_processing_node)
+    ld.add_action(rtabmap_obstacle_and_floor_detection_node)
     return ld
