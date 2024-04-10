@@ -40,8 +40,8 @@
 #    depth_module.infra_format: bgr8
 #    depth_module.enable_auto_exposure: true
 #    pointcloud.ordered_pc: false
-    pointcloud.stream_filter: 0
-#    pointcloud.allow_no_texture_points: false
+    pointcloud.stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
+    pointcloud.allow_no_texture_points: true
 #    colorizer.enable: false
 
     gyro_fps: 400 # 200, 400
@@ -49,8 +49,10 @@
     unite_imu_method: 2
 
     publish_tf: true
-    tf_publish_rate: 30.0
+    tf_publish_rate: 60.0
 
     # setup sensor QoS
     gyro_qos: DEFAULT
     accel_qos: DEFAULT
+#    pointcloud:
+#      pointcloud_qos: SENSOR_DATA

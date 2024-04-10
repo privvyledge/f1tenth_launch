@@ -196,7 +196,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_pkg_prefix, 'launch/localization', 'dual_ekf.launch.py']
                 )),
-                condition=IfCondition([launch_sensor_fusion]),
+                condition=IfCondition(launch_sensor_fusion),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
                     'use_ekf_odom': launch_ekf_odom,
@@ -210,7 +210,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_pkg_prefix, 'launch/mapping', '3d_mapping.launch.py']
                 )),
-                condition=IfCondition([launch_rtabmap_localizer]),
+                condition=IfCondition(launch_rtabmap_localizer),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
                     'use_stereo': 'False',

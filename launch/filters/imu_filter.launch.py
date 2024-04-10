@@ -1,5 +1,6 @@
 """
 Todo: setup imu corrector node name
+Todo: add bias estimation using AMCL and Odom. Any Odom and PoseWithCovarianceStamped message will suffice, e.g. NDT, VSLAM (https://github.com/autowarefoundation/autoware.universe/blob/main/sensing/imu_corrector/launch/gyro_bias_estimator.launch.xml | https://github.com/autowarefoundation/autoware.universe/tree/main/sensing/imu_corrector)
 """
 
 import os
@@ -120,10 +121,6 @@ def generate_launch_description():
                             imu_frame_la, imu_corrector_frame_la, input_topic_la, output_topic_la,
                             imu_corrector_output_topic_la, imu_corrector_node_name_la,
                             remove_gravity_vector_la, node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
-
-    # To convert a launch_configuration variable to a string to use with Python functions
-    launch_context = LaunchContext()
-    node_name_string = node_name.perform(launch_context)
 
     imu_filter_with_correction_node = GroupAction(
             condition=IfCondition(remove_imu_bias),

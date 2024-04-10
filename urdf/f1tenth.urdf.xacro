@@ -7,6 +7,6 @@
 
   <link name="sensor_kit_link" />
   <xacro:sensor_d435i parent="sensor_kit_link" use_nominal_extrinsics="$(arg use_nominal_extrinsics)">
-    <origin xyz="0.1775164 0 0.0639086" rpy="0 0 0"/>
+    <origin xyz="0.1775164 0 0.0639086" rpy="0 0 0"/> <!-- set pitch=3.14159265 for correct IMU rotation -->
   </xacro:sensor_d435i>
 </robot>

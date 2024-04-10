@@ -117,8 +117,13 @@ def generate_launch_description():
             namespace='camera',
             name='camera',
             executable='realsense2_camera_node',
-            parameters=[configured_params, {"pointcloud.enable": True}],
+            parameters=[
+                configured_params,
+                # {"pointcloud.enable": True},
+            ],
             output='screen',
+            respawn=True,
+            respawn_delay=2.0,
             emulate_tty=True,
     )
 
@@ -130,6 +135,8 @@ def generate_launch_description():
             executable='realsense2_camera_node',
             parameters=[LaunchConfiguration('realsense_imu_config')],
             output='screen',
+            respawn=True,
+            respawn_delay=2.0,
             emulate_tty=True,
     )
 

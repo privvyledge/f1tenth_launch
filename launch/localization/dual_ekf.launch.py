@@ -106,7 +106,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_pkg_prefix, 'launch/localization', 'ekf_odom.launch.py']
                 )),
-                condition=IfCondition([use_ekf_odom]),
+                condition=IfCondition(use_ekf_odom),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
                     'params_file': odom_params_file,
@@ -123,7 +123,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_pkg_prefix, 'launch/localization', 'ekf_map.launch.py']
                 )),
-                condition=IfCondition([use_ekf_map]),
+                condition=IfCondition(use_ekf_map),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
                     'params_file': map_params_file,

@@ -81,6 +81,8 @@ def generate_launch_description():
             executable='vesc_driver_node',
             name='vesc_driver_node',
             namespace='vehicle',  # autoware
+            respawn=True,
+            respawn_delay=10.0,
             parameters=[vesc_config]
     )
     throttle_interpolator_node = Node(
@@ -114,7 +116,7 @@ def generate_launch_description():
             launch_arguments={
                 'input_topic': '/vehicle/sensors/imu/raw',
                 'output_topic': '/vehicle/sensors/imu/data',
-                'remove_gravity_vector': 'False',
+                'remove_gravity_vector': 'True',
                 'node_name': 'vesc_imu_filter',
                 'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'False',

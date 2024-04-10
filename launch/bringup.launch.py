@@ -328,7 +328,7 @@ def generate_launch_description():
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
-                            os.path.join(f1tenth_launch_dir, 'mapping', '2d_mapping.launch.py')),
+                            os.path.join(f1tenth_launch_dir, 'mapping.launch.py')),
                         condition=IfCondition(slam),
                         launch_arguments={'namespace': namespace,
                                           'use_namespace': use_namespace,

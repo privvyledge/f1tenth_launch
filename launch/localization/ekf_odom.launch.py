@@ -128,7 +128,7 @@ def generate_launch_description():
         #         output='screen'),
 
         Node(
-                condition=IfCondition([use_ekf]),
+                condition=IfCondition(use_ekf),
                 package='robot_localization',
                 executable='ekf_node',
                 name=node_name,
