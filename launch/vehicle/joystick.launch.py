@@ -32,6 +32,8 @@ def generate_launch_description():
             package='joy',
             executable='joy_node',
             name='joy',
+            respawn=True,
+            respawn_delay=2.0,
             parameters=[joy_config]
     )
 

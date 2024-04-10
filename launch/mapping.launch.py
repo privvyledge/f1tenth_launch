@@ -200,7 +200,7 @@ def generate_launch_description():
                 "launch_localization": launch_localization,
                 "launch_local_localization": launch_local_localization,
                 "launch_global_localization": launch_global_localization,
-                "launch_visualization": launch_visualization,
+                "launch_visualization": 'False',
                 "rviz_config_file": rviz_config_file,
             }.items()
     )
@@ -218,7 +218,7 @@ def generate_launch_description():
                 "map_file_path": map_2d_file,
                 "map_topic": 'map',
                 "with_rviz": 'False',
-                "rviz_cfg_path_param": rviz_config_path,
+                # "rviz_cfg_path_param": rviz_config_path,
                 "launch_visualization": launch_visualization,
                 "rviz_config_file": rviz_config_file,
             }.items()
@@ -244,8 +244,8 @@ def generate_launch_description():
                 "imu_topic": '/camera/camera/imu/filtered',
                 "depth_topic": '/camera/camera/depth/image_rect_raw',
                 "approx_sync": 'True',
-                "rtabmap_viz_view": 'True',
-                "rviz_view": 'False',
+                "rtabmap_viz_view": launch_visualization,
+                "rviz_view": launch_visualization,
                 "database_path": rtabmap_database_file,
                 "rtabmap_args": '-d '
                                 '--RGBD/LoopClosureReextractFeatures true '

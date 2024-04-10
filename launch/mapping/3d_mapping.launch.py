@@ -24,6 +24,11 @@ from ament_index_python import get_package_share_directory
 def generate_launch_description():
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
 
+    database_file = os.path.join(
+            f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db')
+    rviz_cfg_path = os.path.join(
+            f1tenth_launch_pkg_prefix, 'rviz', 'rtabmap.rviz')
+
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_stereo = LaunchConfiguration('use_stereo')
     localization = LaunchConfiguration('localization')
@@ -39,12 +44,10 @@ def generate_launch_description():
     rtabmap_args = LaunchConfiguration('rtabmap_args')
     rtabmap_viz_view = LaunchConfiguration('rtabmap_viz_view')
     rviz_view = LaunchConfiguration('rviz_view')
+    rviz_cfg_path_param = LaunchConfiguration('rviz_cfg_path_param', default=rviz_cfg_path)
 
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
-
-    database_file = os.path.join(
-            f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db')
 
     return LaunchDescription([
 
@@ -104,6 +107,12 @@ def generate_launch_description():
         DeclareLaunchArgument('database_path', default_value=database_file,
                               description='Where is the map saved/loaded.'),
 
+        DeclareLaunchArgument(
+                'rviz_cfg_path_param',
+                default_value=rviz_cfg_path_param,
+                description='Launch RVIZ2 with the specified config file'
+        ),
+
         # todo: use parameters instead of args (http://wiki.ros.org/rtabmap_ros/Tutorials/Advanced%20Parameter%20Tuning#Change_Parameters)
         DeclareLaunchArgument('rtabmap_args', default_value='-d '
                                                             '--RGBD/LoopClosureReextractFeatures true '
@@ -125,7 +134,7 @@ def generate_launch_description():
                                                             '--Vis/CorType 1 '
                                                             # '--Odom/KeyFrameThr 0.6'
                                                             '--Reg/Force3DoF true '
-                                                            '--Rtabmap/DetectionRate 10 '  # set to 0 to use image rate
+                                                            '--Rtabmap/DetectionRate 0 '  # set to 0 to use image rate
                                                             '--Optimizer/Slam2D true '
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
@@ -186,7 +195,7 @@ def generate_launch_description():
 
                     'rtabmap_viz': rtabmap_viz_view,
                     'rviz': rviz_view,
-                    # 'rviz_cfg': '',
+                    'rviz_cfg': rviz_cfg_path_param,
                     'use_sim_time': use_sim_time,
                 }.items()
         ),

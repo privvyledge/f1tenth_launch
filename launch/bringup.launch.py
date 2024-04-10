@@ -325,7 +325,7 @@ def generate_launch_description():
         )
     
     mapping_launch = TimerAction(
-            period=12.0,
+            period=8.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
@@ -344,7 +344,7 @@ def generate_launch_description():
                                           "launch_localization": 'False',
                                           "launch_local_localization": 'False',
                                           "launch_global_localization": 'False',
-                                          "launch_visualization": 'False',
+                                          "launch_visualization": 'True',
                                           "rviz_config_file": rviz_config_file,
                                           "launch_2d_mapping": launch_2d_mapping,
                                           "launch_3d_mapping": launch_3d_mapping,
@@ -357,7 +357,7 @@ def generate_launch_description():
     )
 
     nav2_navigation_launch = TimerAction(
-            period=15.0,
+            period=8.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
