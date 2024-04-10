@@ -140,7 +140,7 @@ def generate_launch_description():
                             rgb_image_topic_la, depth_image_topic_la, color_pointcloud_la,
                             use_image_proc_la, use_rtabmap_la,
                             detect_ground_and_obstacles_la, register_depth_la,
-                            rtabmap_depth_decimation_la, rtabmap_voxel_size])
+                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la])
 
     # Nodes
     # ########################## Stereo to disparity and pointcloud
