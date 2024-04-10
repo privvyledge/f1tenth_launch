@@ -72,10 +72,12 @@ def generate_launch_description():
                                              description='Path to the Realsense IMU parameters file to use.')
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
                                                     default_value='False',
-                                                    description='Whether to publish a PointCloud2 message from stereo images.')
+                                                    description='Whether to publish a PointCloud2 message from stereo '
+                                                                'images.')
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='False',
-                                                        description='Whether to publish a PointCloud2 message from a depth image.')
+                                                        default_value='True',
+                                                        description='Whether to publish a PointCloud2 message from a '
+                                                                    'depth image.')
 
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la, lidar_la, depth_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la])
@@ -171,7 +173,7 @@ def generate_launch_description():
                         {'range_min': 0.1},  # 0.45
                         {'range_max': 10.0}],
             remappings=[
-                ('depth', '/camera/camera/depth/image_rect_raw'),
+                ('depth', '/camera/camera/depth/image_rect_raw'),  # /camera/camera/aligned_depth_to_color/image_raw
                 ('depth_camera_info', '/camera/camera/depth/camera_info'),
                 ('scan', '/scan/from_depth_image')
             ],
@@ -192,10 +194,10 @@ def generate_launch_description():
                     'queue_size': '10',  # default: 10
                     'depthimage_to_pointcloud': depthimage_to_pointcloud,
                     'stereo_to_pointcloud': stereo_to_pointcloud,
-                    'left_image_topic': '',
-                    'right_image_topic': '',
-                    'rgb_image_topic': '',
-                    'depth_image_topic': '',
+                    'left_image_topic': '/camera/camera/infra1/image_rect_raw',
+                    'right_image_topic': '/camera/camera/infra2/image_rect_raw',
+                    'rgb_image_topic': '/camera/camera/color/image_raw',
+                    'depth_image_topic': '/camera/camera/depth/image_rect_raw',
                     'color_pointcloud': 'True',
                     'use_image_proc': 'True',
                     'use_rtabmap': 'False',
