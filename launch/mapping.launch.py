@@ -261,7 +261,7 @@ def generate_launch_description():
                 "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',  # /camera/camera/depth/image_rect_raw
                 "approx_sync": 'True',
                 "rtabmap_viz_view": 'True',  # launch_visualization
-                "rviz_view": 'True',  # launch_visualization
+                "rviz_view": 'False',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "rtabmap_args": f'{delete_old_map}'
                                 '--RGBD/LoopClosureReextractFeatures true '

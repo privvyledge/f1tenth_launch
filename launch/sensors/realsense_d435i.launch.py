@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Todo: launch realsense URDF/Xacro with robot state publisher using _d435i.urdf.xacro or test_d435i_camera.urdf.xacro (https://navigation.ros.org/setup_guides/urdf/setup_urdf.html  | https://github.com/IntelRealSense/realsense-ros/blob/ros2-development/realsense2_description/launch/view_model.launch.py)
-Todo: don't hardcode namespace
+
 """
 from launch import LaunchDescription
 from launch_ros.actions import Node
