@@ -134,7 +134,10 @@ def generate_launch_description():
                                                             '--Vis/CorType 1 '
                                                             # '--Odom/KeyFrameThr 0.6'
                                                             '--Reg/Force3DoF true '
-                                                            '--Rtabmap/DetectionRate 0 '  # set to 0 to use image rate
+                                                            # set DetectionRate to 0 to use image rate
+                                                            '--Rtabmap/DetectionRate 0 '
+                                                            # set to 1 if not using laserscan, 0 otherwise
+                                                            '--Grid/Sensor 0 '
                                                             '--Optimizer/Slam2D true '
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'

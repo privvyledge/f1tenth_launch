@@ -53,7 +53,7 @@ def generate_launch_description():
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    launch_visualization = LaunchConfiguration('launch_visualization', default=False)
+    launch_visualization = LaunchConfiguration('launch_visualization', default=True)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
@@ -236,13 +236,13 @@ def generate_launch_description():
             condition=IfCondition(launch_3d_mapping),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "use_stereo": 'False',
+                "use_stereo": 'False',  # False=use_depth, True=use_stereo
                 "localization": 'False',
                 "queue_size": mapping_3d_queue_size,
                 "publish_map_tf": 'True',
                 "wait_imu_to_init": 'True',
                 "imu_topic": '/camera/camera/imu/filtered',
-                "depth_topic": '/camera/camera/depth/image_rect_raw',
+                "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',  # /camera/camera/depth/image_rect_raw
                 "approx_sync": 'True',
                 "rtabmap_viz_view": launch_visualization,
                 "rviz_view": launch_visualization,
@@ -267,7 +267,8 @@ def generate_launch_description():
                                 '--Vis/CorType 1 '
                                 # '--Odom/KeyFrameThr 0.6'
                                 '--Reg/Force3DoF true '
-                                '--Rtabmap/DetectionRate 10 '  # set to 0 to use image rate
+                                '--Rtabmap/DetectionRate 0 '  # set to 0 to use image rate
+                                '--Grid/Sensor 0 '  # set to 1 if not using laserscan, 0 otherwise
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0',
             }.items()
