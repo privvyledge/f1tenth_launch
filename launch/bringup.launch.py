@@ -321,7 +321,7 @@ def generate_launch_description():
             name='rviz2',
             output='screen',
             arguments=['-d', rviz_config_file],
-            parameters=[{'use_sim_time': LaunchConfiguration("sim")}]
+            parameters=[{'use_sim_time': use_sim_time}]
         )
     
     mapping_launch = TimerAction(
@@ -345,7 +345,7 @@ def generate_launch_description():
                                           "launch_local_localization": 'False',
                                           "launch_global_localization": 'False',
                                           "launch_visualization": 'True',
-                                          "rviz_config_file": rviz_config_file,
+                                          # "rviz_config_file": rviz_config_file,
                                           "launch_2d_mapping": launch_2d_mapping,
                                           "launch_3d_mapping": launch_3d_mapping,
                                           "offline_mapping_2d_param_file": offline_mapping_2d_param_file,

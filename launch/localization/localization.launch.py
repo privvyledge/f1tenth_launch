@@ -228,7 +228,9 @@ def generate_launch_description():
                                     '--Vis/MinInliers 10 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
                                     '--GFTT/QualityLevel 0.00001 --Stereo/MinDisparity 0 --Stereo/MaxDisparity 64 '
                                     '--Vis/BundleAdjustment 1 --Vis/CorNNDR 0.6 --Vis/CorGuessWinSize 20 '
-                                    '--Vis/PnPFlags 0 --Vis/CorType 1 --Reg/Force3DoF true --Rtabmap/DetectionRate 10 '
+                                    '--Vis/PnPFlags 0 --Vis/CorType 1 --Reg/Force3DoF true --Rtabmap/DetectionRate 0 '
+                                    # set to 1 if not using laserscan, 0 otherwise
+                                    '--Grid/Sensor 0 '
                                     '--Optimizer/Slam2D true --Optimizer/GravitySigma 0',
                 }.items()
         )

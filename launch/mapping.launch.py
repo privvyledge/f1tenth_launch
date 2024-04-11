@@ -53,7 +53,7 @@ def generate_launch_description():
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    launch_visualization = LaunchConfiguration('launch_visualization', default=True)
+    launch_visualization = LaunchConfiguration('launch_visualization', default='True')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
@@ -217,10 +217,8 @@ def generate_launch_description():
                 "online_mapping_param_file": online_mapping_2d_param_file,
                 "map_file_path": map_2d_file,
                 "map_topic": 'map',
-                "with_rviz": 'False',
+                "with_rviz": launch_visualization,
                 # "rviz_cfg_path_param": rviz_config_path,
-                "launch_visualization": launch_visualization,
-                "rviz_config_file": rviz_config_file,
             }.items()
     )
 
