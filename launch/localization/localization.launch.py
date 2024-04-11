@@ -1,12 +1,11 @@
 """
 todo: load nodes using composition (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L145)
-This nodes sets up local and global localization.
+This node sets up local and global localization.
 * Load map (yaml and/or posegraph)
 * Launch AMCL localizer
 * Launch slam_toolbox localizer
 * (optional) Launch particle_filter localizer
 * Launch RTABMap localizer
-* todo: Get arguments for downstream components, e.g. IMU filter, LIDAR filter and other configuration variables.
 * Launch Kalman Filter (EKF or UKF) nodes
 
 """
@@ -29,6 +28,15 @@ def generate_launch_description():
     nav2_pkg_prefix = get_package_share_directory('nav2_bringup')
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
 
+    # Setup default directories
+    localization_param_file = os.path.join(
+            f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_amcl.yaml')
+    map_file_path = os.path.join(
+            f1tenth_launch_pkg_prefix, 'data/maps', 'raslab.yaml')
+    rtabmap_database_file_path = os.path.join(f1tenth_launch_pkg_prefix, 'data', 'maps', 'rtabmap', 'rtabmap.db')
+    # ekf_param_file = os.path.join(
+    #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')
+
     # declare launch configurations
     namespace = LaunchConfiguration('namespace')
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -44,22 +52,10 @@ def generate_launch_description():
     odom_frequency = LaunchConfiguration('odom_frequency')
     map_frequency = LaunchConfiguration('map_frequency')
     launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer')
+    rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
     log_level = LaunchConfiguration('log_level')
 
     # Declare default launch arguments
-    localization_param_file = os.path.join(
-            f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_amcl.yaml')
-    map_file_path = os.path.join(
-            f1tenth_launch_pkg_prefix, 'data/maps', 'raslab.yaml')
-    # ekf_param_file = os.path.join(
-    #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')
-    #
-    # imu_filter_param_file = os.path.join(
-    #         f1tenth_launch_pkg_prefix, "config/imu_filter.yaml")
-    # laser_filter_param_file = os.path.join(
-    #         f1tenth_launch_pkg_prefix, "config/filters/laser_filter.yaml")
-
-    # declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -115,6 +111,9 @@ def generate_launch_description():
             default_value='False',
             description='Whether to launch the RTABMaps global localizer node.'
     )
+    rtabmap_database_file_la = DeclareLaunchArgument('rtabmap_database_file',
+                                                     default_value=rtabmap_database_file,
+                                                     description="Path to the config file for the 3D mapping node.")
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value='False',
             description='Use composed bringup if True')
@@ -215,51 +214,42 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                     'use_stereo': 'False',
                     'localization': 'True',
-                    'queue_size': '100',
+                    'queue_size': '10',
                     'approx_sync': 'True',
                     'publish_map_tf': 'False',
                     'wait_imu_to_init': 'True',
-                    'imu_topic': '/camera/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/raw'
-                    'rtabmap_viz_view': 'True',
+                    'imu_topic': '/camera/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
+                    "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',
+                    'rtabmap_viz_view': 'False',
                     'rviz_view': 'False',
-                    'database_path': os.path.join(f1tenth_launch_pkg_prefix, 'data/maps/rtabmap', 'rtabmap.db'),
-                    'rtabmap_args': '--Mem/IncrementalMemory false --Mem/InitWMWithAllNodes true '
-                                    '--RGBD/LoopClosureReextractFeatures false '
-                                    '--Vis/MinInliers 10 --Vis/EstimationType 1 --Vis/MaxDepth 0 '
-                                    '--GFTT/QualityLevel 0.00001 --Stereo/MinDisparity 0 --Stereo/MaxDisparity 64 '
-                                    '--Vis/BundleAdjustment 1 --Vis/CorNNDR 0.6 --Vis/CorGuessWinSize 20 '
-                                    '--Vis/PnPFlags 0 --Vis/CorType 1 --Reg/Force3DoF true --Rtabmap/DetectionRate 0 '
-                                    # set to 1 if not using laserscan, 0 otherwise
+                    'database_path': rtabmap_database_file,
+                    'rtabmap_args': '--Mem/IncrementalMemory false '  # false=localization, true=mapping
+                                    '--Mem/InitWMWithAllNodes true '  # true=localization, false=mapping
+                                    '--RGBD/LoopClosureReextractFeatures false '  # false=localization, true=mapping
+                                    '--Vis/MinInliers 15 '  # default=20
+                                    '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
+                                    '--Vis/MaxDepth 0 '
+                                    '--RGBD/LinearUpdate 0.001 '
+                                    '--RGBD/AngularUpdate 0.001 '
+                                    '--GFTT/QualityLevel 0.00001 '
+                                    '--Stereo/MinDisparity 0 '
+                                    '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                    '--Stereo/OpticalFlow true '  # default=false
+                                    '--Vis/BundleAdjustment 1 '
+                                    '--Vis/CorNNDR 0.6 '
+                                    '--Vis/CorGuessWinSize 20 '
+                                    '--Vis/PnPFlags 0 '
+                                    '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
+                                    '--Reg/Force3DoF true '
+                                    # set DetectionRate to 0 to use image rate. Default=1
+                                    '--Rtabmap/DetectionRate 30 '
+                                    # '--RGBD/CreateOccupancyGrid false '
+                                    # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                     '--Grid/Sensor 0 '
-                                    '--Optimizer/Slam2D true --Optimizer/GravitySigma 0',
+                                    '--Optimizer/Slam2D true '
+                                    '--Optimizer/GravitySigma 0',
                 }.items()
         )
-
-    #
-    # imu_filter_node = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(
-    #                 os.path.join(f1tenth_launch_pkg_prefix,
-    #                              'launch/filters/imu_filter.launch.py')
-    #         )
-    # )
-
-    # laser_filter_node = Node(
-    #         package="laser_filters",
-    #         namespace='lidar',
-    #         executable="scan_to_scan_filter_chain",
-    #         parameters=[laser_filter_param_file],
-    #         remappings=[
-    #             ('output', 'scan'),
-    #             ('scan', '/lidar/scan')
-    #         ]
-    # )
-
-    # laser_filter_node = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(
-    #                 os.path.join(f1tenth_launch_pkg_prefix,
-    #                              'launch/filters/laser_filter.launch.py')
-    #         )
-    # )
 
     # Create Launch Description and add nodes to the launch description
     ld = LaunchDescription([
@@ -283,8 +273,7 @@ def generate_launch_description():
         slam_toolbox_localizer_node,
         ekf_nodes,
         rtabmap_localizer_node,
-        # imu_filter_node,
-        # laser_filter_node,
+        rtabmap_database_file_la,
     ])
 
     return ld

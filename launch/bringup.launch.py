@@ -381,7 +381,13 @@ def generate_launch_description():
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
-                joystick_launch, ackermann_mux_launch, sensors_launch, vehicle_launch, tf_launch
+
+                # nodes
+                joystick_launch,
+                ackermann_mux_launch,
+                sensors_launch,
+                vehicle_launch,
+                tf_launch
             ]
     )
 
@@ -394,10 +400,9 @@ def generate_launch_description():
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
 
+                # nodes
                 mapping_launch,
-
                 localization_launch,
-
                 nav2_navigation_launch,
             ]
     )

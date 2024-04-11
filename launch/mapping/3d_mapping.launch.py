@@ -34,6 +34,7 @@ def generate_launch_description():
     localization = LaunchConfiguration('localization')
     queue_size = LaunchConfiguration('queue_size')
     approx_sync = LaunchConfiguration('approx_sync')
+    approx_sync_max_interval = LaunchConfiguration('approx_sync_max_interval', default=0.05)  # [sec]. 0.0 means infinite
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     lidar_frame_id = LaunchConfiguration('lidar_frame_id')
     wait_imu_to_init = LaunchConfiguration('wait_imu_to_init')
@@ -97,6 +98,10 @@ def generate_launch_description():
                 description='Synchronize topics'),
 
         DeclareLaunchArgument(
+                'approx_sync_max_interval', default_value=approx_sync_max_interval,
+                description='Maximum synchronization interval in seconds. 0.0 means infinite.'),
+
+        DeclareLaunchArgument(
                 'rtabmap_viz_view', default_value='False',
                 description='Whether to start RTABMAP viz'),
 
@@ -114,14 +119,19 @@ def generate_launch_description():
         ),
 
         # todo: use parameters instead of args (http://wiki.ros.org/rtabmap_ros/Tutorials/Advanced%20Parameter%20Tuning#Change_Parameters)
+        # Source: https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161
         DeclareLaunchArgument('rtabmap_args', default_value='-d '
                                                             '--RGBD/LoopClosureReextractFeatures true '
-                                                            '--Vis/MinInliers 15 '
-                                                            '--Vis/EstimationType 1 '
+                                                            '--Rtabmap/CreateIntermediateNodes true '
+                                                            '--Vis/MinInliers 20 '  # default=20, 15 [tested]
+                                                            '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                                             '--Vis/MaxDepth 0 '
+                                                            '--RGBD/LinearUpdate 0.001 '
+                                                            '--RGBD/AngularUpdate 0.001 '
                                                             '--GFTT/QualityLevel 0.00001 '
                                                             '--Stereo/MinDisparity 0 '
-                                                            '--Stereo/MaxDisparity 64 '
+                                                            '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                                            '--Stereo/OpticalFlow true '  # default=false
                                                             # '--Vis/RoiRatios "0 0 0 .2" '
                                                             # "--Kp/RoiRatios '0 0 0 .2' "
                                                             # '--Odom/GuessMotion true '
@@ -131,13 +141,15 @@ def generate_launch_description():
                                                             '--Vis/CorGuessWinSize 20 '
                                                             '--Vis/PnPFlags 0 '
                                                             # '--Odom/Strategy 1 '
-                                                            '--Vis/CorType 1 '
+                                                            '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                                             # '--Odom/KeyFrameThr 0.6'
                                                             '--Reg/Force3DoF true '
-                                                            # set DetectionRate to 0 to use image rate
-                                                            '--Rtabmap/DetectionRate 0 '
-                                                            # set to 1 if not using laserscan, 0 otherwise
+                                                            # set DetectionRate to 0 to use image rate. Default=1
+                                                            '--Rtabmap/DetectionRate 30 '
+                                                            # '--RGBD/CreateOccupancyGrid true '
+                                                            # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                                             '--Grid/Sensor 0 '
+                                                            '--Grid/RangeMax 15.0 '  # 0=inf
                                                             '--Optimizer/Slam2D true '
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
@@ -195,6 +207,7 @@ def generate_launch_description():
                     # 'scan_cloud_topic': '/lidar/point_cloud',
 
                     'approx_sync': approx_sync,
+                    # 'approx_sync_max_interval': approx_sync_max_interval,
 
                     'rtabmap_viz': rtabmap_viz_view,
                     'rviz': rviz_view,

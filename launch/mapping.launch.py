@@ -57,6 +57,7 @@ def generate_launch_description():
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
+    life_long_mapping = LaunchConfiguration('life_long_mapping', default=False)
     offline_mapping_2d_param_file = LaunchConfiguration('offline_mapping_2d_param_file',
                                                         default=offline_mapping_2d_param_file_path)
     online_mapping_2d_param_file = LaunchConfiguration('online_mapping_2d_param_file',
@@ -140,6 +141,12 @@ def generate_launch_description():
                                                   default_value=launch_3d_mapping,
                                                   description="Enable 3D mapping.")
 
+    life_long_mapping_arg = DeclareLaunchArgument('life_long_mapping',
+                                                  default_value=life_long_mapping,
+                                                  description="If set to True, the map will not be deleted but will "
+                                                              "instead add to a preexisting map. Setting to false "
+                                                              "deletes the old map and starts again.")
+
     offline_mapping_2d_param_file_la = DeclareLaunchArgument('offline_mapping_2d_param_file',
                                                              default_value=offline_mapping_2d_param_file,
                                                              description="Path to the config file for the "
@@ -179,6 +186,7 @@ def generate_launch_description():
         rviz_config_arg,
         launch_2d_mapping_arg,
         launch_3d_mapping_arg,
+        life_long_mapping_arg,
         offline_mapping_2d_param_file_la,
         online_mapping_2d_param_file_la,
         map_2d_file_la,
@@ -205,6 +213,9 @@ def generate_launch_description():
             }.items()
     )
 
+    # todo: setup lifelong mapping
+    #  (https://github.com/SteveMacenski/slam_toolbox/blob/humble/launch/lifelong_launch.py).
+    #  Use the online config but change the node
     mapping_2d_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '2d_mapping.launch.py'])
@@ -227,6 +238,13 @@ def generate_launch_description():
         # online_mapping
         mapping_3d_queue_size = '50'  # online mapping
 
+    life_long_mapping_string = life_long_mapping.perform(LaunchContext())
+
+    delete_old_map = '-d '
+    if life_long_mapping_string.lower() == 'true':
+        delete_old_map = ' '
+
+    # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
     mapping_3d_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '3d_mapping.launch.py'])
@@ -245,14 +263,18 @@ def generate_launch_description():
                 "rtabmap_viz_view": 'True',  # launch_visualization
                 "rviz_view": 'True',  # launch_visualization
                 "database_path": rtabmap_database_file,
-                "rtabmap_args": '-d '
+                "rtabmap_args": f'{delete_old_map}'
                                 '--RGBD/LoopClosureReextractFeatures true '
-                                '--Vis/MinInliers 15 '
-                                '--Vis/EstimationType 1 '
+                                '--Rtabmap/CreateIntermediateNodes true '
+                                '--Vis/MinInliers 20 '  # default=20, 15 [tested]
+                                '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
+                                '--RGBD/LinearUpdate 0.001 '
+                                '--RGBD/AngularUpdate 0.001 '
                                 '--GFTT/QualityLevel 0.00001 '
                                 '--Stereo/MinDisparity 0 '
-                                '--Stereo/MaxDisparity 64 '
+                                '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                '--Stereo/OpticalFlow true '  # default=false
                                 # '--Vis/RoiRatios "0 0 0 .2" '
                                 # "--Kp/RoiRatios '0 0 0 .2' "
                                 # '--Odom/GuessMotion true '
@@ -262,11 +284,15 @@ def generate_launch_description():
                                 '--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
                                 # '--Odom/Strategy 1 '
-                                '--Vis/CorType 1 '
+                                '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                 # '--Odom/KeyFrameThr 0.6'
                                 '--Reg/Force3DoF true '
-                                '--Rtabmap/DetectionRate 0 '  # set to 0 to use image rate
-                                '--Grid/Sensor 0 '  # set to 1 if not using laserscan, 0 otherwise
+                                # set DetectionRate to 0 to use image rate. Default=1
+                                '--Rtabmap/DetectionRate 30 '
+                                # '--RGBD/CreateOccupancyGrid true '
+                                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
+                                '--Grid/Sensor 0 '
+                                '--Grid/RangeMax 15.0 '  # 0=inf
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0',
             }.items()
