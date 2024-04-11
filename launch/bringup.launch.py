@@ -294,7 +294,7 @@ def generate_launch_description():
     )
 
     localization_launch = TimerAction(
-            period=10.0,
+            period=1.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
@@ -344,7 +344,7 @@ def generate_launch_description():
                                           "launch_localization": 'False',
                                           "launch_local_localization": 'False',
                                           "launch_global_localization": 'False',
-                                          "launch_visualization": 'True',
+                                          "launch_visualization": launch_visualization,  #
                                           # "rviz_config_file": rviz_config_file,
                                           "launch_2d_mapping": launch_2d_mapping,
                                           "launch_3d_mapping": launch_3d_mapping,

@@ -102,37 +102,6 @@ def generate_launch_description():
             description='Launch RVIZ2 with the specified config file'
     )
 
-    # vehicle_interface_mode = DeclareLaunchArgument(
-    #     'vehicle_interface',
-    #     default_value='vesc',
-    #     description='Launch rviz in addition to other nodes'
-    # )
-
-    # vehicle_launch_vesc = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource(
-    #         os.path.join(f1tenth_launch_dir,
-    #                      'launch/vehicle/vehicle.launch.py'),
-    #     ),
-    #     condition=IfCondition(PythonExpression(['not ', offline_mapping])),
-    #     # condition=IfEqualsCondition("vehicle_interface", "vesc")
-    # )
-    #
-    # sensor_launch = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(
-    #                 os.path.join(f1tenth_launch_dir,
-    #                              'launch/sensors/sensors.launch.py'),
-    #         ),
-    #         condition=IfCondition(PythonExpression(['not ', offline_mapping])),
-    # )
-    #
-    # ekf_odom_launch = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(
-    #                 os.path.join(f1tenth_launch_dir,
-    #                              'launch/localization/ekf_odom.launch.py'),
-    #         ),
-    #         condition=IfCondition(PythonExpression(['not ', offline_mapping])),
-    # )
-
     offline_slam_launch = Node(
             condition=IfCondition([offline_mapping]),
             parameters=[
@@ -197,18 +166,12 @@ def generate_launch_description():
         declare_use_namespace_cmd,
         use_sim_time_la,
         declare_offline_mapping,
-        # with_joy_param,
         with_rviz_param,
-        # vehicle_interface_mode,
         offline_mapping_param_file_la,
         online_mapping_param_file_la,
         map_topic_la,
         map_file_path_la,
         rviz_cfg_path_param_la,
-        # vehicle_launch_svl,
-        # vehicle_launch_vesc,
-        # sensor_launch,
-        # ekf_odom_launch,
         offline_slam_launch,
         online_slam_launch,
         rviz2,

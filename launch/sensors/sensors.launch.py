@@ -174,8 +174,7 @@ def generate_launch_description():
             parameters=[{'scan_time': 0.0333},  # 1 / (desired_frequency, i.e 30.0 Hz)
                         {'use_sim_time': use_sim_time},
                         {'output_frame': "camera_link"},  # camera_link, sensor_kit_link
-                        # the default height is the z-origin of the output_frame. Changing seems to have no effect.
-                        # {'scan_height': 1},
+                        # {'scan_height': 1},  # number of pixel rows to use. The minimum is selected
                         {'range_min': 0.01},  # 0.45
                         {'range_max': 10.0}],
             remappings=[
