@@ -217,7 +217,7 @@ def generate_launch_description():
                 "online_mapping_param_file": online_mapping_2d_param_file,
                 "map_file_path": map_2d_file,
                 "map_topic": 'map',
-                "with_rviz": launch_visualization,  # launch_visualization
+                "with_rviz": 'True',  # launch_visualization
                 # "rviz_cfg_path_param": rviz_config_path,
             }.items()
     )
@@ -242,8 +242,8 @@ def generate_launch_description():
                 "imu_topic": '/camera/camera/imu/filtered',
                 "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',  # /camera/camera/depth/image_rect_raw
                 "approx_sync": 'True',
-                "rtabmap_viz_view": launch_visualization,  # launch_visualization
-                "rviz_view": launch_visualization,  # launch_visualization
+                "rtabmap_viz_view": 'True',  # launch_visualization
+                "rviz_view": 'True',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "rtabmap_args": '-d '
                                 '--RGBD/LoopClosureReextractFeatures true '
