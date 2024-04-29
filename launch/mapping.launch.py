@@ -293,6 +293,7 @@ def generate_launch_description():
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
                                 '--Grid/RangeMax 15.0 '  # 0=inf
+                                # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0',
             }.items()
