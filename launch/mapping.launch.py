@@ -210,7 +210,7 @@ def generate_launch_description():
             'launch_throttle_interpolator_node',
             default_value=launch_throttle_interpolator_node,
             description='Interpolate commands before sending to the VESC. '
-                        'Set to False if using MPC, True otherwise')
+                        'Set to False if using MPC (or increase limits), True otherwise')
 
     # Add launch arguments to a list
     launch_args = [
