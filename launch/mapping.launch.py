@@ -42,18 +42,18 @@ def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     map_yaml_file = LaunchConfiguration('map', default=map_file_path)
-    use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    use_sim_time = LaunchConfiguration('use_sim_time', default=True)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
-    launch_joystick = LaunchConfiguration('launch_joystick', default=True)
-    launch_sensors = LaunchConfiguration('launch_sensors', default=True)
-    launch_vehicle = LaunchConfiguration('launch_vehicle', default=True)
-    launch_tfs = LaunchConfiguration('launch_tfs', default=True)
+    launch_joystick = LaunchConfiguration('launch_joystick', default=False)
+    launch_sensors = LaunchConfiguration('launch_sensors', default=False)
+    launch_vehicle = LaunchConfiguration('launch_vehicle', default=False)
+    launch_tfs = LaunchConfiguration('launch_tfs', default=False)
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    launch_visualization = LaunchConfiguration('launch_visualization', default='True')
+    launch_visualization = LaunchConfiguration('launch_visualization', default='False')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
@@ -266,6 +266,8 @@ def generate_launch_description():
                 "rtabmap_args": f'{delete_old_map}'
                                 '--RGBD/LoopClosureReextractFeatures true '
                                 '--Rtabmap/CreateIntermediateNodes true '
+                                # always update the map not only when the robot moves. todo
+                                # '--map_always_update False'
                                 '--Vis/MinInliers 20 '  # default=20, 15 [tested]
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
@@ -293,6 +295,10 @@ def generate_launch_description():
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
                                 '--Grid/RangeMax 15.0 '  # 0=inf
+                                # enable ray-tracing to clear out cells and mark as free 
+                                # space in occupancy grid map
+                                # '--Grid/RayTracing False '
+                                # '--Grid/FromDepth False '  # generate 2D map from depth
                                 # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0',

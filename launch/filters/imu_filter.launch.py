@@ -152,7 +152,7 @@ def generate_launch_description():
                         package='imu_corrector',
                         executable='imu_corrector',
                         name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
-                        output='screen',
+                        output={'both': 'log'},
                         parameters=[imu_corrector_params_file],
                         remappings=[
                             ('input', input_topic),  # input topic: /vehicle/sensors/imu/raw

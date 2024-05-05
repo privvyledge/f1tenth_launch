@@ -1,11 +1,3 @@
-# due to issues with the realsense driver, if pointclouds/depths are required, either use some other node e.g depth or stereo to pointcloud
-# align depth should also be set to False, otherwise the whole system fails
-# if pointclouds/depths are required specifically from the realsense driver then set FPS of color and depth to 15 but this causes
-# the infrared images to not publish. Set FPS >= 30 for infrared images.
-# if not using infra images, set depth.emitter_enabled=1 so depth is more accurate otherwise 0
-# i.e if using stereo, set depth resolution and fps to 848x480x90 and depth_module.emitter_enabled: 0
-# if using color and depth, set resolution and fps of rgb and depth to 640x480x15 and depth_module.emitter_enabled: 1
-
 # todo: pass resolution, fps and depth_module.emitter_enabled in the launch file
 /**:
   ros__parameters:
@@ -15,44 +7,80 @@
 #    initial_reset: false
 ##    base_frame_id: camera_link
 
-    accelerate_gpu_with_glsl: true
+    accelerate_gpu_with_glsl: false  # setting to true causes high cpu utilization
+    log_level: error # DEBUG|INFO|WARN|ERROR|FATAL
+    wait_for_device_timeout: -1.0 # Timeout for waiting for device to connect (Seconds)
+    reconnect_timeout: 6.0  # Timeout(seconds) between consecutive reconnection attempts
 
     enable_sync: true
-    enable_depth: true
     enable_color: true
+    enable_depth: true
     enable_infra: true
     enable_infra1: true
     enable_infra2: true
-    enable_confidence: true
+    pointcloud.enable: true
     enable_gyro: true
     enable_accel: true
-#    enable_pose: false
-#    enable_rgbd: false
-    pointcloud.enable: true
+    enable_rgbd: false
+    enable_confidence: true
+    enable_pose: false
 
-    depth_module.profile: 640x360x15  # 640x480x60, 848x480x30, 1280x720x30
-    rgb_camera.profile: 640x360x15  # 640x480x60, 848x480x30, 1280x720x30
-#    rgb_camera.color_format: bgr8
-#    rgb_camera:
+    rgb_camera:
+      profile: "640x480x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+#      color_format: bgr8
 #      enable_auto_exposure: true
-    align_depth.enable: true
-    depth_module.emitter_enabled: 1  # set to 0 if using infra
-#    depth_module.infra_format: bgr8
-#    depth_module.enable_auto_exposure: true
-#    pointcloud.ordered_pc: false
-    pointcloud.stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
-    pointcloud.allow_no_texture_points: true
+
+    depth_module:
+      profile: "640x480x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      emitter_enabled: 1  # set to 0 if using infra
+      emitter_on_off: false
+#      infra_format: bgr8
+#      enable_auto_exposure: true
+
 #    colorizer.enable: false
+    align_depth:
+      enable: true
+
+    pointcloud:
+      ordered_pc: true
+      stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
+#      stream_index_filter: 0
+      allow_no_texture_points: true
+
+    pointcloud_texture_index: 0
+    pointcloud_texture_stream: RS2_STREAM_ANY
+
 
     gyro_fps: 400 # 200, 400
     accel_fps: 200 # 100, 200
     unite_imu_method: 2
+#    angular_velocity_cov: 0.01
+#    linear_accel_cov: 0.01
 
     publish_tf: true
     tf_publish_rate: 60.0
 
-    # setup sensor QoS
-    gyro_qos: DEFAULT
-    accel_qos: DEFAULT
-#    pointcloud:
-#      pointcloud_qos: SENSOR_DATA
+    # Enable post-processing filters
+#    decimation_filter:
+#      enable: true
+#      filter_magnitude: 2
+#        spatial_filter.enable: true
+#    temporal_filter:
+#      enable: true
+#    disparity_filter:
+#      enable: true
+#    hole_filling_filter:
+#      enable: true
+
+    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
+    color_qos: "SENSOR_DATA"
+    color_info_qos: "SENSOR_DATA"
+    infra_qos: "SENSOR_DATA"
+    infra1_qos: "SENSOR_DATA"
+    infra2_qos: "SENSOR_DATA"
+    depth_qos: "SENSOR_DATA"
+    depth_info_qos: "SENSOR_DATA"
+    pointcloud.pointcloud_qos: "SENSOR_DATA"
+    gyro_qos: "SENSOR_DATA"
+    accel_qos: "SENSOR_DATA"
+

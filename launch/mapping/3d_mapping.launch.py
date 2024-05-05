@@ -123,6 +123,8 @@ def generate_launch_description():
         DeclareLaunchArgument('rtabmap_args', default_value='-d '
                                                             '--RGBD/LoopClosureReextractFeatures true '
                                                             '--Rtabmap/CreateIntermediateNodes true '
+                                                            # always update the map not only when the robot moves. todo
+                                                            # '--map_always_update False'
                                                             '--Vis/MinInliers 20 '  # default=20, 15 [tested]
                                                             '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                                             '--Vis/MaxDepth 0 '
@@ -150,7 +152,12 @@ def generate_launch_description():
                                                             # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                                             '--Grid/Sensor 0 '
                                                             '--Grid/RangeMax 15.0 '  # 0=inf
-                                                            # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
+                                                            # '--Grid/FromDepth False '  # generate 2D map from depth
+                                                            # enable ray-tracing to clear out cells and mark as free 
+                                                            # space in occupancy grid map
+                                                            # '--Grid/RayTracing False '
+                                                            # optimizer strat 2=gtsam (might be better for localization)
+                                                            # '--Optimizer/Strategy 2 '
                                                             '--Optimizer/Slam2D true '
                                                             '--Optimizer/GravitySigma 0',
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'

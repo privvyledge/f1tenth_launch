@@ -32,6 +32,7 @@ def generate_launch_description():
     imu_only = LaunchConfiguration('imu_only')
     unite_imu_method = LaunchConfiguration('unite_imu_method')
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
+    log_level = LaunchConfiguration('log_level')
 
     # Create a dictionary for substitutable parameters
     param_substitutions = {
@@ -74,6 +75,10 @@ def generate_launch_description():
             'use_respawn', default_value='False',
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
 
+    declare_log_level_cmd = DeclareLaunchArgument(
+            'log_level', default_value='fatal',
+            description='Realsense log level')
+
     realsense_params_file_cmd = DeclareLaunchArgument(
             'config_file',
             default_value=realsense_config,
@@ -93,7 +98,7 @@ def generate_launch_description():
 
     # Create Launch Description
     ld = LaunchDescription([declare_namespace_cmd, declare_use_namespace_cmd,
-                            declare_autostart_cmd, declare_use_respawn_cmd,
+                            declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
                             realsense_params_file_cmd, realsense_imu_la,
                             imu_only_cmd, launch_imu_filter_cmd])
 
@@ -120,6 +125,7 @@ def generate_launch_description():
                 configured_params,
                 # {"pointcloud.enable": True},
             ],
+            arguments=['--ros-args', '--log-level', log_level],
             output='screen',
             respawn=True,
             respawn_delay=2.0,

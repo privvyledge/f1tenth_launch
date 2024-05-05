@@ -25,6 +25,7 @@ def generate_launch_description():
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
 
     # Declare launch configuration variables
+    use_sim_time = LaunchConfiguration('use_sim_time', default="False")
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
     launch_sensors = LaunchConfiguration('launch_sensors', default=True)
     launch_vehicle = LaunchConfiguration('launch_vehicle', default=True)
@@ -61,6 +62,11 @@ def generate_launch_description():
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
+    declare_use_sim_time_cmd = DeclareLaunchArgument(
+            'use_sim_time',
+            default_value=use_sim_time,
+            description='Use simulation (Gazebo) clock if true')
+
     rviz_config_arg = DeclareLaunchArgument('rviz_config_file',
                                             default_value=rviz_config_file,
                                             description="The path to the rviz configuration file.")
@@ -74,6 +80,7 @@ def generate_launch_description():
         launch_local_localization_arg,
         launch_global_localization_arg,
         launch_visualization_arg,
+        declare_use_sim_time_cmd,
         rviz_config_arg,
     ]
 
@@ -130,6 +137,7 @@ def generate_launch_description():
                 "launch_ekf_map": launch_global_localization,
                 "launch_slam_toolbox_localizer": 'False',
                 "launch_rtabmap_localizer": 'False',
+                "use_sim_time": use_sim_time,
             }.items()
     )
 
