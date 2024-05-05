@@ -3,7 +3,7 @@ Launches: vehicle driver, joystick driver, mux, and sensors
 Todo: setup loglevel
 """
 import os
-from launch import LaunchDescription
+from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
@@ -35,6 +35,10 @@ def generate_launch_description():
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
+
+    deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    max_speed = LaunchConfiguration('max_speed', default=5.0)
+    max_steering = LaunchConfiguration('max_steering', default=0.34)
 
     # Declare launch arguments
     launch_joystick_arg = DeclareLaunchArgument('launch_joystick', default_value=launch_joystick,
@@ -71,6 +75,21 @@ def generate_launch_description():
                                             default_value=rviz_config_file,
                                             description="The path to the rviz configuration file.")
 
+    deadman_buttons_la = DeclareLaunchArgument(
+            'deadman_buttons',
+            default_value=deadman_buttons,
+            description='Buttons used to arm the vehicle actuators.')
+
+    max_speed_la = DeclareLaunchArgument(
+            'max_speed',
+            default_value=max_speed,
+            description='The maximum speed in m/s.')
+
+    max_steering_la = DeclareLaunchArgument(
+            'max_steering',
+            default_value=max_steering,
+            description='The maximum steering angle in rads.')
+
     launch_args = [
         launch_joystick_arg,
         launch_sensors_arg,
@@ -82,6 +101,7 @@ def generate_launch_description():
         launch_visualization_arg,
         declare_use_sim_time_cmd,
         rviz_config_arg,
+        deadman_buttons_la, max_speed_la, max_steering_la
     ]
 
     # Launch nodes
@@ -89,7 +109,12 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
             ),
-            condition=IfCondition(launch_joystick)
+            condition=IfCondition(launch_joystick),
+            launch_arguments={
+                "deadman_buttons": deadman_buttons,
+                "max_speed": max_speed,
+                "max_steering": max_steering
+            }.items()
     )
 
     ackermann_mux_launch = IncludeLaunchDescription(

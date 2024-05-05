@@ -72,6 +72,10 @@ def generate_launch_description():
     map_2d_file = LaunchConfiguration('default_2d_map_file', default=default_2d_map_file_path)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
+    deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    max_speed = LaunchConfiguration('max_speed', default=5.0)
+    max_steering = LaunchConfiguration('max_steering', default=0.34)
+
     # Setup Remappings/renamings
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -210,6 +214,21 @@ def generate_launch_description():
                                                      default_value=rtabmap_database_file,
                                                      description="Path to the config file for the 3D mapping node.")
 
+    deadman_buttons_la = DeclareLaunchArgument(
+            'deadman_buttons',
+            default_value=deadman_buttons,
+            description='Buttons used to arm the vehicle actuators.')
+
+    max_speed_la = DeclareLaunchArgument(
+            'max_speed',
+            default_value=max_speed,
+            description='The maximum speed in m/s.')
+
+    max_steering_la = DeclareLaunchArgument(
+            'max_steering',
+            default_value=max_steering,
+            description='The maximum steering angle in rads.')
+
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
@@ -238,7 +257,8 @@ def generate_launch_description():
         offline_mapping_2d_param_file_la,
         online_mapping_2d_param_file_la,
         map_2d_file_la,
-        rtabmap_database_file_la
+        rtabmap_database_file_la,
+        deadman_buttons_la, max_speed_la, max_steering_la
     ]
 
     ''' Launch Nodes '''
@@ -256,7 +276,12 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
             ),
-            condition=IfCondition(launch_joystick)
+            condition=IfCondition(launch_joystick),
+            launch_arguments={
+                "deadman_buttons": deadman_buttons,
+                "max_speed": max_speed,
+                "max_steering": max_steering
+            }.items()
     )
 
     ackermann_mux_launch = IncludeLaunchDescription(

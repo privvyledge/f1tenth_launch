@@ -20,13 +20,31 @@ def generate_launch_description():
     )
 
     joy_config = LaunchConfiguration('joy_config')
+    deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    max_speed = LaunchConfiguration('max_speed', default=5.0)
+    max_steering = LaunchConfiguration('max_steering', default=0.34)
 
     joy_la = DeclareLaunchArgument(
             'joy_config',
             default_value=joy_teleop_config_file,
             description='Descriptions for joy and joy_teleop configs')
 
-    ld = LaunchDescription([joy_la])
+    deadman_buttons_la = DeclareLaunchArgument(
+            'deadman_buttons',
+            default_value=deadman_buttons,
+            description='Buttons used to arm the vehicle actuators.')
+
+    max_speed_la = DeclareLaunchArgument(
+            'max_speed',
+            default_value=max_speed,
+            description='The maximum speed in m/s.')
+
+    max_steering_la = DeclareLaunchArgument(
+            'max_steering',
+            default_value=max_steering,
+            description='The maximum steering angle in rads.')
+
+    ld = LaunchDescription([joy_la, deadman_buttons_la, max_speed_la, max_steering_la])
 
     joy_node = Node(
             package='joy',
@@ -41,7 +59,14 @@ def generate_launch_description():
             package='joy_teleop',
             executable='joy_teleop',
             name='joy_teleop',
-            parameters=[joy_config]
+            parameters=[
+                joy_config,
+                {
+                    'human_control.deadman_buttons': deadman_buttons,
+                    'human_control.axis_mappings.drive-speed.scale': max_speed,  # max speed in m/s
+                    'human_control.axis_mappings.drive-steering_angle.scale': max_steering,  # max steering in rads
+                }
+            ]
     )
 
     # add nodes to the launch description

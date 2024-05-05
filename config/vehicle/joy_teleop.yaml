@@ -26,7 +26,7 @@ joy_teleop:
       type: topic
       interface_type: ackermann_msgs/msg/AckermannDriveStamped
       topic_name: teleop
-      deadman_buttons: [9]  # 9/4 for PS4, 4 for Logitech F710
+      deadman_buttons: [4, 9]  # 9/4 for PS4, 4 for Logitech F710
       axis_mappings:
         drive-speed:
           axis: 1
