@@ -1,13 +1,12 @@
 """
 Todo: move joy launching (with mux and teleop_twist/ackermann) to another launch file.
 """
-from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch import LaunchDescription, LaunchContext
+from launch_ros.actions import Node, SetRemap
 from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
-from launch.conditions import IfCondition, LaunchConfigurationEquals
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -28,7 +27,10 @@ def generate_launch_description():
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node')
-    launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node')
+    launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
+
+    max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
+    max_steering_rate = LaunchConfiguration('max_servo_rate', default=3.2)
 
     vesc_la = DeclareLaunchArgument(
             'vesc_config',
@@ -48,22 +50,74 @@ def generate_launch_description():
             description='Publish odometry messages from the VESC.')
     declare_launch_throttle_interpolator_node = DeclareLaunchArgument(
             'launch_throttle_interpolator_node',
-            default_value='False',
-            description='Interpolate commands before sending to the VESC.')
+            default_value=launch_throttle_interpolator_node,
+            description='Interpolate commands before sending to the VESC. '
+                        'Set to False if using MPC, True otherwise')
+
+    max_acceleration_la = DeclareLaunchArgument(
+            'max_acceleration',
+            default_value=max_acceleration,
+            description='The maximum acceleration in m/s^2.')
+
+    max_steering_rate_la = DeclareLaunchArgument(
+            'max_steering_rate',
+            default_value=max_steering_rate,
+            description='The maximum steering rate in rads/s.')
 
     ld = LaunchDescription([vesc_la,
                             declare_launch_imu_filter,
                             declare_launch_ackermann_to_vesc_node,
                             declare_launch_vesc_to_odom_node,
-                            declare_launch_throttle_interpolator_node])
+                            declare_launch_throttle_interpolator_node,
+                            max_acceleration_la, max_steering_rate_la])
 
-    ackermann_to_vesc_node = Node(
+    # remap ackermann to vesc topic if the throttle interpolator is on
+    # raw_speed_input_topic = 'commands/motor/speed'
+    # raw_servo_input_topic = 'commands/servo/position'
+    # raw_speed_output_topic = 'commands/motor/speed'  # when using actuation interpolation
+    # raw_servo_output_topic = 'commands/servo/position'  # when using actuation interpolation
+    #
+    # launch_context = LaunchContext()
+    # throttle_interpolator_string = launch_throttle_interpolator_node.perform(launch_context)
+    #
+    # if throttle_interpolator_string.lower() == 'true':
+    #     raw_speed_output_topic = 'commands/motor/unsmoothed_speed'
+    #     raw_servo_output_topic = 'commands/servo/unsmoothed_position'
+
+    # ackermann_to_vesc_node = Node(
+    #         condition=IfCondition(launch_ackermann_to_vesc_node),
+    #         package='vesc_ackermann',
+    #         executable='ackermann_to_vesc_node',
+    #         name='ackermann_to_vesc_node',
+    #         namespace='vehicle',
+    #         parameters=[vesc_config],
+    #         remappings=[(raw_speed_input_topic, raw_speed_output_topic),
+    #                     (raw_servo_input_topic, raw_servo_output_topic)]
+    # )
+
+    ackermann_to_vesc_node = GroupAction(
             condition=IfCondition(launch_ackermann_to_vesc_node),
-            package='vesc_ackermann',
-            executable='ackermann_to_vesc_node',
-            name='ackermann_to_vesc_node',
-            namespace='vehicle',
-            parameters=[vesc_config]
+            actions=[
+                Node(
+                        condition=UnlessCondition(launch_throttle_interpolator_node),
+                        package='vesc_ackermann',
+                        executable='ackermann_to_vesc_node',
+                        name='ackermann_to_vesc_node',
+                        namespace='vehicle',
+                        parameters=[vesc_config]
+                ),
+
+                Node(
+                        condition=IfCondition(launch_throttle_interpolator_node),
+                        package='vesc_ackermann',
+                        executable='ackermann_to_vesc_node',
+                        name='ackermann_to_vesc_node',
+                        namespace='vehicle',
+                        parameters=[vesc_config],
+                        remappings=[('commands/motor/speed', 'commands/motor/unsmoothed_speed'),
+                                    ('commands/servo/position', 'commands/servo/unsmoothed_position')]
+                )
+            ]
     )
     vesc_to_odom_node = Node(
             condition=IfCondition(launch_vesc_to_odom_node),
@@ -71,7 +125,13 @@ def generate_launch_description():
             executable='vesc_to_odom_node',
             name='vesc_to_odom_node',
             namespace='vehicle',  # autoware
-            parameters=[vesc_config],
+            parameters=[
+                vesc_config,
+                {
+                    'max_acceleration': max_acceleration,
+                    'max_servo_speed': max_steering_rate,
+                }
+            ],
             remappings=[  # ('/odom', '/vesc/odom'),
                 ('odom', 'vesc_odom'),  # autoware
             ]
@@ -90,6 +150,7 @@ def generate_launch_description():
             package='f1tenth_stack',
             executable='throttle_interpolator',
             name='throttle_interpolator',
+            namespace='vehicle',
             parameters=[vesc_config]
     )
 

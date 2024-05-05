@@ -39,6 +39,11 @@ def generate_launch_description():
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
+    max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
+    max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
+    launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
+    launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
+    launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='True')
 
     # Declare launch arguments
     launch_joystick_arg = DeclareLaunchArgument('launch_joystick', default_value=launch_joystick,
@@ -90,6 +95,30 @@ def generate_launch_description():
             default_value=max_steering,
             description='The maximum steering angle in rads.')
 
+    max_acceleration_la = DeclareLaunchArgument(
+            'max_acceleration',
+            default_value=max_acceleration,
+            description='The maximum acceleration in m/s^2.')
+
+    max_steering_rate_la = DeclareLaunchArgument(
+            'max_steering_rate',
+            default_value=max_steering_rate,
+            description='The maximum steering rate in rads/s.')
+
+    declare_launch_ackermann_to_vesc_node = DeclareLaunchArgument(
+            'launch_ackermann_to_vesc_node',
+            default_value=launch_ackermann_to_vesc_node,
+            description='Send ackermann commands to the VESC.')
+    declare_launch_vesc_to_odom_node = DeclareLaunchArgument(
+            'launch_vesc_to_odom_node',
+            default_value=launch_vesc_to_odom_node,
+            description='Publish odometry messages from the VESC.')
+    declare_launch_throttle_interpolator_node = DeclareLaunchArgument(
+            'launch_throttle_interpolator_node',
+            default_value=launch_throttle_interpolator_node,
+            description='Interpolate commands before sending to the VESC. '
+                        'Set to False if using MPC, True otherwise')
+
     launch_args = [
         launch_joystick_arg,
         launch_sensors_arg,
@@ -101,7 +130,10 @@ def generate_launch_description():
         launch_visualization_arg,
         declare_use_sim_time_cmd,
         rviz_config_arg,
-        deadman_buttons_la, max_speed_la, max_steering_la
+        deadman_buttons_la, max_speed_la, max_steering_la,
+        max_acceleration_la, max_steering_rate_la,
+        declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
+        declare_launch_throttle_interpolator_node
     ]
 
     # Launch nodes
@@ -138,9 +170,11 @@ def generate_launch_description():
             condition=IfCondition(launch_vehicle),
             launch_arguments={
                 "launch_imu_filter": 'True',
-                "launch_ackermann_to_vesc_node": 'True',
-                "launch_vesc_to_odom_node": 'True',
-                "launch_throttle_interpolator_node": 'False'
+                "launch_ackermann_to_vesc_node": launch_ackermann_to_vesc_node,
+                "launch_vesc_to_odom_node": launch_throttle_interpolator_node,
+                "launch_throttle_interpolator_node": launch_throttle_interpolator_node,
+                "max_acceleration": max_acceleration,
+                "max_steering_rate": max_steering_rate,
             }.items()
     )
 
