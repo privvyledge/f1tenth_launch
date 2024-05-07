@@ -151,6 +151,7 @@ def generate_launch_description():
             executable='throttle_interpolator',
             name='throttle_interpolator',
             namespace='vehicle',
+            output={'both': 'log'},
             parameters=[vesc_config]
     )
 

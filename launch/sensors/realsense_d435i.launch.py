@@ -76,7 +76,7 @@ def generate_launch_description():
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
 
     declare_log_level_cmd = DeclareLaunchArgument(
-            'log_level', default_value='fatal',
+            'log_level', default_value='info',
             description='Realsense log level')
 
     realsense_params_file_cmd = DeclareLaunchArgument(

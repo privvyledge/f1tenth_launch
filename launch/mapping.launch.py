@@ -247,7 +247,13 @@ def generate_launch_description():
 
     ''' Launch Nodes '''
     launch_context = LaunchContext()
+    # todo: use OpaqueFunction to correctly get the runtime LaunchConfiguration.
+    #  E.g ZED ROS2 wrapper |
+    #  https://robotics.stackexchange.com/a/103368 |
+    #  https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/ |
+    #  https://robotics.stackexchange.com/a/104402
     use_sim_time_string = use_sim_time.perform(launch_context)
+    life_long_mapping_string = life_long_mapping.perform(launch_context)
 
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -298,8 +304,6 @@ def generate_launch_description():
     if use_sim_time_string.lower() == 'false':
         # online_mapping
         mapping_3d_queue_size = '50'  # online mapping
-
-    life_long_mapping_string = life_long_mapping.perform(launch_context)
 
     delete_old_map = '-d '
     if life_long_mapping_string.lower() == 'true':
