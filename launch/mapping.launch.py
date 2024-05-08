@@ -9,7 +9,7 @@ from launch_ros.descriptions import ParameterFile
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, \
     EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, OpaqueFunction, \
     SetEnvironmentVariable
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
@@ -18,7 +18,7 @@ from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
@@ -246,14 +246,13 @@ def generate_launch_description():
     ]
 
     ''' Launch Nodes '''
-    launch_context = LaunchContext()
-    # todo: use OpaqueFunction to correctly get the runtime LaunchConfiguration.
+    # use OpaqueFunction to correctly get the runtime LaunchConfiguration.
     #  E.g ZED ROS2 wrapper |
     #  https://robotics.stackexchange.com/a/103368 |
     #  https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/ |
     #  https://robotics.stackexchange.com/a/104402
-    use_sim_time_string = use_sim_time.perform(launch_context)
-    life_long_mapping_string = life_long_mapping.perform(launch_context)
+    use_sim_time_string = use_sim_time.perform(context)
+    life_long_mapping_string = life_long_mapping.perform(context)
 
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -371,11 +370,27 @@ def generate_launch_description():
     )
 
     # Add launch arguments and nodes to the launch description
-    ld = LaunchDescription(
-            launch_args + [
+    # ld = LaunchDescription(
+    #         launch_args + [
+    #             teleop_launch,
+    #             mapping_2d_node,
+    #             mapping_3d_node
+    #         ]
+    # )
+
+    ld = launch_args + [
                 teleop_launch,
                 mapping_2d_node,
                 mapping_3d_node
             ]
-    )
     return ld
+
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )
+    
