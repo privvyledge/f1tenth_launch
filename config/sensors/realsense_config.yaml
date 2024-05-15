@@ -22,12 +22,12 @@
     enable_gyro: true
     enable_accel: true
     enable_rgbd: false
-    enable_confidence: true
+    enable_confidence: false
     enable_pose: false
 
     rgb_camera:
       color_profile: "640x360x15"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
-      color_format: BGR8
+      color_format: "RGB8"
       enable_auto_exposure: true
 
     depth_module:
@@ -40,29 +40,24 @@
       infra2_format: "Y8"
       emitter_enabled: 1  # set to 0 if using infra
       emitter_on_off: false
-#      infra_format: bgr8
-#      enable_auto_exposure: true
 
     colorizer:
       enable: false
+
     align_depth:
       enable: true
 
     pointcloud:
       ordered_pc: true
       stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
-#      stream_index_filter: 0
+      stream_index_filter: 0
       allow_no_texture_points: true
-
-#    pointcloud_texture_index: 0
-#    pointcloud_texture_stream: RS2_STREAM_ANY
-
 
     gyro_fps: 200 # 200, 400
     accel_fps: 200 # 100, 200
     unite_imu_method: 2  # 0: no unified imu message, 1: copy, 2: linear interpolation
-#    angular_velocity_cov: 0.01
-#    linear_accel_cov: 0.01
+    angular_velocity_cov: 0.01
+    linear_accel_cov: 0.01
 
     publish_tf: true
     tf_publish_rate: 10.0
