@@ -71,30 +71,6 @@ def generate_launch_description():
                             declare_launch_throttle_interpolator_node,
                             max_acceleration_la, max_steering_rate_la])
 
-    # remap ackermann to vesc topic if the throttle interpolator is on
-    # raw_speed_input_topic = 'commands/motor/speed'
-    # raw_servo_input_topic = 'commands/servo/position'
-    # raw_speed_output_topic = 'commands/motor/speed'  # when using actuation interpolation
-    # raw_servo_output_topic = 'commands/servo/position'  # when using actuation interpolation
-    #
-    # launch_context = LaunchContext()
-    # throttle_interpolator_string = launch_throttle_interpolator_node.perform(launch_context)
-    #
-    # if throttle_interpolator_string.lower() == 'true':
-    #     raw_speed_output_topic = 'commands/motor/unsmoothed_speed'
-    #     raw_servo_output_topic = 'commands/servo/unsmoothed_position'
-
-    # ackermann_to_vesc_node = Node(
-    #         condition=IfCondition(launch_ackermann_to_vesc_node),
-    #         package='vesc_ackermann',
-    #         executable='ackermann_to_vesc_node',
-    #         name='ackermann_to_vesc_node',
-    #         namespace='vehicle',
-    #         parameters=[vesc_config],
-    #         remappings=[(raw_speed_input_topic, raw_speed_output_topic),
-    #                     (raw_servo_input_topic, raw_servo_output_topic)]
-    # )
-
     ackermann_to_vesc_node = GroupAction(
             condition=IfCondition(launch_ackermann_to_vesc_node),
             actions=[
