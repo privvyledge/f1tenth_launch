@@ -1,6 +1,7 @@
 """
 Todo:
-    * Setup groupActions for depth and stereo
+    * Setup groupActions for depth and stereo [done]
+    * remove parameters and remapping rules declared in GroupActions from non group action definitions
     * Switch to Components for RTABMap
     * Rename cloud topics from /camera/* to /cloud/*
 

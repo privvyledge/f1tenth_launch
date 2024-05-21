@@ -400,15 +400,11 @@ def launch_setup(context, *args, **kwargs):
                                 '--Stereo/OpticalFlow true '  # default=false
                                 # '--Vis/RoiRatios "0 0 0 .2" '
                                 # "--Kp/RoiRatios '0 0 0 .2' "
-                                # '--Odom/GuessMotion true '
                                 '--Vis/BundleAdjustment 1 '
-                                # '--OdomF2M/BundleAdjustment 1 '
                                 '--Vis/CorNNDR 0.6 '
                                 '--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
-                                # '--Odom/Strategy 1 '
                                 '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
-                                # '--Odom/KeyFrameThr 0.6'
                                 '--Reg/Force3DoF true '
                                 '--RGBD/NeighborLinkRefining true '  # when using laserscan
                                 '--RGBD/ProximityBySpace true '  # when using laserscan

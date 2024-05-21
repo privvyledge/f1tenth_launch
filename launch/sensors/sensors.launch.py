@@ -121,65 +121,6 @@ def generate_launch_description():
             ))
     )
 
-    # #################### Begin LaserScan (or PointCloud) to Odometry
-    rtabmap_icp_odometry = Node(
-            package='rtabmap_odom',
-            executable='icp_odometry',
-            name='rtabmap_icp',
-            output='screen',
-            parameters=[{
-                'frame_id': 'base_link',
-                'odom_frame_id': 'odom',
-                'publish_tf': False,
-                'wait_for_transform': 0.1,
-                'wait_imu_to_init ': True,  # use if imu is passed
-                'queue_size': 1,
-                'use_sim_time': use_sim_time,
-            }],
-            remappings=[('scan', '/lidar/scan_filtered'),
-                        ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation
-                        ('odom', '/odom/rtabmap_icp'),
-                        ('odom_last_frame', '/rtabmap_icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
-                        ]
-    )
-
-    rf2o_odometry_node = Node(
-            package='rf2o_laser_odometry',
-            executable='rf2o_laser_odometry_node',
-            # name='rf2o_laser_odometry',
-            output='screen',
-            parameters=[{
-                'laser_scan_topic': '/lidar/scan_filtered',
-                'odom_topic': '/odom/rf2o',
-                'publish_tf': False,
-                'base_frame_id': 'base_link',
-                'odom_frame_id': 'odom',
-                'init_pose_from_topic': '',
-                'use_sim_time': use_sim_time,
-                'freq': 10.0}],
-    )
-
-    laser_scan_matcher_node = Node(
-            package='ros2_laser_scan_matcher',
-            executable='laser_scan_matcher',
-            name='laser_scan_matcher_node',
-            output='screen',
-            parameters=[{
-                'publish_odom': '/odom/laser_scan_matcher',
-                'publish_tf': False,
-                'laser_frame': 'lidar',
-                'base_frame': 'base_link',
-                'odom_frame': 'odom_laser_scan_matcher',
-                'map_frame': 'map',
-                'init_pose_from_topic': '',
-                'use_sim_time': use_sim_time,
-                'freq': 20.0}],
-            remappings=[('scan', '/lidar/scan'),
-                        ('odom', '/odom/laser_scan_matcher')]
-    )
-
-    # #################### End LaserScan (or PointCloud) to Odometry
-
     # depth_image_node = IncludeLaunchDescription(
     #         PythonLaunchDescriptionSource(depth_launch_path),
     #         condition=IfCondition(PythonExpression(['"" != "', depth_sensor_name, '"'])),
@@ -267,10 +208,6 @@ def generate_launch_description():
 
     # Add nodes to launch description
     ld.add_action(lidar_node)
-
-    # ld.add_action(rtabmap_icp_odometry)
-    # ld.add_action(rf2o_odometry_node)
-    # # ld.add_action(laser_scan_matcher_node)
 
     ld.add_action(realsense_node)
     # ld.add_action(realsense_imu_node)
