@@ -205,6 +205,7 @@ def generate_launch_description():
                 }.items()
         )
 
+    # global localization using a pre-existing map
     rtabmap_localizer_node = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [f1tenth_launch_pkg_prefix, 'launch/mapping', '3d_mapping.launch.py']
@@ -241,15 +242,30 @@ def generate_launch_description():
                                     '--Vis/PnPFlags 0 '
                                     '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                     '--Reg/Force3DoF true '
+                                    '--RGBD/NeighborLinkRefining true '  # when using laserscan
+                                    '--RGBD/ProximityBySpace true '  # when using laserscan
+                                    '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp.
+                                    '--Icp/VoxelSize 0.05 '  
+                                    '--Icp/MaxCorrespondenceDistance 0.1 '  
+                                    '--Grid/FromDepth False '  
                                     # set DetectionRate to 0 to use image rate. Default=1
                                     '--Rtabmap/DetectionRate 30 '
                                     # '--RGBD/CreateOccupancyGrid false '
                                     # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                     '--Grid/Sensor 0 '
+                                    '--Grid/RangeMax 15.0 '  # 0=inf
                                     '--Optimizer/Slam2D true '
                                     '--Optimizer/GravitySigma 0',
                 }.items()
         )
+
+    # RGB-D odometry
+
+    # Stereo odometry
+
+    # PointCloud Odometry (kiss-icp). todo: also make the pointcloud topic dynamic
+
+    # LaserScan odometry
 
     # Create Launch Description and add nodes to the launch description
     ld = LaunchDescription([

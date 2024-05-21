@@ -7,7 +7,7 @@
 #    initial_reset: false
 ##    base_frame_id: camera_link
 
-    accelerate_gpu_with_glsl: false  # setting to true causes high cpu utilization
+    accelerate_gpu_with_glsl: false  # Only available if compiled with the flag set to ON. Note: setting to true causes high cpu utilization.
     log_level: info # DEBUG|INFO|WARN|ERROR|FATAL
     wait_for_device_timeout: -1.0 # Timeout for waiting for device to connect (Seconds)
     reconnect_timeout: 6.0  # Timeout(seconds) between consecutive reconnection attempts
@@ -41,6 +41,8 @@
       emitter_enabled: 1  # set to 0 if using infra
       emitter_on_off: false
 
+#    auto_exposure_priority: false
+
     colorizer:
       enable: false
 
@@ -66,7 +68,8 @@
 #    decimation_filter:
 #      enable: true
 #      filter_magnitude: 2
-#        spatial_filter.enable: true
+#    spatial_filter:
+#      enable: true
 #    temporal_filter:
 #      enable: true
 #    disparity_filter:

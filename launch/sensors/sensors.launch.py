@@ -54,6 +54,7 @@ def generate_launch_description():
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
+    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -83,10 +84,17 @@ def generate_launch_description():
                                                            default_value='False',
                                                            description='Whether to use RTABmaps obstacle detector.')
 
+    publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
+                                                            default_value='True',
+                                                            description='Whether to publish PointClouds using '
+                                                                        'librealsense SDK. Could be disabled when '
+                                                                        'recording ROSBags or mapping. ')
+
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
-                            stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la])
+                            stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
+                            publish_realsense_pointcloud_la])
 
     # Nodes
     lidar_node = IncludeLaunchDescription(

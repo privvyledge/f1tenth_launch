@@ -146,6 +146,12 @@ def generate_launch_description():
                                                             '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                                             # '--Odom/KeyFrameThr 0.6'
                                                             '--Reg/Force3DoF true '
+                                                            '--RGBD/NeighborLinkRefining true '  #
+                                                            '--RGBD/ProximityBySpace true '  # 
+                                                            '--Reg/Strategy 1 '  # 0=Vis, 1=Icp, 2=VisIcp.
+                                                            '--Icp/VoxelSize 0.05 '  
+                                                            '--Icp/MaxCorrespondenceDistance 0.1 '  
+                                                            '--Grid/FromDepth False '  
                                                             # set DetectionRate to 0 to use image rate. Default=1
                                                             '--Rtabmap/DetectionRate 30 '
                                                             # '--RGBD/CreateOccupancyGrid true '
