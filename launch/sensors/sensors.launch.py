@@ -55,6 +55,8 @@ def generate_launch_description():
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud')
+    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -90,11 +92,27 @@ def generate_launch_description():
                                                                         'librealsense SDK. Could be disabled when '
                                                                         'recording ROSBags or mapping. ')
 
+    realsense_emitter_enabled_la = DeclareLaunchArgument(
+            'realsense_emitter_enabled',
+            default_value='True',
+            description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
+                        'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
+                        'VSLAM, VIO odometry, etc. '
+                        'Disable when mapping or running VIO enable if accurate pointclouds are essential.')
+
+    realsense_emitter_on_off_la = DeclareLaunchArgument(
+            'realsense_emitter_on_off',
+            default_value='False',
+            description='Whether to alternate enabling/disabling the emitters. '
+                        'This can be used to simultaneously '
+                        'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
+                        'have usable IR images (when in the off state)')
+
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
-                            publish_realsense_pointcloud_la])
+                            publish_realsense_pointcloud_la, realsense_emitter_enabled_la, realsense_emitter_on_off_la])
 
     # Nodes
     lidar_node = IncludeLaunchDescription(
@@ -171,7 +189,12 @@ def generate_launch_description():
     realsense_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [f1tenth_launch_dir, 'launch/sensors', 'realsense_d435i.launch.py']
-            ))
+            )),
+            launch_arguments={
+                'enable_pointcloud': publish_realsense_pointcloud,
+                'emitter_enabled': realsense_emitter_enabled,
+                'emitter_on_off': realsense_emitter_on_off,
+            }.items()
     )
 
     depth_to_laserscan_node = Node(

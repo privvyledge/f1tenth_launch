@@ -74,6 +74,14 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='True')
 
+    approx_sync = LaunchConfiguration('approx_sync', default='True')
+    stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
+    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
+    detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
+    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
+    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='True')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
+
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
@@ -212,6 +220,45 @@ def launch_setup(context, *args, **kwargs):
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
 
+    approx_sync_la = DeclareLaunchArgument(
+            'approx_sync', default_value='True',
+            description='Synchronize topics')
+
+    stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
+                                                    default_value='False',
+                                                    description='Whether to publish a PointCloud2 message from stereo '
+                                                                'images.')
+
+    depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
+                                                        default_value='False',
+                                                        description='Whether to publish a PointCloud2 message from a '
+                                                                    'depth image.')
+    detect_ground_and_obstacles_la = DeclareLaunchArgument('detect_ground_and_obstacles',
+                                                           default_value='False',
+                                                           description='Whether to use RTABmaps obstacle detector.')
+
+    publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
+                                                            default_value='True',
+                                                            description='Whether to publish PointClouds using '
+                                                                        'librealsense SDK. Could be disabled when '
+                                                                        'recording ROSBags or mapping. ')
+
+    realsense_emitter_enabled_la = DeclareLaunchArgument(
+            'realsense_emitter_enabled',
+            default_value='True',
+            description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
+                        'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
+                        'VSLAM, VIO odometry, etc. '
+                        'Disable when mapping or running VIO enable if accurate pointclouds are essential.')
+
+    realsense_emitter_on_off_la = DeclareLaunchArgument(
+            'realsense_emitter_on_off',
+            default_value='False',
+            description='Whether to alternate enabling/disabling the emitters. '
+                        'This can be used to simultaneously '
+                        'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
+                        'have usable IR images (when in the off state)')
+
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
@@ -242,7 +289,10 @@ def launch_setup(context, *args, **kwargs):
         deadman_buttons_la, max_speed_la, max_steering_la,
         max_acceleration_la, max_steering_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
-        declare_launch_throttle_interpolator_node
+        declare_launch_throttle_interpolator_node,
+        approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
+        detect_ground_and_obstacles_la, publish_realsense_pointcloud_la,
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la
     ]
 
     ''' Launch Nodes '''
@@ -276,6 +326,13 @@ def launch_setup(context, *args, **kwargs):
                 "launch_throttle_interpolator_node": launch_throttle_interpolator_node,
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
+                "approx_sync": approx_sync,
+                "stereo_to_pointcloud": stereo_to_pointcloud,
+                "depthimage_to_pointcloud": depthimage_to_pointcloud,
+                "detect_ground_and_obstacles": detect_ground_and_obstacles,
+                "publish_realsense_pointcloud": publish_realsense_pointcloud,
+                "realsense_emitter_enabled": realsense_emitter_enabled,
+                "realsense_emitter_on_off": realsense_emitter_on_off
             }.items()
     )
 

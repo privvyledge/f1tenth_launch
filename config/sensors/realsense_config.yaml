@@ -18,7 +18,7 @@
     enable_infra: true
     enable_infra1: true
     enable_infra2: true
-    pointcloud.enable: true
+    pointcloud.enable: true  # overridden by launch files
     enable_gyro: true
     enable_accel: true
     enable_rgbd: false
@@ -38,8 +38,8 @@
       infra_format: "RGB8"
       infra1_format: "Y8"
       infra2_format: "Y8"
-      emitter_enabled: 1  # set to 0 if using infra
-      emitter_on_off: false
+      emitter_enabled: 1  # set to 0 if using infra.  Overridden by launch files
+      emitter_on_off: false  # Overridden by launch files
 
 #    auto_exposure_priority: false
 
@@ -65,17 +65,17 @@
     tf_publish_rate: 10.0
 
     # Enable post-processing filters
-#    decimation_filter:
-#      enable: true
-#      filter_magnitude: 2
-#    spatial_filter:
-#      enable: true
-#    temporal_filter:
-#      enable: true
-#    disparity_filter:
-#      enable: true
-#    hole_filling_filter:
-#      enable: true
+    decimation_filter:
+      enable: false
+      filter_magnitude: 2
+    spatial_filter:
+      enable: false
+    temporal_filter:
+      enable: false
+    disparity_filter:
+      enable: false
+    hole_filling_filter:
+      enable: false
 
     # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
 #    color_qos: "SENSOR_DATA"

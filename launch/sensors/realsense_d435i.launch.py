@@ -33,6 +33,9 @@ def generate_launch_description():
     unite_imu_method = LaunchConfiguration('unite_imu_method')
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
     log_level = LaunchConfiguration('log_level')
+    enable_pointcloud = LaunchConfiguration('enable_pointcloud')
+    emitter_enabled = LaunchConfiguration('emitter_enabled')
+    emitter_on_off = LaunchConfiguration('emitter_on_off')
 
     # Create a dictionary for substitutable parameters
     param_substitutions = {
@@ -84,6 +87,28 @@ def generate_launch_description():
             default_value=realsense_config,
             description='Full path to the realsense config file to use.')
 
+    enable_pointcloud_la = DeclareLaunchArgument(
+            'enable_pointcloud',
+            default_value='True',
+            description='Whether to publish PointClouds using librealsense SDK. '
+                        'Could be disabled when recording ROSBags or mapping. ')
+
+    emitter_enabled_la = DeclareLaunchArgument(
+            'emitter_enabled',
+            default_value='True',
+            description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
+                        'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
+                        'VSLAM, VIO odometry, etc. '
+                        'Disable when mapping or running VIO enable if accurate pointclouds are essential.')
+
+    emitter_on_off_la = DeclareLaunchArgument(
+            'emitter_on_off',
+            default_value='False',
+            description='Whether to alternate enabling/disabling the emitters. '
+                        'This can be used to simultaneously '
+                        'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
+                        'have usable IR images (when in the off state)')
+
     realsense_imu_la = DeclareLaunchArgument('realsense_imu_config',
                                              default_value=realsense_imu_config,
                                              description='Path to the Realsense IMU parameters file to use.')
@@ -99,8 +124,8 @@ def generate_launch_description():
     # Create Launch Description
     ld = LaunchDescription([declare_namespace_cmd, declare_use_namespace_cmd,
                             declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
-                            realsense_params_file_cmd, realsense_imu_la,
-                            imu_only_cmd, launch_imu_filter_cmd])
+                            realsense_params_file_cmd, enable_pointcloud_la, emitter_enabled_la, emitter_on_off_la,
+                            realsense_imu_la, imu_only_cmd, launch_imu_filter_cmd])
 
     # Setup nodes
     # realsense_node = IncludeLaunchDescription(
@@ -123,7 +148,11 @@ def generate_launch_description():
             executable='realsense2_camera_node',
             parameters=[
                 configured_params,
-                # {"pointcloud.enable": True},
+                {
+                    "pointcloud.enable": enable_pointcloud,
+                    "depth_module.emitter_enabled": emitter_enabled,
+                    "depth_module.emitter_on_off": emitter_on_off,
+                 },
             ],
             arguments=['--ros-args', '--log-level', log_level],
             output='screen',
