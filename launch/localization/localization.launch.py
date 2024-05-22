@@ -298,12 +298,23 @@ def generate_launch_description():
             }.items()
     )
 
+    # common rtabmap parameters (to avoid having to create multiple LaunchConfigurations to cast as strings)
+    parameters = {
+        'Odom/Strategy': '0',   # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
+        'Odom/Holonomic': 'False',
+        'Odom/FilteringStrategy': '0',  # odom output filtering. 0=None, 1=KF, 2=PF
+        'Odom/GuessMotion': 'True',
+        'Odom/KeyFrameThr': '0.6',  # default = 0.3
+        'OdomF2M/BundleAdjustment': '1'  # 0=disabled, 1=g2o
+    }
+
     # RGB-D odometry
     rtabmap_rgbd_odometry = Node(
             package='rtabmap_odom',
             executable='rgbd_odometry',
             condition=IfCondition(launch_rgbd_odometry),
             name='rtabmap_rgbd_odom',
+            parameters=[parameters],
             output='screen',
             remappings=[
                 ('rgb/image', '/camera/camera/color/image_raw'),
@@ -321,6 +332,7 @@ def generate_launch_description():
             executable='stereo_odometry',
             condition=IfCondition(launch_stereo_odometry),
             name='rtabmap_stereo_odom',
+            parameters=[parameters],
             output='screen',
             remappings=[
                 ('left/image_rect', '/camera/infra1/image_rect_raw'),
@@ -367,7 +379,7 @@ def generate_launch_description():
                 "position_covariance": 0.1,
                 "orientation_covariance": 0.1,
                 # ROS CLI arguments
-                "publish_debug_clouds": "False",  # todo: use this to debug accuracy
+                "publish_debug_clouds": False,  # todo: use this to debug accuracy
                 "use_sim_time": use_sim_time,
             },
         ],
@@ -379,6 +391,7 @@ def generate_launch_description():
             executable='icp_odometry',
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
+            parameters=[parameters],
             output='screen',
             # parameters=[
             #     {
@@ -449,12 +462,6 @@ def generate_launch_description():
                 SetParameter(name='wait_for_transform', value='0.1'),
                 SetParameter(name='wait_imu_to_init', value='True'),
                 SetParameter(name='publish_null_when_lost', value='True'),
-                SetParameter(name='Odom/Strategy', value='0'),  # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
-                SetParameter(name='Odom/Holonomic', value='True'),
-                SetParameter(name='Odom/FilteringStrategy', value='0'),  # odom output filtering. 0=None, 1=KF, 2=PF
-                SetParameter(name='Odom/GuessMotion', value='True'),
-                SetParameter(name='Odom/KeyFrameThr', value='0.6'),  # default = 0.3
-                SetParameter(name='OdomF2M/BundleAdjustment', value='1'),  # 0=disabled, 1=g2o
 
                 # Set remapping rules
                 SetRemap(src='scan', dst='/lidar/scan_filtered'),
