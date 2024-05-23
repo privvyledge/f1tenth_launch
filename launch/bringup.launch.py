@@ -86,7 +86,7 @@ def generate_launch_description():
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
-    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='True')
+    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
 
     # Setup Remappings/renamings
@@ -291,7 +291,7 @@ def generate_launch_description():
 
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
-            default_value='True',
+            default_value=realsense_emitter_enabled,
             description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
                         'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
                         'VSLAM, VIO odometry, etc. '

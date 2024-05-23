@@ -79,7 +79,7 @@ def launch_setup(context, *args, **kwargs):
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
-    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='True')
+    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
 
     # Declare launch arguments
@@ -245,7 +245,7 @@ def launch_setup(context, *args, **kwargs):
 
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
-            default_value='True',
+            default_value=realsense_emitter_enabled,
             description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
                         'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
                         'VSLAM, VIO odometry, etc. '
@@ -398,8 +398,8 @@ def launch_setup(context, *args, **kwargs):
                                 '--Stereo/MinDisparity 0 '
                                 '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
                                 '--Stereo/OpticalFlow true '  # default=false
-                                # '--Vis/RoiRatios "0 0 0 .2" '
-                                # "--Kp/RoiRatios '0 0 0 .2' "
+                                # '--Vis/RoiRatios 0,0,0,.2 '
+                                # "--Kp/RoiRatios 0,0,0,.2 "
                                 '--Vis/BundleAdjustment 1 '
                                 '--Vis/CorNNDR 0.6 '
                                 '--Vis/CorGuessWinSize 20 '

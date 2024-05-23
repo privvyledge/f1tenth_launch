@@ -134,8 +134,8 @@ def generate_launch_description():
                                                             '--Stereo/MinDisparity 0 '
                                                             '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
                                                             '--Stereo/OpticalFlow true '  # default=false
-                                                            # '--Vis/RoiRatios "0 0 0 .2" '
-                                                            # "--Kp/RoiRatios '0 0 0 .2' "
+                                                            # '--Vis/RoiRatios 0,0,0,.2 '
+                                                            # "--Kp/RoiRatios 0,0,0,.2 "
                                                             '--Vis/BundleAdjustment 1 '
                                                             '--Vis/CorNNDR 0.6 '
                                                             '--Vis/CorGuessWinSize 20 '
