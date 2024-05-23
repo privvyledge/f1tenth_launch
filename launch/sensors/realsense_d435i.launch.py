@@ -95,7 +95,7 @@ def generate_launch_description():
 
     emitter_enabled_la = DeclareLaunchArgument(
             'emitter_enabled',
-            default_value='True',
+            default_value='1',
             description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
                         'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
                         'VSLAM, VIO odometry, etc. '
