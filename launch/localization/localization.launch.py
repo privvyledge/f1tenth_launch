@@ -56,9 +56,9 @@ def generate_launch_description():
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
     log_level = LaunchConfiguration('log_level')
 
-    launch_pointcloud_odometry = LaunchConfiguration('launch_pointcloud_odometry', default='True')
-    launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='True')
-    launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='False')
+    launch_pointcloud_odometry = LaunchConfiguration('launch_pointcloud_odometry', default='False')
+    launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='False')
+    launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='True')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
 
@@ -75,7 +75,7 @@ def generate_launch_description():
             description='Top-level namespace')
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
-            default_value='false',
+            default_value='False',
             description='Use simulation (Gazebo) clock if true')
     localization_param = DeclareLaunchArgument(
             'params_file',
@@ -89,7 +89,7 @@ def generate_launch_description():
     )
     launch_slam_toolbox_localizer_la = DeclareLaunchArgument(
             'launch_slam_toolbox_localizer',
-            default_value='True',
+            default_value='False',
             description='Whether to launch slam toolbox\'s localizer'
     )
     launch_sensor_fusion_la = DeclareLaunchArgument(
@@ -109,12 +109,12 @@ def generate_launch_description():
     )
     odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency',
-            default_value='100.0',
+            default_value='30.0',  # 100.0
             description='Local/odom EKF/UKF node update/publish frequency.'
     )
     map_frequency_la = DeclareLaunchArgument(
             'map_frequency',
-            default_value='30.0',
+            default_value='10.0',  # 30.0
             description='Global/map EKF/UKF node update/publish frequency.'
     )
     launch_rtabmap_localizer_la = DeclareLaunchArgument(
@@ -300,7 +300,7 @@ def generate_launch_description():
                 # '--RGBD/CreateOccupancyGrid false '
                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
-                                '--Grid/RangeMax 15.0 '  # 0=inf
+                                '--Grid/RangeMax 12.0 '  # 0=inf
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0',
             }.items()
@@ -313,7 +313,15 @@ def generate_launch_description():
         'Odom/FilteringStrategy': '0',  # odom output filtering. 0=None, 1=KF, 2=PF
         'Odom/GuessMotion': 'True',
         'Odom/KeyFrameThr': '0.3',  # default = 0.3. 0.6
-        'OdomF2M/BundleAdjustment': '1'  # 0=disabled, 1=g2o
+        'Odom/ScanKeyFrameThr': '0.3',
+        'Odom/ResetCountdown': '1',  # reset X frames after losing odometry
+        'Rtabmap/StartNewMapOnLoopClosure': 'True',
+        'OdomF2M/BundleAdjustment': '1',  # 0=disabled, 1=g2o
+        'Optimizer/GravitySigma': '0',
+        'Icp/VoxelSize': '0.05',
+        # 'Icp/RangeMax': '12.0',
+        # 'Icp/Force4DoF': 'True'
+        # 'Reg/Force3DoF': 'True',  # leads to instability for now
     }
 
     # RGB-D odometry
@@ -345,10 +353,10 @@ def generate_launch_description():
             parameters=[parameters],
             output='screen',
             remappings=[
-                ('left/image_rect', '/camera/infra1/image_rect_raw'),
-                ('left/camera_info', '/camera/infra1/camera_info'),
-                ('right/image_rect', '/camera/infra2/image_rect_raw'),
-                ('right/camera_info', '/camera/infra2/camera_info'),
+                ('left/image_rect', '/camera/camera/infra1/image_rect_raw'),
+                ('left/camera_info', '/camera/camera/infra1/camera_info'),
+                ('right/image_rect', '/camera/camera/infra2/image_rect_raw'),
+                ('right/camera_info', '/camera/camera/infra2/camera_info'),
                 # ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation
                 ('odom', '/odom/rtabmap/stereo'),
                 ('odom_last_frame', '/rtabmap/stereo/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
@@ -363,7 +371,7 @@ def generate_launch_description():
         name="kiss_icp_node",
         output="screen",
         remappings=[
-            ("pointcloud_topic", "/camera/camera/depth/color/points"),
+            ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth
         ],
         parameters=[
             {
@@ -402,19 +410,17 @@ def generate_launch_description():
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
             namespace='rtabmap_icp_odom',
-            parameters=[parameters],
+            parameters=[
+                parameters,
+                {
+                    'qos': 1,
+                    'expected_update_rate': 10.0,
+                    'wait_for_transform': 0.3,
+                    'wait_imu_to_init ': False,
+                    'use_sim_time': use_sim_time,
+                }
+            ],
             output='screen',
-            # parameters=[
-            #     {
-            #         'frame_id': 'base_link',
-            #         'odom_frame_id': 'odom',
-            #         'publish_tf': False,
-            #         'wait_for_transform': 0.1,
-            #         'wait_imu_to_init ': True,  # use if imu is passed
-            #         'queue_size': 1,
-            #         'use_sim_time': use_sim_time,
-            #     }
-            # ],
             remappings=[
                 ('scan', '/lidar/scan_filtered'),
                 # ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation
@@ -466,13 +472,17 @@ def generate_launch_description():
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='queue_size', value='10'),
-                SetParameter(name='approx_sync', value='True'),
-                SetParameter(name='frame_id', value='base_link'),
-                SetParameter(name='odom_frame_id', value='odom'),
-                SetParameter(name='publish_tf', value='False'),
-                SetParameter(name='wait_for_transform', value='0.1'),
-                SetParameter(name='wait_imu_to_init', value='True'),
+                SetParameter(name='approx_sync', value='False'),
+                SetParameter(name='frame_id', value=base_frame),
+                SetParameter(name='odom_frame_id', value=odom_frame),
+                SetParameter(name='guess_frame_id', value=odom_frame),
+                SetParameter(name='guess_min_translation', value='0.05'),  # m
+                SetParameter(name='guess_min_rotation', value='0.005'),  # rad
+                SetParameter(name='publish_tf', value=publish_odom_tf),
+                SetParameter(name='wait_for_transform', value='0.3'),
+                SetParameter(name='wait_imu_to_init', value='False'),
                 SetParameter(name='publish_null_when_lost', value='True'),
+                # SetParameter(name='rtabmap_config_path', value=rtabmap_database_file_path),
 
                 # Set remapping rules
                 SetRemap(src='scan', dst='/lidar/scan_filtered'),
@@ -482,7 +492,7 @@ def generate_launch_description():
                 # add nodes
                 rtabmap_rgbd_odometry,
                 rtabmap_stereo_odometry,
-                rtabmap_icp_odometry
+                rtabmap_icp_odometry,  # set 'wait_imu_to_init' to False
             ]
     )
 

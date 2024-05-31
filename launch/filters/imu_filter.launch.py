@@ -38,8 +38,8 @@ def generate_launch_description():
     imu_corrector_frame = LaunchConfiguration('imu_corrector_frame')
     imu_corrector_frame_la = DeclareLaunchArgument(
             'imu_corrector_frame',
-            default_value='base_link',
-            description='Frame ID for the IMU message of the IMU corrector/bias remover.')
+            default_value='camera_imu_optical_frame',
+            description='Frame ID for the IMU message of the IMU corrector/bias remover. E.g base_link, sensor_kit_link')
 
     # Whether to publish a TF transform that represents the orientation of the IMU,
     # using the frame specified in fixed_frame as the parent frame and the frame
@@ -72,7 +72,7 @@ def generate_launch_description():
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
-            default_value='false',
+            default_value='False',
             description='Use simulation (Gazebo) clock if true')
 
     declare_imu_corrector_params_file_cmd = DeclareLaunchArgument(
@@ -109,7 +109,7 @@ def generate_launch_description():
             description='Name for the IMU bias corrector/removal node.')
     use_madgwick_filter_la = DeclareLaunchArgument(
             'use_madgwick_filter',
-            default_value='False',
+            default_value='True',
             description='Whether or not to use the Madgwick Filter. Uses the complementary filter if False.')
     remove_imu_bias_la = DeclareLaunchArgument(
             'remove_imu_bias',

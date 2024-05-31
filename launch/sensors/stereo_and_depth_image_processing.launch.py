@@ -1,9 +1,10 @@
 """
 Todo:
     * Setup groupActions for depth and stereo [done]
+    * Setup nested GroupActions to differentiate stereo and depth e.g for RTABMap
     * remove parameters and remapping rules declared in GroupActions from non group action definitions
-    * Switch to Components for RTABMap
     * Rename cloud topics from /camera/* to /cloud/*
+    * Switch to Components for RTABMap
 
 Takes in Stereo images, outputs a depth/disparity image, decimate the depth image and output a pointcloud.
 Could also take in a disparity or depth image.
@@ -265,7 +266,8 @@ def generate_launch_description():
             output='screen',
     )
 
-    # ######### RTabMap depth to pointcloud to depth
+    # ######### RTabMap depth to pointcloud to depth.
+    # Todo: since these work with either stereo or depth. Refactore with a nested GroupAction below
     rtabmap_depth_to_pointcloud_xyz = GroupAction(
             condition=UnlessCondition(color_pointcloud),
             actions=[
@@ -276,7 +278,7 @@ def generate_launch_description():
                         parameters=[
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
-                            {'min_depth ': 0.1},  # (m) 0.0 to disable filtering
+                            {'min_depth ': 0.105},  # (m) 0.0 to disable filtering. 0.105 or 0.28
                             {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
@@ -296,7 +298,8 @@ def generate_launch_description():
             ]
     )
 
-    # use either RGB and depth or stereo
+    # use either RGB and depth or stereo.
+    # Todo: since these work with either stereo or depth. Refactore with a nested GroupAction below
     rtabmap_depth_to_pointcloud_xyz_rgb = GroupAction(
             condition=IfCondition(color_pointcloud),
             actions=[
@@ -307,7 +310,7 @@ def generate_launch_description():
                         parameters=[
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
-                            {'min_depth ': 0.01},  # (m) 0.0 to disable filtering
+                            {'min_depth ': 0.105},  # (m) 0.0 to disable filtering. 0.105 or 0.28
                             {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
@@ -474,7 +477,8 @@ def generate_launch_description():
                 # cloud is common to xyzrgb and obstacles and registration nodes
                 SetRemap(src='cloud', dst='/camera/downsampled_cloud_from_depth'),
 
-                # rtabmap_depth_to_pointcloud_xyzrgb. Uncomment left/right to use stereo (and comment out rgb/depth)
+                # rtabmap_depth_to_pointcloud_xyzrgb. Uncomment left/right to use stereo (and comment out rgb/depth).
+                # todo: refactor with a nested GroupAction
                 SetRemap(src='rgb/image', dst=rgb_image_topic),
                 SetRemap(src='rgb/camera_info', dst='/camera/camera/color/camera_info'),
                 # SetRemap(src='left/image', dst=left_image_topic),
