@@ -63,6 +63,7 @@
 
     publish_tf: true
     tf_publish_rate: 10.0
+    clip_distance: 10.0  # meters
 
     # Enable post-processing filters
     decimation_filter:

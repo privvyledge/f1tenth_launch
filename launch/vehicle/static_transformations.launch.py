@@ -15,8 +15,9 @@ Base_link here refers to the rear_axle
 """
 import os
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch.substitutions import Command
+from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
 from launch_ros.descriptions import ParameterFile, ParameterValue
 from ament_index_python.packages import get_package_share_directory
 
@@ -24,6 +25,14 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     urdf_path = os.path.join(get_package_share_directory('f1tenth_launch'), 'urdf/f1tenth.urdf.xacro')
+
+    # Launch configurations
+    use_sim_time = LaunchConfiguration('use_sim_time')
+
+    # Launch Arguments
+    use_sim_time_la = DeclareLaunchArgument(
+            'use_sim_time', default_value='False',
+            description='Use simulation (Gazebo) clock if true')
 
     base_link_to_sensor_kit_tf_node = Node(
             package='tf2_ros',
@@ -67,13 +76,21 @@ def generate_launch_description():
             arguments=['0.0', '0.0', '-0.033', '0.0', '0.0', '0.0', 'base_link', 'base_footprint']
     )  # rear axle to ground
 
+    static_tf_group = GroupAction(
+            actions=[
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                base_link_to_sensor_kit_tf_node,
+                lidar_static_tf_node,
+                # camera_static_tf_node,
+                robot_state_publisher_node,
+                vesc_imu_static_tf_node,
+                base_footprint_tf_node,
+            ]
+    )
+
     ld = LaunchDescription([
-        base_link_to_sensor_kit_tf_node,
-        lidar_static_tf_node,
-        # camera_static_tf_node,
-        robot_state_publisher_node,
-        vesc_imu_static_tf_node,
-        base_footprint_tf_node,
+        use_sim_time_la,
+        static_tf_group
     ])
 
     return ld

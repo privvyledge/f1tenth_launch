@@ -276,7 +276,7 @@ def generate_launch_description():
                         parameters=[
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
-                            {'min_depth ': 0.01},  # (m) 0.0 to disable filtering
+                            {'min_depth ': 0.1},  # (m) 0.0 to disable filtering
                             {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.

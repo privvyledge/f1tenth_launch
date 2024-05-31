@@ -60,6 +60,7 @@ def generate_launch_description():
     launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='True')
     launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='False')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
+    launch_amcl = LaunchConfiguration('launch_amcl', default='True')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
@@ -154,6 +155,10 @@ def generate_launch_description():
             'launch_laserscan_odometry', default_value=launch_laserscan_odometry,
             description='Whether to launch laserscan odometry.')
 
+    launch_amcl_la = DeclareLaunchArgument(
+            'launch_amcl', default_value=launch_amcl,
+            description='Whether to launch AMCL global localizer.')
+
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
             description='Robot frame, e.g base_link, sensor_kit_link.')
@@ -189,6 +194,7 @@ def generate_launch_description():
                 Node(
                         package='nav2_map_server',
                         executable='map_server',
+                        condition=IfCondition(launch_amcl),
                         name='map_server',
                         output='screen',
                         respawn=use_respawn,
@@ -199,6 +205,7 @@ def generate_launch_description():
                 Node(
                         package='nav2_amcl',
                         executable='amcl',
+                        condition=IfCondition(launch_amcl),
                         name='amcl',
                         output={'both': 'log'},
                         respawn=use_respawn,
@@ -209,6 +216,7 @@ def generate_launch_description():
                 Node(
                         package='nav2_lifecycle_manager',
                         executable='lifecycle_manager',
+                        condition=IfCondition(launch_amcl),
                         name='lifecycle_manager_localization',
                         output='screen',
                         arguments=['--ros-args', '--log-level', log_level],
@@ -304,7 +312,7 @@ def generate_launch_description():
         'Odom/Holonomic': 'False',
         'Odom/FilteringStrategy': '0',  # odom output filtering. 0=None, 1=KF, 2=PF
         'Odom/GuessMotion': 'True',
-        'Odom/KeyFrameThr': '0.6',  # default = 0.3
+        'Odom/KeyFrameThr': '0.3',  # default = 0.3. 0.6
         'OdomF2M/BundleAdjustment': '1'  # 0=disabled, 1=g2o
     }
 
@@ -314,6 +322,7 @@ def generate_launch_description():
             executable='rgbd_odometry',
             condition=IfCondition(launch_rgbd_odometry),
             name='rtabmap_rgbd_odom',
+            namespace='rtabmap_rgbd_odom',
             parameters=[parameters],
             output='screen',
             remappings=[
@@ -332,6 +341,7 @@ def generate_launch_description():
             executable='stereo_odometry',
             condition=IfCondition(launch_stereo_odometry),
             name='rtabmap_stereo_odom',
+            namespace='rtabmap_stereo_odom',
             parameters=[parameters],
             output='screen',
             remappings=[
@@ -362,8 +372,8 @@ def generate_launch_description():
                 "odom_frame": odom_frame,
                 "publish_odom_tf": publish_odom_tf,
                 # KISS-ICP configuration
-                "max_range": 7.0,  # todo: tune
-                "min_range": 0.3,  # todo: tune
+                "max_range": 10.0,  # todo: tune using realsense viewer
+                "min_range": 0.105,  # 0.105 or 0.28, todo: tune
                 "deskew": False,
                 "max_points_per_voxel": 20,
                 "voxel_size": 0.5,  # (optional)
@@ -391,6 +401,7 @@ def generate_launch_description():
             executable='icp_odometry',
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
+            namespace='rtabmap_icp_odom',
             parameters=[parameters],
             output='screen',
             # parameters=[
@@ -484,6 +495,7 @@ def generate_launch_description():
         launch_rgbd_odometry_la,
         launch_stereo_odometry_la,
         launch_laserscan_odometry_la,
+        launch_amcl_la,
         localization_param,
         map_file_la,
         launch_slam_toolbox_localizer_la,
