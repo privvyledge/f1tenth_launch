@@ -122,7 +122,7 @@ def generate_launch_description():
             'color_pointcloud', default_value='True',
             description='Whether to register depth to a different frame')
     detect_ground_and_obstacles_la = DeclareLaunchArgument(
-            'detect_ground_and_obstacles', default_value='True',
+            'detect_ground_and_obstacles', default_value='False',
             description='Whether to detect and isolate the floor plane and obstacles from raw pointclouds.')
     register_depth_la = DeclareLaunchArgument(
             'register_depth', default_value='False',
@@ -279,7 +279,7 @@ def generate_launch_description():
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
                             {'min_depth ': 0.105},  # (m) 0.0 to disable filtering. 0.105 or 0.28
-                            {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
+                            {'max_depth ': 10.0},  # (m) 0.0 to disable filtering. 2.0, 4.0, 6.0 or 10.0
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
                             {'noise_filter_min_neighbors ': 5},
@@ -311,7 +311,7 @@ def generate_launch_description():
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
                             {'min_depth ': 0.105},  # (m) 0.0 to disable filtering. 0.105 or 0.28
-                            {'max_depth ': 10.0},  # (m) 0.0 to disable filtering
+                            {'max_depth ': 10.0},  # (m) 0.0 to disable filtering. 2.0, 4.0, 6.0 or 10.0
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
                             {'noise_filter_min_neighbors ': 5},

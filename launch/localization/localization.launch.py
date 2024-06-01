@@ -416,8 +416,18 @@ def generate_launch_description():
                     'qos': 1,
                     'expected_update_rate': 10.0,
                     'wait_for_transform': 0.3,
-                    'wait_imu_to_init ': False,
+                    'wait_imu_to_init': False,
                     'use_sim_time': use_sim_time,
+                    'queue_size': 10,
+                    'approx_sync': False,
+                    'frame_id': base_frame,
+                    'odom_frame_id': odom_frame,
+                    'guess_frame_id': odom_frame,
+                    'guess_min_translation': 0.05,  # m
+                    'guess_min_rotation': 0.005,  # rad
+                    'publish_tf': publish_odom_tf,
+                    'publish_null_when_lost': True,
+                    'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
             output='screen',
@@ -492,7 +502,7 @@ def generate_launch_description():
                 # add nodes
                 rtabmap_rgbd_odometry,
                 rtabmap_stereo_odometry,
-                rtabmap_icp_odometry,  # set 'wait_imu_to_init' to False
+                # rtabmap_icp_odometry,  # set 'wait_imu_to_init' to False
             ]
     )
 
@@ -528,6 +538,7 @@ def generate_launch_description():
         odom_frame_la,
         publish_odom_tf_la,
         rtabmap_group,
+        rtabmap_icp_odometry,
         kiss_icp_node,
         # rtabmap_icp_odometry,
         # rf2o_odometry_node,
