@@ -111,7 +111,7 @@
     # data is converted to velocity data by differentiating the absolute pose measurements. These velocities are then
     # integrated as usual. NOTE: this only applies to sensors that provide pose measurements; setting differential to true
     # for twist measurements has no effect.
-    odom0_differential: true
+    odom0_differential: false
 
     # [ADVANCED] When the node starts, if this parameter is true, then the first measurement is treated as a "zero point"
     # for all future measurements. While you can achieve the same effect with the differential paremeter, the key
@@ -128,26 +128,26 @@
     #odom0_pose_rejection_threshold: 1.0
     #odom0_twist_rejection_threshold: 0.5
 
-    odom1: /odom/rtabmap/icp
+    odom1: /odom/rtabmap/stereo  # /odom/rtabmap/stereo, /odom/rtabmap/rgbd, /kiss/odom (could use all separately)
     odom1_config: [true,  true,  false,  # true, true,
                    false, false, true,
                    false, false, false,  # true, true
                    false, false, false,  # , , true
                    false, false, false ]
     odom1_queue_size: 2
-    odom1_differential: true  # true
+    odom1_differential: false  # true
     odom1_relative: true  # false
     #odom1_pose_rejection_threshold: 1.0
     #odom1_twist_rejection_threshold: 0.5
 
-    odom2: /odom/rtabmap/stereo  # /odom/rtabmap/stereo, /odom/rtabmap/rgbd, /kiss/odom (could use all separately)
+    odom2: /odom/rtabmap/icp  #
     odom2_config: [ true,  true,  false,  # true, true,
                     false, false, true,
                     false, false, false,  # true, true
                     false, false, false,  # , , true
                     false, false, false ]
     odom2_queue_size: 2
-    odom2_differential: false  # true
+    odom2_differential: true  # true
     odom2_relative: true  # false
     #odom2_pose_rejection_threshold: 1.0
     #odom2_twist_rejection_threshold: 0.5

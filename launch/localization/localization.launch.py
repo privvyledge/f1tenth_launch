@@ -311,12 +311,12 @@ def generate_launch_description():
         'Odom/Strategy': '0',   # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
         'Odom/Holonomic': 'False',
         'Odom/FilteringStrategy': '0',  # odom output filtering. 0=None, 1=KF, 2=PF
+        'OdomF2M/BundleAdjustment': '1',  # 0=disabled, 1=g2o
         'Odom/GuessMotion': 'True',
         'Odom/KeyFrameThr': '0.3',  # default = 0.3. 0.6
         'Odom/ScanKeyFrameThr': '0.3',
         'Odom/ResetCountdown': '1',  # reset X frames after losing odometry
         'Rtabmap/StartNewMapOnLoopClosure': 'True',
-        'OdomF2M/BundleAdjustment': '1',  # 0=disabled, 1=g2o
         'Optimizer/GravitySigma': '0',
         'Icp/VoxelSize': '0.05',
         # 'Icp/RangeMax': '12.0',
@@ -422,12 +422,12 @@ def generate_launch_description():
                     'approx_sync': False,
                     'frame_id': base_frame,
                     'odom_frame_id': odom_frame,
-                    'guess_frame_id': odom_frame,
+                    # 'guess_frame_id': odom_frame,
                     'guess_min_translation': 0.05,  # m
                     'guess_min_rotation': 0.005,  # rad
                     'publish_tf': publish_odom_tf,
                     'publish_null_when_lost': True,
-                    'rtabmap_config_path': rtabmap_database_file_path,
+                    # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
             output='screen',
@@ -485,7 +485,7 @@ def generate_launch_description():
                 SetParameter(name='approx_sync', value='False'),
                 SetParameter(name='frame_id', value=base_frame),
                 SetParameter(name='odom_frame_id', value=odom_frame),
-                SetParameter(name='guess_frame_id', value=odom_frame),
+                # SetParameter(name='guess_frame_id', value=odom_frame),
                 SetParameter(name='guess_min_translation', value='0.05'),  # m
                 SetParameter(name='guess_min_rotation', value='0.005'),  # rad
                 SetParameter(name='publish_tf', value=publish_odom_tf),
