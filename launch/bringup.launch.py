@@ -79,7 +79,7 @@ def generate_launch_description():
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
-    launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='True')
+    launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
