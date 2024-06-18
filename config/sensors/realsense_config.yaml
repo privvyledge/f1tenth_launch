@@ -53,7 +53,7 @@
       ordered_pc: true
       stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
       stream_index_filter: 0
-      allow_no_texture_points: true
+      allow_no_texture_points: false # true
 
     gyro_fps: 400 # 200, 400
     accel_fps: 200 # 100, 200
