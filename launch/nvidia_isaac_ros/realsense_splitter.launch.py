@@ -27,6 +27,7 @@ def launch_setup(context, *args, **kwargs):
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='realsense_container')
+    realsense_config_file = LaunchConfiguration('realsense_config_file', default=realsense_config_file_path)
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -45,12 +46,16 @@ def launch_setup(context, *args, **kwargs):
                                                          default_value=component_container_name,
                                                          description="The name of the optional container to join")
 
+    realsense_config_file_arg = DeclareLaunchArgument('realsense_config_file', default_value=realsense_config_file,
+                                                     description="Path to a config file")
+
     # Add launch arguments to a list
     launch_args = [
         use_sim_time_la,
         launch_realsense_driver_launch_arg,
         attach_to_shared_component_container_arg,
-        component_container_name_arg
+        component_container_name_arg,
+        realsense_config_file_arg
     ]
 
     # Run nodes
@@ -94,7 +99,7 @@ def launch_setup(context, *args, **kwargs):
                         namespace="camera",
                         package='realsense2_camera',
                         plugin='realsense2_camera::RealSenseNodeFactory',
-                        parameters=[realsense_config_file_path]
+                        parameters=[realsense_config_file]
                 )
             ]
     )
