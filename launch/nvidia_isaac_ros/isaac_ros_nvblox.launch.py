@@ -102,16 +102,16 @@ def launch_setup(context, *args, **kwargs):
     # Run nodes
     '''Create a container if not joining one for the realsense splitter'''
     nvblox_container = Node(
-            name=component_container_name_arg,
+            name=component_container_name,
             package='rclcpp_components',
             executable='component_container_mt',
             output='screen',
-            condition=UnlessCondition(attach_to_shared_component_container_arg)
+            condition=UnlessCondition(attach_to_shared_component_container)
     )
 
     # todo: use a launch context to check dynamic object and people flags
     load_composable_nodes = LoadComposableNodes(
-            target_container=component_container_name_arg,
+            target_container=component_container_name,
             composable_node_descriptions=[
                 # nvblox static node
                 ComposableNode(
