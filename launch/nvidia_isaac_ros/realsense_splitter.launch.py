@@ -78,14 +78,14 @@ def launch_setup(context, *args, **kwargs):
                             'output_qos': 'SENSOR_DATA'  # todo: make dynamic
                         }],
                         remappings=[
-                            ('input/infra_1', '/camera/infra1/image_rect_raw'),
-                            ('input/infra_1_metadata', '/camera/infra1/metadata'),
-                            ('input/infra_2', '/camera/infra2/image_rect_raw'),
-                            ('input/infra_2_metadata', '/camera/infra2/metadata'),
-                            ('input/depth', '/camera/depth/image_rect_raw'),
-                            ('input/depth_metadata', '/camera/depth/metadata'),
-                            ('input/pointcloud', '/camera/depth/color/points'),
-                            ('input/pointcloud_metadata', '/camera/depth/metadata'),
+                            ('input/infra_1', 'camera/infra1/image_rect_raw'),
+                            ('input/infra_1_metadata', 'camera/infra1/metadata'),
+                            ('input/infra_2', 'camera/infra2/image_rect_raw'),
+                            ('input/infra_2_metadata', 'camera/infra2/metadata'),
+                            ('input/depth', 'camera/depth/image_rect_raw'),
+                            ('input/depth_metadata', 'camera/depth/metadata'),
+                            ('input/pointcloud', 'camera/depth/color/points'),
+                            ('input/pointcloud_metadata', 'camera/depth/metadata'),
                                     ]
                 ),
                 # Node Factory
