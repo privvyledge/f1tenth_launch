@@ -3,8 +3,8 @@ todo: move to a ROS best practices github repository
 """
 import os
 from launch import LaunchDescription, LaunchContext
-from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
-from launch_ros.descriptions import ParameterFile
+from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
+from launch_ros.descriptions import ParameterFile, ComposableNode
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable

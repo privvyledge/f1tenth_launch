@@ -373,7 +373,7 @@ def generate_launch_description():
         remappings=[
             ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth
         ],
-        parameters=[
+        parameters=[  # todo: see Open3D's realsense settings for ideas
             {
                 # ROS node configuration
                 "base_frame": "base_link",
@@ -384,7 +384,7 @@ def generate_launch_description():
                 "min_range": 0.105,  # 0.105 or 0.28, todo: tune
                 "deskew": False,
                 "max_points_per_voxel": 20,
-                "voxel_size": 0.5,  # (optional)
+                "voxel_size": 0.05,  # (optional)
                 # Adaptive threshold
                 # "fixed_threshold": 0.3,  # (optional) this disables adaptive thresholding
                 "initial_threshold": 2.0,
