@@ -160,8 +160,8 @@ def launch_setup(context, *args, **kwargs):
                 # Set parameters with specializations
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParametersFromFile(base_config),
-                SetParametersFromFile(dynamics_config, condition=remove_dynamic_objects),
-                SetParametersFromFile(segmentation_config, condition=remove_people),
+                SetParametersFromFile(dynamics_config, condition=IfCondition(remove_dynamic_objects)),
+                SetParametersFromFile(segmentation_config, condition=IfCondition(remove_people)),
                 SetParametersFromFile(realsense_config),
                 SetParameter(name='global_frame', value=global_frame),
 

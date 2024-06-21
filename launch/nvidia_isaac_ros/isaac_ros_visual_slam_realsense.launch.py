@@ -3,6 +3,7 @@ Todo:
     * Prepare for unified use, containerization, realsense_splitting
         https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nvblox/blob/release-2.0.0/nvblox_examples/nvblox_examples_bringup/launch/perception/vslam.launch.py |
         https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nvblox/blob/main/nvblox_examples/nvblox_examples_bringup/launch/perception/vslam.launch.py
+    * Todo: pass topics as arguments
 """
 
 import os
@@ -54,12 +55,18 @@ def launch_setup(context, *args, **kwargs):
                 'enable_color': False,
                 'enable_depth': False,
                 'depth_module.emitter_enabled': 0,
-                'depth_module.profile': '640x360x90',
+                'depth_module.depth_profile': '640x360x60',
+                'depth_module.infra_profile': '640x360x60',
+                'depth_module.infra_format': "RGB8",
+                'depth_module.infra1_format': "Y8",
+                'depth_module.infra2_format': "Y8",
                 'enable_gyro': True,
                 'enable_accel': True,
                 'gyro_fps': 200,
                 'accel_fps': 200,
-                'unite_imu_method': 2
+                'unite_imu_method': 2,
+                'publish_tf': True,
+                'tf_publish_rate': 30.0
             }]
     )
 
@@ -96,7 +103,7 @@ def launch_setup(context, *args, **kwargs):
                 'map_frame': 'map',
                 'odom_frame': 'odom',
                 'base_frame': 'camera_link',  # camera_link, base_link. todo: set as launch argument
-                'imu_frame': 'camera_gyro_optical_frame',  # todo: set as launch argument
+                'imu_frame': 'camera_imu_optical_frame',  # todo: set as launch argument
                 'publish_map_to_odom_tf': True,
                 'publish_odom_to_rig_tf': True,  # publish odom->base_link tf
                 'invert_map_to_odom_tf': False,
@@ -107,7 +114,7 @@ def launch_setup(context, *args, **kwargs):
                 'camera_optical_frames': [
                     'camera_infra1_optical_frame',
                     'camera_infra2_optical_frame',
-                ],  # leaving an empty list will take the parameters from messages
+                ],  # leaving an empty list, e.g '[]' will take the parameters from messages
                 # 'image_qos': 'DEFAULT',
                 # 'imu_qos': 'DEFAULT',
             }],

@@ -79,7 +79,7 @@ def launch_setup(context, *args, **kwargs):
                         plugin='nvblox::RealsenseSplitterNode',
                         parameters=[{
                             'use_sim_time': use_sim_time,
-                            'input_qos': 'SENSOR_DATA',  # todo: make dynamic
+                            # 'input_qos': 'SENSOR_DATA',  # todo: make dynamic as it must match the input
                             'output_qos': 'SENSOR_DATA'  # todo: make dynamic
                         }],
                         remappings=[
