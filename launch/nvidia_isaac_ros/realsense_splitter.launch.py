@@ -114,7 +114,6 @@ def launch_setup(context, *args, **kwargs):
             composable_node_descriptions=[
                 # Realsense Driver Node Factory
                 ComposableNode(
-                        condition=IfCondition(launch_realsense_driver),
                         namespace="camera",
                         package='realsense2_camera',
                         plugin='realsense2_camera::RealSenseNodeFactory',

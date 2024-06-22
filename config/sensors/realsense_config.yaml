@@ -55,7 +55,7 @@
       stream_index_filter: 0
       allow_no_texture_points: false # true
 
-    gyro_fps: 400 # 200, 400
+    gyro_fps: 200 # 200, 400
     accel_fps: 200 # 100, 200
     unite_imu_method: 2  # 0: no unified imu message, 1: copy, 2: linear interpolation
     angular_velocity_cov: 0.01
@@ -63,7 +63,7 @@
 
     publish_tf: true
     tf_publish_rate: 30.0
-    clip_distance: 10.0  # meters
+    clip_distance: 5.0  # meters
 
     # Enable post-processing filters
     decimation_filter:

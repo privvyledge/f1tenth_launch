@@ -167,9 +167,9 @@ def launch_setup(context, *args, **kwargs):
                 'publish_odom_to_rig_tf': publish_odom_to_baselink_tf,
                 'invert_map_to_odom_tf': False,
                 'invert_odom_to_rig_tf': False,
-                'enable_slam_visualization': True,
-                'enable_landmarks_view': True,
-                'enable_observations_view': True,
+                'enable_slam_visualization': False,
+                'enable_landmarks_view': False,
+                'enable_observations_view': False,
                 'camera_optical_frames': [
                     'camera_infra1_optical_frame',
                     'camera_infra2_optical_frame',
