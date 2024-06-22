@@ -55,11 +55,6 @@ def generate_launch_description():
                     [f1tenth_launch_dir, 'launch/filters', 'laser_filter.launch.py']
             )),
             condition=IfCondition([launch_filter]),
-            # launch_arguments={
-            #     'pointcloud.enable': 'true',
-            #     'ordered_pc': 'true',
-            #     'initial_reset': 'true'
-            # }.items()
     )
 
     ld.add_action(lidar_node)

@@ -26,6 +26,7 @@ def generate_launch_description():
 
     # Declare launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default="False")
+    use_gpu = LaunchConfiguration('use_gpu', default=True)
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
     launch_sensors = LaunchConfiguration('launch_sensors', default=True)
     launch_vehicle = LaunchConfiguration('launch_vehicle', default=True)
@@ -51,9 +52,14 @@ def generate_launch_description():
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
-    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
 
     # Declare launch arguments
+    use_gpu_la = DeclareLaunchArgument(
+            'use_gpu', default_value=use_gpu,
+            description='Use GPU acceleration. Default: True')
+
     launch_joystick_arg = DeclareLaunchArgument('launch_joystick', default_value=launch_joystick,
                                                 description="Launch the joystick driver, "
                                                             "teleop (speed and steering), and mux nodes.")
@@ -160,13 +166,18 @@ def generate_launch_description():
 
     realsense_emitter_on_off_la = DeclareLaunchArgument(
             'realsense_emitter_on_off',
-            default_value='False',
+            default_value=realsense_emitter_on_off,
             description='Whether to alternate enabling/disabling the emitters. '
                         'This can be used to simultaneously '
                         'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
                         'have usable IR images (when in the off state)')
 
+    launch_realsense_splitter_node_la = DeclareLaunchArgument(
+            'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
+            description='Whether to launch the realsense splitter node.')
+
     launch_args = [
+        use_gpu_la,
         launch_joystick_arg,
         launch_sensors_arg,
         launch_vehicle_arg,
@@ -183,7 +194,7 @@ def generate_launch_description():
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, publish_realsense_pointcloud_la,
-        realsense_emitter_enabled_la, realsense_emitter_on_off_la
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
     ]
 
     # Launch nodes
@@ -219,6 +230,7 @@ def generate_launch_description():
                 "publish_realsense_pointcloud": publish_realsense_pointcloud,
                 "realsense_emitter_enabled": realsense_emitter_enabled,
                 "realsense_emitter_on_off": realsense_emitter_on_off,
+                "launch_realsense_splitter_node": launch_realsense_splitter_node,
             }.items()
     )
 
@@ -256,6 +268,7 @@ def generate_launch_description():
                 "launch_slam_toolbox_localizer": 'False',
                 "launch_rtabmap_localizer": 'False',
                 "use_sim_time": use_sim_time,
+                "use_gpu": use_gpu,
             }.items()
     )
 

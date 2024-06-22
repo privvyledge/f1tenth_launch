@@ -44,8 +44,9 @@ def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     slam = LaunchConfiguration('slam', default=False)
-    map_yaml_file = LaunchConfiguration('map', default=map_file_path)
+    map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    use_gpu = LaunchConfiguration('use_gpu', default=True)
     params_file = LaunchConfiguration('params_file',
                                       default=nav2_params_file_path)
     autostart = LaunchConfiguration('autostart')
@@ -87,7 +88,8 @@ def generate_launch_description():
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
-    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
 
     # Setup Remappings/renamings
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -141,14 +143,18 @@ def generate_launch_description():
             description='Whether to run SLAM')
 
     declare_map_yaml_cmd = DeclareLaunchArgument(
-            'map',
-            default_value=map_yaml_file,
+            'map_file',
+            default_value=map_file,
             description='Full path to map yaml file to load')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
             default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
+
+    use_gpu_la = DeclareLaunchArgument(
+            'use_gpu', default_value=use_gpu,
+            description='Use GPU acceleration. Default: True')
 
     declare_params_file_cmd = DeclareLaunchArgument(
             'params_file',
@@ -299,11 +305,15 @@ def generate_launch_description():
 
     realsense_emitter_on_off_la = DeclareLaunchArgument(
             'realsense_emitter_on_off',
-            default_value='False',
+            default_value=realsense_emitter_on_off,
             description='Whether to alternate enabling/disabling the emitters. '
                         'This can be used to simultaneously '
                         'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
                         'have usable IR images (when in the off state)')
+
+    launch_realsense_splitter_node_la = DeclareLaunchArgument(
+            'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
+            description='Whether to launch the realsense splitter node.')
 
     # Add launch arguments to a list
     launch_args = [
@@ -313,6 +323,7 @@ def generate_launch_description():
         declare_slam_cmd,
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
+        use_gpu_la,
         declare_params_file_cmd,
         declare_autostart_cmd,
         declare_use_composition_cmd,
@@ -340,7 +351,7 @@ def generate_launch_description():
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, publish_realsense_pointcloud_la,
-        realsense_emitter_enabled_la, realsense_emitter_on_off_la
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
     ]
 
     ''' Launch Nodes '''
@@ -348,6 +359,8 @@ def generate_launch_description():
             condition=IfCondition(use_composition),
             name='f1tenth_container',
             package='rclcpp_components',
+            # todo: compare 'component_container_isolated' with
+            #  'component_container_mt' and 'component_container_isolated'
             executable='component_container_isolated',
             parameters=[configured_params, {'autostart': autostart}],
             arguments=['--ros-args', '--log-level', log_level],
@@ -377,7 +390,18 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([sensor_include_dir, 'sensors.launch.py'])
             ),
-            condition=IfCondition(launch_sensors)
+            condition=IfCondition(launch_sensors),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "approx_sync": approx_sync,
+                "stereo_to_pointcloud": stereo_to_pointcloud,
+                "depthimage_to_pointcloud": depthimage_to_pointcloud,
+                "detect_ground_and_obstacles": detect_ground_and_obstacles,
+                "publish_realsense_pointcloud": publish_realsense_pointcloud,
+                "realsense_emitter_enabled": realsense_emitter_enabled,
+                "realsense_emitter_on_off": realsense_emitter_on_off,
+                "launch_realsense_splitter_node": launch_realsense_splitter_node,
+            }.items()
     )
 
     vehicle_launch = IncludeLaunchDescription(
@@ -399,7 +423,10 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'static_transformations.launch.py'])
             ),
-            condition=LaunchConfigurationEquals('launch_tfs', 'True')
+            condition=LaunchConfigurationEquals('launch_tfs', 'True'),
+            launch_arguments={
+                "use_sim_time": use_sim_time
+            }.items()
     )
 
     localization_launch = TimerAction(
@@ -416,8 +443,9 @@ def generate_launch_description():
                             "launch_ekf_map": launch_global_localization,
                             "launch_slam_toolbox_localizer": 'False',
                             "launch_rtabmap_localizer": 'False',
-                            "map": map_yaml_file,
+                            "map": map_file,
                             "use_sim_time": use_sim_time,
+                            "use_gpu": use_gpu,
                         }.items()
                 )
             ]
@@ -443,6 +471,7 @@ def generate_launch_description():
                         launch_arguments={'namespace': namespace,
                                           'use_namespace': use_namespace,
                                           'use_sim_time': use_sim_time,
+                                          'use_gpu': use_gpu,
                                           'autostart': autostart,
                                           'use_composition': use_composition,
                                           'use_respawn': use_respawn,

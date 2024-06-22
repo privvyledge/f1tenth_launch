@@ -150,7 +150,7 @@ def generate_launch_description():
 
                 Node(
                         package='imu_corrector',
-                        executable='imu_corrector',
+                        executable='imu_corrector_node',
                         name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
                         output={'both': 'log'},
                         parameters=[imu_corrector_params_file],

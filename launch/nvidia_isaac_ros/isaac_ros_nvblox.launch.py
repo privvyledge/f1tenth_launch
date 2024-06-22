@@ -43,6 +43,9 @@ def launch_setup(context, *args, **kwargs):
     global_frame = LaunchConfiguration('global_frame', default='odom')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     launch_realsense_splitter = LaunchConfiguration('launch_realsense_splitter', default=False)
+    depth_topic = LaunchConfiguration('depth_topic')
+    left_image_topic = LaunchConfiguration('left_image_topic')
+    right_image_topic = LaunchConfiguration('right_image_topic')
     remove_dynamic_objects = LaunchConfiguration('remove_dynamic_objects', default=False)
     remove_people = LaunchConfiguration('remove_people', default=False)
     launch_visual_slam = LaunchConfiguration('launch_visual_slam', default=False)
@@ -65,6 +68,23 @@ def launch_setup(context, *args, **kwargs):
                                                           default_value=launch_realsense_splitter,
                                                           description="Whether to launch the "
                                                                       "realsense splitter component.")
+
+    depth_topic_arg = DeclareLaunchArgument(
+                'depth_topic', default_value='/camera/camera/realsense_splitter_node/output/depth',
+                description='Raw unaligned depth topic to subscribe to. E.g '
+                            '"/camera/camera/aligned_depth_to_color/image_raw", '
+                            '"/camera/camera/depth/image_rect_raw", '
+                            '"/camera/depth_registered/image_rect", '
+                            '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
+                            '"/camera/realigned_depth_to_color/image_raw"')
+
+    left_image_topic_la = DeclareLaunchArgument(
+            'left_image_topic', default_value='/camera/realsense_splitter_node/output/infra_1',
+            description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
+
+    right_image_topic_la = DeclareLaunchArgument(
+            'right_image_topic', default_value='/camera/realsense_splitter_node/output/infra_2',
+            description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
 
     remove_dynamic_objects_arg = DeclareLaunchArgument('remove_dynamic_objects',
                                                        default_value=remove_dynamic_objects,
@@ -92,6 +112,9 @@ def launch_setup(context, *args, **kwargs):
         global_frame_arg,
         launch_realsense_driver_arg,
         launch_realsense_splitter_arg,
+        depth_topic_arg,
+        left_image_topic_la,
+        right_image_topic_la,
         remove_dynamic_objects_arg,
         remove_people_arg,
         launch_visual_slam_arg,
@@ -142,17 +165,31 @@ def launch_setup(context, *args, **kwargs):
             }.items()
     )
 
-    visual_slam_launch_include = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([nvidia_isaac_launch_dir, 'isaac_ros_visual_slam_realsense.launch.py'])
-            ),
-            condition=IfCondition(launch_visual_slam),
-            launch_arguments={
-                'use_sim_time': use_sim_time,
-                'launch_realsense_driver': 'False',
-                'attach_to_shared_component_container': 'True',
-                'component_container_name': component_container_name
-            }.items()
+    visual_slam_launch_include = TimerAction(
+            period=1.0,
+            actions=[
+                IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(
+                                PathJoinSubstitution(
+                                        [nvidia_isaac_launch_dir, 'isaac_ros_visual_slam_realsense.launch.py'])
+                        ),
+                        condition=IfCondition(launch_visual_slam),
+                        launch_arguments={
+                            'use_sim_time': use_sim_time,
+                            'two_d_mode': 'True',
+                            'base_frame': 'base_link',
+                            'publish_map_to_odom_tf': 'False',
+                            'publish_odom_to_baselink_tf': 'True',
+                            'launch_realsense_driver': 'False',
+                            'left_image_topic': left_image_topic,
+                            'right_image_topic': right_image_topic,
+                            'image_qos': 'DEFAULT',
+                            'imu_qos': 'DEFAULT',
+                            'attach_to_shared_component_container': 'True',
+                            'component_container_name': component_container_name,
+                        }.items()
+                )
+            ]
     )
 
     nvblox_group_action = GroupAction(
@@ -167,7 +204,7 @@ def launch_setup(context, *args, **kwargs):
 
                 # Remappings for realsense data
                 SetRemap(src=['camera_0/depth/image'],
-                         dst=['/camera/camera/realsense_splitter_node/output/depth']),
+                         dst=[depth_topic]),
                 SetRemap(src=['camera_0/depth/camera_info'],
                          dst=['/camera/camera/depth/camera_info']),
                 SetRemap(src=['camera_0/color/image'],

@@ -97,10 +97,10 @@ def generate_launch_description():
                                                                     'from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
             'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
-            description='')
+            description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
     right_image_topic_la = DeclareLaunchArgument(
             'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
-            description='')
+            description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
     rgb_image_topic_la = DeclareLaunchArgument(
             'rgb_image_topic', default_value='/camera/camera/color/image_raw',
             description='')
@@ -111,6 +111,7 @@ def generate_launch_description():
                         '"/camera/camera/aligned_depth_to_color/image_raw", '
                         '"/camera/depth_from_disparity"'
                         '"/camera/depth_registered/image_rect", '
+                        '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                         '"/camera/realigned_depth_to_color/image_raw"')
     use_image_proc_la = DeclareLaunchArgument(
             'use_image_proc', default_value='True',

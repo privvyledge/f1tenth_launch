@@ -1,6 +1,7 @@
 import os
 from launch import LaunchDescription, LaunchContext
-from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, SetParametersFromFile, \
+from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, \
+    SetParametersFromFile, \
     SetParameter
 from launch_ros.descriptions import ParameterFile, ComposableNode
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, \
@@ -28,6 +29,10 @@ def launch_setup(context, *args, **kwargs):
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='realsense_container')
     realsense_config_file = LaunchConfiguration('realsense_config_file', default=realsense_config_file_path)
+    # '/camera/camera/depth/image_rect_raw' or '/camera/camera/aligned_depth_to_color/image_raw'
+    depth_topic = LaunchConfiguration('depth_topic', default='/camera/camera/depth/image_rect_raw')
+    input_qos = LaunchConfiguration('input_qos', default='SENSOR_DATA')
+    output_qos = LaunchConfiguration('output_qos', default='SENSOR_DATA')
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -47,7 +52,16 @@ def launch_setup(context, *args, **kwargs):
                                                          description="The name of the optional container to join")
 
     realsense_config_file_arg = DeclareLaunchArgument('realsense_config_file', default_value=realsense_config_file,
-                                                     description="Path to a config file")
+                                                      description="Path to a config file")
+
+    depth_topic_arg = DeclareLaunchArgument('depth_topic', default_value=depth_topic,
+                                            description="The depth topic to remap.")
+
+    input_qos_arg = DeclareLaunchArgument('input_qos', default_value=input_qos,
+                                          description="The QoS of the realsense topic published by the driver.")
+
+    output_qos_arg = DeclareLaunchArgument('output_qos', default_value=output_qos,
+                                           description="The output QoS of the topics published by the realsense splitter.")
 
     # Add launch arguments to a list
     launch_args = [
@@ -55,7 +69,10 @@ def launch_setup(context, *args, **kwargs):
         launch_realsense_driver_launch_arg,
         attach_to_shared_component_container_arg,
         component_container_name_arg,
-        realsense_config_file_arg
+        realsense_config_file_arg,
+        depth_topic_arg,
+        input_qos_arg,
+        output_qos_arg
     ]
 
     # Run nodes
@@ -79,8 +96,8 @@ def launch_setup(context, *args, **kwargs):
                         plugin='nvblox::RealsenseSplitterNode',
                         parameters=[{
                             'use_sim_time': use_sim_time,
-                            # 'input_qos': 'SENSOR_DATA',  # todo: make dynamic as it must match the input
-                            'output_qos': 'SENSOR_DATA'  # todo: make dynamic
+                            'input_qos': input_qos,
+                            'output_qos': output_qos,
                         }],
                         remappings=[
                             ('input/infra_1', 'camera/infra1/image_rect_raw'),
@@ -91,7 +108,7 @@ def launch_setup(context, *args, **kwargs):
                             ('input/depth_metadata', 'camera/depth/metadata'),
                             ('input/pointcloud', 'camera/depth/color/points'),
                             ('input/pointcloud_metadata', 'camera/depth/metadata'),
-                                    ]
+                        ]
                 ),
                 # Node Factory
                 ComposableNode(
@@ -99,7 +116,7 @@ def launch_setup(context, *args, **kwargs):
                         namespace="camera",
                         package='realsense2_camera',
                         plugin='realsense2_camera::RealSenseNodeFactory',
-                        parameters=[realsense_config_file]
+                        parameters=[realsense_config_file]  # todo: pass the input QoS
                 )
             ]
     )

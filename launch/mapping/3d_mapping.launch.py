@@ -47,6 +47,8 @@ def generate_launch_description():
     rviz_view = LaunchConfiguration('rviz_view')
     rviz_cfg_path_param = LaunchConfiguration('rviz_cfg_path_param', default=rviz_cfg_path)
 
+    left_image_topic = LaunchConfiguration('left_image_topic')
+    right_image_topic = LaunchConfiguration('right_image_topic')
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
 
@@ -86,11 +88,20 @@ def generate_launch_description():
                 description='Used with VIO approaches and for SLAM graph optimization (gravity constraints). '),
 
         DeclareLaunchArgument(
+            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
+            description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1'),
+
+        DeclareLaunchArgument(
+            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
+            description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2'),
+
+        DeclareLaunchArgument(
                 'depth_topic', default_value='/camera/camera/aligned_depth_to_color/image_raw',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/camera/aligned_depth_to_color/image_raw", '
                             '"/camera/camera/depth/image_rect_raw", '
                             '"/camera/depth_registered/image_rect", '
+                            '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                             '"/camera/realigned_depth_to_color/image_raw"'),
 
         DeclareLaunchArgument(
@@ -204,8 +215,8 @@ def generate_launch_description():
                     'wait_imu_to_init': wait_imu_to_init,
 
                     'stereo_namespace': '/camera/camera',
-                    'left_image_topic': '/camera/camera/infra1/image_rect_raw',
-                    'right_image_topic': '/camera/camera/infra2/image_rect_raw',
+                    'left_image_topic': left_image_topic,
+                    'right_image_topic': right_image_topic,
                     'left_camera_info_topic': '/camera/camera/infra1/camera_info',
                     'right_camera_info_topic': '/camera/camera/infra2/camera_info',
 

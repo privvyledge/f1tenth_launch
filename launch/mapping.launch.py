@@ -1,6 +1,10 @@
 """
 Launches (optionally): 2D mapping (online or offline), 3D mapping (online or offline).
     Can also choose GPU/CPU mode
+
+Todo:
+    * add flag for CPU or GPU (nvidia) mode
+    * add isaac ros nvblox
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -29,6 +33,7 @@ def launch_setup(context, *args, **kwargs):
     vehicle_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'vehicle')
     sensor_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'sensors')
     localization_include_dir = os.path.join(f1tenth_launch_bringup_dir, 'localization')
+    nvidia_isaac_launch_dir = os.path.join(f1tenth_launch_bringup_dir, 'nvidia_isaac_ros')
 
     # Setup default directories.
     map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
@@ -41,8 +46,9 @@ def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
-    map_yaml_file = LaunchConfiguration('map', default=map_file_path)
+    map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
+    use_gpu = LaunchConfiguration('use_gpu', default=True)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
@@ -80,7 +86,8 @@ def launch_setup(context, *args, **kwargs):
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
-    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
 
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -97,14 +104,18 @@ def launch_setup(context, *args, **kwargs):
             description='Whether to apply a namespace to the navigation stack')
 
     declare_map_yaml_cmd = DeclareLaunchArgument(
-            'map',
-            default_value=map_yaml_file,
+            'map_file',
+            default_value=map_file,
             description='Full path to map yaml file to load')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
             default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
+
+    use_gpu_la = DeclareLaunchArgument(
+            'use_gpu', default_value=use_gpu,
+            description='Use GPU acceleration. Default: True')
 
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value=autostart,
@@ -253,11 +264,15 @@ def launch_setup(context, *args, **kwargs):
 
     realsense_emitter_on_off_la = DeclareLaunchArgument(
             'realsense_emitter_on_off',
-            default_value='False',
+            default_value=realsense_emitter_on_off,
             description='Whether to alternate enabling/disabling the emitters. '
                         'This can be used to simultaneously '
                         'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
                         'have usable IR images (when in the off state)')
+
+    launch_realsense_splitter_node_la = DeclareLaunchArgument(
+            'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
+            description='Whether to launch the realsense splitter node.')
 
     # Add launch arguments to a list
     launch_args = [
@@ -266,6 +281,7 @@ def launch_setup(context, *args, **kwargs):
         declare_use_namespace_cmd,
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
+        use_gpu_la,
         declare_autostart_cmd,
         declare_use_composition_cmd,
         declare_use_respawn_cmd,
@@ -292,7 +308,7 @@ def launch_setup(context, *args, **kwargs):
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, publish_realsense_pointcloud_la,
-        realsense_emitter_enabled_la, realsense_emitter_on_off_la
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
     ]
 
     ''' Launch Nodes '''
@@ -303,12 +319,15 @@ def launch_setup(context, *args, **kwargs):
     #  https://robotics.stackexchange.com/a/104402
     use_sim_time_string = use_sim_time.perform(context)
     life_long_mapping_string = life_long_mapping.perform(context)
+    realsense_splitter_enabled_string = launch_realsense_splitter_node.perform(context)
 
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'teleop.launch.py'])
             ),
             launch_arguments={
+                "use_sim_time": use_sim_time,
+                "use_gpu": use_gpu,
                 "launch_joystick": launch_joystick,
                 "launch_sensors": launch_sensors,
                 "launch_vehicle": launch_vehicle,
@@ -332,7 +351,8 @@ def launch_setup(context, *args, **kwargs):
                 "detect_ground_and_obstacles": detect_ground_and_obstacles,
                 "publish_realsense_pointcloud": publish_realsense_pointcloud,
                 "realsense_emitter_enabled": realsense_emitter_enabled,
-                "realsense_emitter_on_off": realsense_emitter_on_off
+                "realsense_emitter_on_off": realsense_emitter_on_off,
+                "launch_realsense_splitter_node": launch_realsense_splitter_node,
             }.items()
     )
 
@@ -365,12 +385,21 @@ def launch_setup(context, *args, **kwargs):
     if life_long_mapping_string.lower() == 'true':
         delete_old_map = ' '
 
+    left_image_topic = '/camera/camera/infra1/image_rect_raw'
+    right_image_topic = '/camera/camera/infra2/image_rect_raw'
+    depth_topic = '/camera/camera/aligned_depth_to_color/image_raw'  # /camera/camera/depth/image_rect_raw
+    if realsense_splitter_enabled_string.lower() == 'true':
+        left_image_topic = '/camera/realsense_splitter_node/output/infra_1'
+        right_image_topic = '/camera/realsense_splitter_node/output/infra_2'
+        # todo: might need to launch RTABMaps depth realignment to color node if using realsense splitter
+        depth_topic = '/camera/camera/realsense_splitter_node/output/depth'
+
     # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
-    mapping_3d_node = IncludeLaunchDescription(
+    mapping_3d_cpu_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '3d_mapping.launch.py'])
             ),
-            condition=IfCondition(launch_3d_mapping),
+            condition=UnlessCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "use_stereo": 'False',  # False=use_depth, True=use_stereo
@@ -379,7 +408,9 @@ def launch_setup(context, *args, **kwargs):
                 "publish_map_tf": 'True',
                 "wait_imu_to_init": 'True',
                 "imu_topic": '/camera/camera/imu/filtered',
-                "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',  # /camera/camera/depth/image_rect_raw
+                "left_image_topic": left_image_topic,
+                "right_image_topic": right_image_topic,
+                "depth_topic": depth_topic,
                 "approx_sync": 'True',
                 "rtabmap_viz_view": 'True',  # launch_visualization
                 "rviz_view": 'False',  # launch_visualization
@@ -428,19 +459,44 @@ def launch_setup(context, *args, **kwargs):
             }.items()
     )
 
-    # Add launch arguments and nodes to the launch description
-    # ld = LaunchDescription(
-    #         launch_args + [
-    #             teleop_launch,
-    #             mapping_2d_node,
-    #             mapping_3d_node
-    #         ]
-    # )
+    mapping_3d_gpu_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    PathJoinSubstitution([nvidia_isaac_launch_dir, 'isaac_ros_nvblox.launch.py'])
+            ),
+            condition=IfCondition(use_gpu),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "global_frame": 'odom',
+                "launch_realsense_driver": 'False',
+                "launch_realsense_splitter": 'False',
+                # "publish_map_tf": 'True',
+                "left_image_topic": left_image_topic,
+                "right_image_topic": right_image_topic,
+                "depth_topic": depth_topic,
+                "remove_dynamic_objects": 'False',
+                "remove_people": 'False',
+                "launch_visual_slam": 'False',
+                "attach_to_shared_component_container": 'False',
+                "component_container_name": 'nvblox_container',
+            }.items()
+    )
+
+    mapping_3d_group = GroupAction(
+            condition=IfCondition(launch_3d_mapping),
+            actions=[
+                # set common parameters
+                SetParameter(name='use_sim_time', value=use_sim_time),
+
+                # nodes
+                mapping_3d_cpu_node,
+                mapping_3d_gpu_node
+            ]
+    )
 
     ld = launch_args + [
                 teleop_launch,
                 mapping_2d_node,
-                mapping_3d_node
+                mapping_3d_group
             ]
     return ld
 

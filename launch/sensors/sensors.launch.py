@@ -49,7 +49,7 @@ def generate_launch_description():
     # )
 
     depth_sensor_name = 'realsense'
-    use_sim_time = LaunchConfiguration('use_sim_time')
+    use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     approx_sync = LaunchConfiguration('approx_sync')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
@@ -57,10 +57,11 @@ def generate_launch_description():
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off')
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
-            'use_sim_time', default_value='False',
+            'use_sim_time', default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
     approx_sync_la = DeclareLaunchArgument(
             'approx_sync', default_value='True',
@@ -108,11 +109,16 @@ def generate_launch_description():
                         'get accurate depth maps and pointclouds (when in the on state, i.e enabled) and '
                         'have usable IR images (when in the off state)')
 
+    launch_realsense_splitter_node_la = DeclareLaunchArgument(
+            'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
+            description='Whether to launch the realsense splitter node.')
+
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
-                            publish_realsense_pointcloud_la, realsense_emitter_enabled_la, realsense_emitter_on_off_la])
+                            publish_realsense_pointcloud_la, realsense_emitter_enabled_la,
+                            realsense_emitter_on_off_la, launch_realsense_splitter_node_la])
 
     # Nodes
     lidar_node = IncludeLaunchDescription(
@@ -132,9 +138,11 @@ def generate_launch_description():
                     [f1tenth_launch_dir, 'launch/sensors', 'realsense_d435i.launch.py']
             )),
             launch_arguments={
+                'use_sim_time': use_sim_time,
                 'enable_pointcloud': publish_realsense_pointcloud,
                 'emitter_enabled': realsense_emitter_enabled,
                 'emitter_on_off': realsense_emitter_on_off,
+                'launch_realsense_splitter_node': launch_realsense_splitter_node,
             }.items()
     )
 

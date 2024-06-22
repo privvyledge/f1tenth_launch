@@ -1,4 +1,6 @@
 """
+todo:
+    * add isaac ros visual slam
 todo: if odom nodes fail, test using the sensors base_frame instead
 todo: load nodes using composition (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L145)
 This node sets up local and global localization.
@@ -12,12 +14,12 @@ This node sets up local and global localization.
 """
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
+from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode, ParameterFile
 from nav2_common.launch import RewrittenYaml
@@ -28,6 +30,9 @@ def generate_launch_description():
     # Get path to files and directories
     nav2_pkg_prefix = get_package_share_directory('nav2_bringup')
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
+
+    # Get launch directories
+    nvidia_isaac_launch_dir = os.path.join(f1tenth_launch_pkg_prefix, 'launch', 'nvidia_isaac_ros')
 
     # Setup default directories
     localization_param_file = os.path.join(
@@ -42,10 +47,12 @@ def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_composition = LaunchConfiguration('use_composition')
+    container_name = LaunchConfiguration('container_name', default='nav2_container')
+    container_name_full = (namespace, '/', container_name)
     autostart = LaunchConfiguration('autostart')
     use_respawn = LaunchConfiguration('use_respawn')
     params_file = LaunchConfiguration('params_file')
-    map_yaml_file = LaunchConfiguration('map')
+    map_file = LaunchConfiguration('map_file')
     launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer')
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion')
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom')
@@ -66,6 +73,8 @@ def generate_launch_description():
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
     publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')
 
+    use_gpu = LaunchConfiguration('use_gpu', default='True')
+
     # Declare default launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
@@ -83,7 +92,7 @@ def generate_launch_description():
             description='Path to config file for localization nodes'
     )
     map_file_la = DeclareLaunchArgument(
-            'map',
+            'map_file',
             default_value=map_file_path,
             description='Path to 2D map config file'
     )
@@ -126,8 +135,12 @@ def generate_launch_description():
                                                      default_value=rtabmap_database_file,
                                                      description="Path to the config file for the 3D mapping node.")
     declare_use_composition_cmd = DeclareLaunchArgument(
-            'use_composition', default_value='False',
+            'use_composition', default_value='False',  # set to True
             description='Use composed bringup if True')
+    declare_container_name_cmd = DeclareLaunchArgument(
+            'container_name', default_value=container_name,
+            description='the name of conatiner that nodes will load in if use composition')
+
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value='true',
             description='Automatically startup the nav2 stack')
@@ -171,13 +184,19 @@ def generate_launch_description():
             'publish_odom_tf', default_value=publish_odom_tf,
             description='Default: False')
 
+    use_gpu_la = DeclareLaunchArgument(
+            'use_gpu', default_value=use_gpu,
+            description='Use GPU acceleration. Default: True')
+
     lifecycle_nodes = ['map_server', 'amcl']
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
     param_substitutions = {
         'use_sim_time': use_sim_time,
-        'yaml_filename': map_yaml_file}
+        'yaml_filename': map_file,
+        'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: test
+    }
 
     configured_params = ParameterFile(
             RewrittenYaml(
@@ -224,6 +243,35 @@ def generate_launch_description():
                                     {'autostart': autostart},
                                     {'node_names': lifecycle_nodes}])
             ]
+    )
+
+    load_composable_nodes = LoadComposableNodes(
+            condition=IfCondition(use_composition),
+            target_container=container_name_full,
+            composable_node_descriptions=[
+                ComposableNode(
+                        package='nav2_map_server',
+                        plugin='nav2_map_server::MapServer',
+                        condition=IfCondition(launch_amcl),
+                        name='map_server',
+                        parameters=[configured_params],
+                        remappings=remappings),
+                ComposableNode(
+                        package='nav2_amcl',
+                        plugin='nav2_amcl::AmclNode',
+                        condition=IfCondition(launch_amcl),
+                        name='amcl',
+                        parameters=[configured_params],
+                        remappings=remappings),
+                ComposableNode(
+                        package='nav2_lifecycle_manager',
+                        plugin='nav2_lifecycle_manager::LifecycleManager',
+                        condition=IfCondition(launch_amcl),
+                        name='lifecycle_manager_localization',
+                        parameters=[{'use_sim_time': use_sim_time,
+                                     'autostart': autostart,
+                                     'node_names': lifecycle_nodes}]),
+            ],
     )
 
     slam_toolbox_localizer_node = IncludeLaunchDescription(
@@ -308,7 +356,7 @@ def generate_launch_description():
 
     # common rtabmap parameters (to avoid having to create multiple LaunchConfigurations to cast as strings)
     parameters = {
-        'Odom/Strategy': '0',   # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
+        'Odom/Strategy': '0',  # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
         'Odom/Holonomic': 'False',
         'Odom/FilteringStrategy': '0',  # odom output filtering. 0=None, 1=KF, 2=PF
         'OdomF2M/BundleAdjustment': '1',  # 0=disabled, 1=g2o
@@ -365,42 +413,42 @@ def generate_launch_description():
 
     # PointCloud Odometry (kiss-icp). todo: also make the pointcloud topic dynamic
     kiss_icp_node = Node(
-        package="kiss_icp",
-        executable="kiss_icp_node",
-        condition=IfCondition(launch_pointcloud_odometry),
-        name="kiss_icp_node",
-        output="screen",
-        remappings=[
-            ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth
-        ],
-        parameters=[  # todo: see Open3D's realsense settings for ideas
-            {
-                # ROS node configuration
-                "base_frame": "base_link",
-                "odom_frame": odom_frame,
-                "publish_odom_tf": publish_odom_tf,
-                # KISS-ICP configuration
-                "max_range": 10.0,  # todo: tune using realsense viewer
-                "min_range": 0.105,  # 0.105 or 0.28, todo: tune
-                "deskew": False,
-                "max_points_per_voxel": 20,
-                "voxel_size": 0.05,  # (optional)
-                # Adaptive threshold
-                # "fixed_threshold": 0.3,  # (optional) this disables adaptive thresholding
-                "initial_threshold": 2.0,
-                "min_motion_th": 0.1,
-                # Registration
-                "max_num_iterations": 500,  # (optional).
-                "convergence_criterion": 0.0001,  # (optional).
-                "max_num_threads": 0,  # (optional). todo: tune
-                # Fixed covariances
-                "position_covariance": 0.1,
-                "orientation_covariance": 0.1,
-                # ROS CLI arguments
-                "publish_debug_clouds": False,  # todo: use this to debug accuracy
-                "use_sim_time": use_sim_time,
-            },
-        ],
+            package="kiss_icp",
+            executable="kiss_icp_node",
+            condition=IfCondition(launch_pointcloud_odometry),
+            name="kiss_icp_node",
+            output="screen",
+            remappings=[
+                ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth
+            ],
+            parameters=[  # todo: see Open3D's realsense settings for ideas
+                {
+                    # ROS node configuration
+                    "base_frame": "base_link",
+                    "odom_frame": odom_frame,
+                    "publish_odom_tf": publish_odom_tf,
+                    # KISS-ICP configuration
+                    "max_range": 10.0,  # todo: tune using realsense viewer
+                    "min_range": 0.105,  # 0.105 or 0.28, todo: tune
+                    "deskew": False,
+                    "max_points_per_voxel": 20,
+                    "voxel_size": 0.05,  # (optional)
+                    # Adaptive threshold
+                    # "fixed_threshold": 0.3,  # (optional) this disables adaptive thresholding
+                    "initial_threshold": 2.0,
+                    "min_motion_th": 0.1,
+                    # Registration
+                    "max_num_iterations": 500,  # (optional).
+                    "convergence_criterion": 0.0001,  # (optional).
+                    "max_num_threads": 0,  # (optional). todo: tune
+                    # Fixed covariances
+                    "position_covariance": 0.1,
+                    "orientation_covariance": 0.1,
+                    # ROS CLI arguments
+                    "publish_debug_clouds": False,  # todo: use this to debug accuracy
+                    "use_sim_time": use_sim_time,
+                },
+            ],
     )
 
     # LaserScan odometry
@@ -506,6 +554,104 @@ def generate_launch_description():
             ]
     )
 
+    # GPU group
+    visual_slam_launch_include = TimerAction(
+            period=1.5,
+            actions=[
+                IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(
+                                PathJoinSubstitution(
+                                        [nvidia_isaac_launch_dir, 'isaac_ros_visual_slam_realsense.launch.py'])
+                        ),
+                        condition=IfCondition(launch_stereo_odometry),
+                        launch_arguments={
+                            'use_sim_time': use_sim_time,
+                            'two_d_mode': 'True',
+                            'base_frame': 'base_link',
+                            'publish_map_to_odom_tf': 'False',
+                            'publish_odom_to_baselink_tf': publish_odom_tf,
+                            'launch_realsense_driver': 'False',
+                            'left_image_topic': '/camera/realsense_splitter_node/output/infra_1',
+                            'right_image_topic': '/camera/realsense_splitter_node/output/infra_2',
+                            'image_qos': 'DEFAULT',  # todo: as RTABMAP also takes in QoS arguments
+                            'imu_qos': 'DEFAULT',
+                            'attach_to_shared_component_container': 'False',
+                            'component_container_name': 'visual_slam_launch_container',  # todo: add to container
+                        }.items()
+                )
+            ]
+    )
+
+    laserscan_to_flatscan_node = ComposableNode(
+            package='isaac_ros_pointcloud_utils',
+            plugin='nvidia::isaac_ros::pointcloud_utils::LaserScantoFlatScanNode',
+            name='laserscan_to_flatscan',
+            parameters=[
+                {
+                    'use_sim_time': use_sim_time,
+                }
+            ],
+            remappings=[('scan', '/lidar/scan_filtered'),
+                        ('flatscan', 'flatscan_localization')]
+    )
+
+    occupancy_grid_localizer_node = ComposableNode(
+            package='isaac_ros_occupancy_grid_localizer',
+            plugin='nvidia::isaac_ros::occupancy_grid_localizer::OccupancyGridLocalizerNode',
+            name='occupancy_grid_localizer',
+            condition=IfCondition(launch_amcl),
+            parameters=[  # todo: get parameters
+                {
+                    'use_sim_time': use_sim_time,
+                    'loc_result_frame': 'map',
+                    'map_yaml_path': map_file,
+                }
+            ],
+            remappings=[
+                ('localization_result', '/initialpose')
+            ]
+    )
+
+    # todo: use Node instead of ComposableNodeContainer
+    occupancy_grid_localizer_container = Node(
+            name=container_name_full,  # 'occupancy_grid_localizer_container'
+            namespace='',
+            package='rclcpp_components',
+            executable='component_container_mt',
+            output='screen',
+            condition=UnlessCondition(use_composition),
+            # composable_node_descriptions=[
+            #     occupancy_grid_localizer_node,
+            #     laserscan_to_flatscan_node
+            # ],
+    )
+
+    load_gpu_laser_composable_node = LoadComposableNodes(
+            target_container=container_name_full,
+            composable_node_descriptions=[
+                occupancy_grid_localizer_node,
+                laserscan_to_flatscan_node
+            ]
+    )
+
+    occupancy_grid_localizer_group = GroupAction(
+            actions=[
+                occupancy_grid_localizer_container,
+                load_gpu_laser_composable_node
+            ]
+    )
+
+    gpu_group = GroupAction(
+            actions=[
+                # Set common parameters
+                SetParameter(name='use_sim_time', value=use_sim_time),
+
+                # add nodes
+                visual_slam_launch_include,
+                occupancy_grid_localizer_group,
+            ]
+    )
+
     # Create Launch Description and add nodes to the launch description
     ld = LaunchDescription([
         stdout_linebuf_envvar,
@@ -526,10 +672,12 @@ def generate_launch_description():
         odom_frequency_la,
         launch_rtabmap_localizer_la,
         declare_use_composition_cmd,
+        declare_container_name_cmd,
         declare_autostart_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         load_nodes,
+        load_composable_nodes,
         slam_toolbox_localizer_node,
         ekf_nodes,
         rtabmap_localizer_node,
@@ -537,9 +685,11 @@ def generate_launch_description():
         base_frame_la,
         odom_frame_la,
         publish_odom_tf_la,
+        use_gpu_la,
         rtabmap_group,
         rtabmap_icp_odometry,
         kiss_icp_node,
+        gpu_group,
         # rtabmap_icp_odometry,
         # rf2o_odometry_node,
         # laser_scan_matcher_node
