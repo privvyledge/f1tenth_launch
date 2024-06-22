@@ -50,7 +50,7 @@ def generate_launch_description():
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
-    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='True')
+    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
@@ -138,20 +138,20 @@ def generate_launch_description():
             description='Synchronize topics')
 
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
-                                                    default_value='False',
+                                                    default_value=stereo_to_pointcloud,
                                                     description='Whether to publish a PointCloud2 message from stereo '
                                                                 'images.')
 
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='False',
+                                                        default_value=depthimage_to_pointcloud,
                                                         description='Whether to publish a PointCloud2 message from a '
                                                                     'depth image.')
     detect_ground_and_obstacles_la = DeclareLaunchArgument('detect_ground_and_obstacles',
-                                                           default_value='False',
+                                                           default_value=detect_ground_and_obstacles,
                                                            description='Whether to use RTABmaps obstacle detector.')
 
     publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
-                                                            default_value='True',
+                                                            default_value=publish_realsense_pointcloud,
                                                             description='Whether to publish PointClouds using '
                                                                         'librealsense SDK. Could be disabled when '
                                                                         'recording ROSBags or mapping. ')

@@ -26,15 +26,15 @@
     enable_pose: false
 
     rgb_camera:
-      color_profile: "640x360x60"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      color_profile: "640x360x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
       color_format: "RGB8"
       enable_auto_exposure: true
 
     depth_module:
-      depth_profile: "640x360x60"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      depth_profile: "640x360x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
       depth_format: "Z16"
       enable_auto_exposure: true
-      infra_profile: "640x360x60"
+      infra_profile: "640x360x30"
       infra_format: "RGB8"
       infra1_format: "Y8"
       infra2_format: "Y8"
@@ -78,15 +78,15 @@
     hole_filling_filter:
       enable: false
 
-    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
-    color_qos: "SENSOR_DATA"
-    color_info_qos: "SENSOR_DATA"
-    infra_qos: "SENSOR_DATA"
-    infra1_qos: "SENSOR_DATA"
-    infra2_qos: "SENSOR_DATA"
-    depth_qos: "SENSOR_DATA"
-    depth_info_qos: "SENSOR_DATA"
-    pointcloud.pointcloud_qos: "SENSOR_DATA"
-    gyro_qos: "SENSOR_DATA"
-    accel_qos: "SENSOR_DATA"
+#    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
+#    color_qos: "SENSOR_DATA"
+#    color_info_qos: "SENSOR_DATA"
+#    infra_qos: "SENSOR_DATA"
+#    infra1_qos: "SENSOR_DATA"
+#    infra2_qos: "SENSOR_DATA"
+#    depth_qos: "SENSOR_DATA"
+#    depth_info_qos: "SENSOR_DATA"
+#    pointcloud.pointcloud_qos: "SENSOR_DATA"
+#    gyro_qos: "SENSOR_DATA"
+#    accel_qos: "SENSOR_DATA"
 

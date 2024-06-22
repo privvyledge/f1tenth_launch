@@ -23,9 +23,6 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def launch_setup(context, *args, **kwargs):
-    # todo: add launch argument to launch realsense  or not
-    # todo: use realsense config
-
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     two_d_mode = LaunchConfiguration('two_d_mode', default=False)

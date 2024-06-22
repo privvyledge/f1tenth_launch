@@ -1,5 +1,7 @@
 """
 todo: move to a ROS best practices github repository
+
+A nice tutorial: https://roboticscasual.com/tutorial-ros2-launch-files-all-you-need-to-know/
 """
 import os
 from launch import LaunchDescription, LaunchContext

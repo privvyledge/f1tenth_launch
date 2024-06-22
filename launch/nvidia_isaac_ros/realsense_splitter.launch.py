@@ -31,8 +31,8 @@ def launch_setup(context, *args, **kwargs):
     realsense_config_file = LaunchConfiguration('realsense_config_file', default=realsense_config_file_path)
     # '/camera/camera/depth/image_rect_raw' or '/camera/camera/aligned_depth_to_color/image_raw'
     depth_topic = LaunchConfiguration('depth_topic', default='/camera/camera/depth/image_rect_raw')
-    input_qos = LaunchConfiguration('input_qos', default='SENSOR_DATA')
-    output_qos = LaunchConfiguration('output_qos', default='SENSOR_DATA')
+    input_qos = LaunchConfiguration('input_qos', default='SYSTEM_DEFAULT')
+    output_qos = LaunchConfiguration('output_qos', default='SYSTEM_DEFAULT')
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -61,7 +61,8 @@ def launch_setup(context, *args, **kwargs):
                                           description="The QoS of the realsense topic published by the driver.")
 
     output_qos_arg = DeclareLaunchArgument('output_qos', default_value=output_qos,
-                                           description="The output QoS of the topics published by the realsense splitter.")
+                                           description="The output QoS of the topics published by the "
+                                                       "realsense splitter node.")
 
     # Add launch arguments to a list
     launch_args = [
@@ -77,7 +78,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Run nodes
     '''Create a container if not joining one for the realsense splitter'''
-    realsense_container = Node(
+    realsense_splitter_container = Node(
             name=component_container_name,
             package='rclcpp_components',
             executable='component_container_mt',
@@ -85,11 +86,7 @@ def launch_setup(context, *args, **kwargs):
             condition=UnlessCondition(attach_to_shared_component_container)
     )
 
-    load_composable_nodes = LoadComposableNodes(
-            target_container=component_container_name,
-            composable_node_descriptions=[
-                # RealSense splitter node
-                ComposableNode(
+    realsense_splitter_component = ComposableNode(
                         namespace="camera",
                         name='realsense_splitter_node',
                         package='realsense_splitter',
@@ -109,8 +106,13 @@ def launch_setup(context, *args, **kwargs):
                             ('input/pointcloud', 'camera/depth/color/points'),
                             ('input/pointcloud_metadata', 'camera/depth/metadata'),
                         ]
-                ),
-                # Node Factory
+                )
+
+    realsense_driver_component = LoadComposableNodes(
+            condition=IfCondition(launch_realsense_driver),
+            target_container=component_container_name,
+            composable_node_descriptions=[
+                # Realsense Driver Node Factory
                 ComposableNode(
                         condition=IfCondition(launch_realsense_driver),
                         namespace="camera",
@@ -121,8 +123,17 @@ def launch_setup(context, *args, **kwargs):
             ]
     )
 
+    load_composable_nodes = LoadComposableNodes(
+            target_container=component_container_name,
+            composable_node_descriptions=[
+                # RealSense splitter node
+                realsense_splitter_component
+            ]
+    )
+
     # Add launch arguments and nodes to the launch description
-    ld = launch_args + [realsense_container,
+    ld = launch_args + [realsense_splitter_container,
+                        realsense_driver_component,
                         load_composable_nodes]
     return ld
 
