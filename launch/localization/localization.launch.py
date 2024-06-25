@@ -1,4 +1,5 @@
 """
+Currently untested with "namespace". Might fail if a namespace is specified
 todo:
     * add default booleans to LaunchConfigurations instead of LaunchArguments to streamline
     * run tests and remove todos below
@@ -201,7 +202,7 @@ def generate_launch_description():
         'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: test
     }
 
-    # Only it applys when `use_namespace` is True.
+    # It only applys when `use_namespace` is True.
     # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
     # in config file 'nav2_multirobot_params.yaml' as a default & example.
     # User defined config file should contain '<robot_namespace>' keyword for the replacements.
