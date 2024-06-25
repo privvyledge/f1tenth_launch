@@ -1,5 +1,7 @@
 """
 todo:
+    * add default booleans to LaunchConfigurations instead of LaunchArguments to streamline
+    * run tests and remove todos below
     * add isaac ros visual slam
 todo: if odom nodes fail, test using the sensors base_frame instead
 todo: load nodes using composition (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L145)
@@ -22,7 +24,7 @@ from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode, ParameterFile
-from nav2_common.launch import RewrittenYaml
+from nav2_common.launch import RewrittenYaml, ReplaceString
 from ament_index_python import get_package_share_directory
 
 
@@ -45,21 +47,22 @@ def generate_launch_description():
 
     # declare launch configurations
     namespace = LaunchConfiguration('namespace')
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    use_composition = LaunchConfiguration('use_composition')
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    use_composition = LaunchConfiguration('use_composition', default=False)
     container_name = LaunchConfiguration('container_name', default='nav2_container')
     container_name_full = (namespace, '/', container_name)
-    autostart = LaunchConfiguration('autostart')
-    use_respawn = LaunchConfiguration('use_respawn')
+    autostart = LaunchConfiguration('autostart', default=True)
+    use_respawn = LaunchConfiguration('use_respawn', default=False)
     params_file = LaunchConfiguration('params_file')
     map_file = LaunchConfiguration('map_file')
-    launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer')
-    launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion')
-    launch_ekf_odom = LaunchConfiguration('launch_ekf_odom')
-    launch_ekf_map = LaunchConfiguration('launch_ekf_map')
+    launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer', default=False)
+    launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
+    launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
+    launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=True)
     odom_frequency = LaunchConfiguration('odom_frequency')
     map_frequency = LaunchConfiguration('map_frequency')
-    launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer')
+    launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer', default=False)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
     log_level = LaunchConfiguration('log_level')
 
@@ -98,22 +101,22 @@ def generate_launch_description():
     )
     launch_slam_toolbox_localizer_la = DeclareLaunchArgument(
             'launch_slam_toolbox_localizer',
-            default_value='False',
+            default_value=launch_slam_toolbox_localizer,
             description='Whether to launch slam toolbox\'s localizer'
     )
     launch_sensor_fusion_la = DeclareLaunchArgument(
             'launch_sensor_fusion',
-            default_value='True',
+            default_value=launch_sensor_fusion,
             description='Whether to launch either EKF/UKF node.'
     )
     launch_ekf_odom_la = DeclareLaunchArgument(
             'launch_ekf_odom',
-            default_value='True',
+            default_value=launch_ekf_odom,
             description='Whether to launch the local/odom EKF/UKF node.'
     )
     launch_ekf_map_la = DeclareLaunchArgument(
             'launch_ekf_map',
-            default_value='True',
+            default_value=launch_ekf_map,
             description='Whether to launch the global/map EKF/UKF node.'
     )
     odom_frequency_la = DeclareLaunchArgument(
@@ -128,24 +131,24 @@ def generate_launch_description():
     )
     launch_rtabmap_localizer_la = DeclareLaunchArgument(
             'launch_rtabmap_localizer',
-            default_value='False',
+            default_value=launch_rtabmap_localizer,
             description='Whether to launch the RTABMaps global localizer node.'
     )
     rtabmap_database_file_la = DeclareLaunchArgument('rtabmap_database_file',
                                                      default_value=rtabmap_database_file,
                                                      description="Path to the config file for the 3D mapping node.")
     declare_use_composition_cmd = DeclareLaunchArgument(
-            'use_composition', default_value='False',  # set to True
+            'use_composition', default_value=use_composition,  # set to True
             description='Use composed bringup if True')
     declare_container_name_cmd = DeclareLaunchArgument(
             'container_name', default_value=container_name,
             description='the name of conatiner that nodes will load in if use composition')
 
     declare_autostart_cmd = DeclareLaunchArgument(
-            'autostart', default_value='true',
+            'autostart', default_value=autostart,
             description='Automatically startup the nav2 stack')
     declare_use_respawn_cmd = DeclareLaunchArgument(
-            'use_respawn', default_value='False',
+            'use_respawn', default_value=use_respawn,
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
     declare_log_level_cmd = DeclareLaunchArgument(
             'log_level', default_value='info',
@@ -197,6 +200,15 @@ def generate_launch_description():
         'yaml_filename': map_file,
         'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: test
     }
+
+    # Only it applys when `use_namespace` is True.
+    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
+    # in config file 'nav2_multirobot_params.yaml' as a default & example.
+    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
+    params_file = ReplaceString(
+            source_file=params_file,
+            replacements={'<robot_namespace>': ('/', namespace)},
+            condition=IfCondition(use_namespace))
 
     configured_params = ParameterFile(
             RewrittenYaml(
@@ -613,17 +625,22 @@ def generate_launch_description():
     )
 
     # todo: use Node instead of ComposableNodeContainer
-    occupancy_grid_localizer_container = Node(
-            name=container_name_full,  # 'occupancy_grid_localizer_container'
-            namespace='',
-            package='rclcpp_components',
-            executable='component_container_mt',
-            output='screen',
-            condition=UnlessCondition(use_composition),
-            # composable_node_descriptions=[
-            #     occupancy_grid_localizer_node,
-            #     laserscan_to_flatscan_node
-            # ],
+    occupancy_grid_localizer_container = GroupAction(
+            actions=[
+                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                Node(
+                        name='occupancy_grid_localizer_container',
+                        namespace='',  # namespace
+                        package='rclcpp_components',
+                        executable='component_container_mt',
+                        output='screen',
+                        condition=UnlessCondition(use_composition),
+                        # composable_node_descriptions=[
+                        #     occupancy_grid_localizer_node,
+                        #     laserscan_to_flatscan_node
+                        # ],
+                )
+            ]
     )
 
     load_gpu_laser_composable_node = LoadComposableNodes(

@@ -392,7 +392,7 @@ def launch_setup(context, *args, **kwargs):
         left_image_topic = '/camera/realsense_splitter_node/output/infra_1'
         right_image_topic = '/camera/realsense_splitter_node/output/infra_2'
         # todo: might need to launch RTABMaps depth realignment to color node if using realsense splitter
-        depth_topic = '/camera/camera/realsense_splitter_node/output/depth'
+        depth_topic = '/camera/realsense_splitter_node/output/depth'
 
     # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
     mapping_3d_cpu_node = IncludeLaunchDescription(

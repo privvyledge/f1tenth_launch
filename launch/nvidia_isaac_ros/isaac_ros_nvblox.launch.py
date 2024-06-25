@@ -1,4 +1,6 @@
 """
+Do not run this live even though it runs on the GPU as it still uses a lot of CPU resources,
+e.g 100% on Jetson Orin Nano.
 Todo: (https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nvblox/blob/main/nvblox_examples/nvblox_examples_bringup/launch/perception/nvblox.launch.py)
     * add people segmentation
     * add dynamic object removal
@@ -70,12 +72,12 @@ def launch_setup(context, *args, **kwargs):
                                                                       "realsense splitter component.")
 
     depth_topic_arg = DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/camera/realsense_splitter_node/output/depth',
+                'depth_topic', default_value='/camera/realsense_splitter_node/output/depth',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/camera/aligned_depth_to_color/image_raw", '
                             '"/camera/camera/depth/image_rect_raw", '
                             '"/camera/depth_registered/image_rect", '
-                            '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
+                            '"/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                             '"/camera/realigned_depth_to_color/image_raw"')
 
     left_image_topic_la = DeclareLaunchArgument(

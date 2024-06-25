@@ -62,7 +62,7 @@
     linear_accel_cov: 0.01
 
     publish_tf: true
-    tf_publish_rate: 30.0
+#    tf_publish_rate: 200.0
     clip_distance: 5.0  # meters
 
     # Enable post-processing filters

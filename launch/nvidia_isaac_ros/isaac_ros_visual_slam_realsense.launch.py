@@ -138,10 +138,12 @@ def launch_setup(context, *args, **kwargs):
     #         extra_arguments=[{'use_intra_process_comms': LaunchConfiguration("intra_process_comms")}],
     #         parameters=[config_file])
 
+    # if a transformError occurs, it's probably due to a low realsense tf_publish_rate
     visual_slam_node = ComposableNode(
             name='visual_slam_node',
             package='isaac_ros_visual_slam',
             plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
+            # extra_arguments=[{"use_intra_process_comms": True}],  # todo: test
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'num_cameras': 2,  # two for a single stereo camera
@@ -157,7 +159,11 @@ def launch_setup(context, *args, **kwargs):
                 'accel_noise_density': 0.001862,
                 'accel_random_walk': 0.003,
                 'calibration_frequency': 200.0,
-                'image_jitter_threshold_ms': 22.00,
+                'sync_matching_threshold_ms': 5.0,  # approximate stereo synchronization tolerance
+                'image_jitter_threshold_ms': 70.00,  # 1000 / (Hz) + buffer. Default: 34.0, realsense 22.00 (for 45 Hz)
+                'imu_jitter_threshold_ms': 10.0,
+                'image_buffer_size': 100,  # Default: 100
+                'imu_buffer_size': 50,  # Default: 50
                 'path_max_size': 200,  # Default: 1024. For visualization purposes only
                 'map_frame': 'map',
                 'odom_frame': 'odom',
@@ -184,7 +190,6 @@ def launch_setup(context, *args, **kwargs):
                         ('visual_slam/imu', 'camera/camera/imu')]
     )
 
-    # todo: use Node instead of ComposableNodeContainer
     visual_slam_launch_container = ComposableNodeContainer(
             name='visual_slam_launch_container',
             namespace='',
