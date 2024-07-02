@@ -18,7 +18,7 @@ from ament_index_python.packages import get_package_share_directory
 def launch_setup(context, *args, **kwargs):
     # Get package directories
     # realsense_config_dir = get_package_share_directory('nvblox_examples_bringup')  # todo: switch to my realsense config
-    realsense_config_dir = get_package_share_directory('nvblox_examples_bringup')
+    realsense_config_dir = get_package_share_directory('f1tenth_launch')
 
     # Setup default directories
     # realsense_config.yaml, realsense.yaml
