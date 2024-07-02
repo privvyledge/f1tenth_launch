@@ -176,10 +176,10 @@ def launch_setup(context, *args, **kwargs):
                 'enable_slam_visualization': False,
                 'enable_landmarks_view': False,
                 'enable_observations_view': False,
-                'camera_optical_frames': [
-                    'camera_infra1_optical_frame',
-                    'camera_infra2_optical_frame',
-                ],  # leaving an empty list, e.g '[]' will take the parameters from messages
+                # 'camera_optical_frames': [
+                #     'camera_infra1_optical_frame',
+                #     'camera_infra2_optical_frame',
+                # ],  # leaving an empty list, e.g '[]' will take the parameters from messages
                 # 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 # 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
             }],

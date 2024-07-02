@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Todo:
-    * add realsense_splitter node
+    * use a container for realsense driver and imu
 """
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -140,18 +140,6 @@ def generate_launch_description():
                             launch_realsense_splitter_node_la])
 
     # Setup nodes
-    # realsense_node = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource(PathJoinSubstitution(
-    #                 [FindPackageShare('realsense2_camera'), 'launch', 'rs_launch.py']
-    #         )),
-    #         condition=LaunchConfigurationEquals('sensor', 'realsense'),
-    #         launch_arguments={
-    #             'pointcloud.enable': 'true',
-    #             'ordered_pc': 'true',
-    #             'initial_reset': 'true'
-    #         }.items()
-    # )
-
     realsense_node = Node(
             condition=IfCondition(PythonExpression(['not ', imu_only])),
             package='realsense2_camera',

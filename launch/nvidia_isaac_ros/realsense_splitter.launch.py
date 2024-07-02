@@ -28,11 +28,12 @@ def launch_setup(context, *args, **kwargs):
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='realsense_container')
+    intra_process_comms = LaunchConfiguration("intra_process_comms", default=True)
     realsense_config_file = LaunchConfiguration('realsense_config_file', default=realsense_config_file_path)
     # '/camera/camera/depth/image_rect_raw' or '/camera/camera/aligned_depth_to_color/image_raw'
     depth_topic = LaunchConfiguration('depth_topic', default='/camera/camera/depth/image_rect_raw')
-    input_qos = LaunchConfiguration('input_qos', default='SYSTEM_DEFAULT')
-    output_qos = LaunchConfiguration('output_qos', default='SYSTEM_DEFAULT')
+    input_qos = LaunchConfiguration('input_qos', default='SENSOR_DATA')
+    output_qos = LaunchConfiguration('output_qos', default='SENSOR_DATA')
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -50,6 +51,10 @@ def launch_setup(context, *args, **kwargs):
     component_container_name_arg = DeclareLaunchArgument('component_container_name',
                                                          default_value=component_container_name,
                                                          description="The name of the optional container to join")
+
+    intra_process_comms_arg = DeclareLaunchArgument('intra_process_comms',
+                                                    default_value=intra_process_comms,
+                                                    description="Whether to launch components with intra process communication.")
 
     realsense_config_file_arg = DeclareLaunchArgument('realsense_config_file', default_value=realsense_config_file,
                                                       description="Path to a config file")
@@ -70,6 +75,7 @@ def launch_setup(context, *args, **kwargs):
         launch_realsense_driver_launch_arg,
         attach_to_shared_component_container_arg,
         component_container_name_arg,
+        intra_process_comms_arg,
         realsense_config_file_arg,
         depth_topic_arg,
         input_qos_arg,
@@ -87,26 +93,26 @@ def launch_setup(context, *args, **kwargs):
     )
 
     realsense_splitter_component = ComposableNode(
-                        namespace="camera",
-                        name='realsense_splitter_node',
-                        package='realsense_splitter',
-                        plugin='nvblox::RealsenseSplitterNode',
-                        parameters=[{
-                            'use_sim_time': use_sim_time,
-                            'input_qos': input_qos,
-                            'output_qos': output_qos,
-                        }],
-                        remappings=[
-                            ('input/infra_1', 'camera/infra1/image_rect_raw'),
-                            ('input/infra_1_metadata', 'camera/infra1/metadata'),
-                            ('input/infra_2', 'camera/infra2/image_rect_raw'),
-                            ('input/infra_2_metadata', 'camera/infra2/metadata'),
-                            ('input/depth', 'camera/depth/image_rect_raw'),
-                            ('input/depth_metadata', 'camera/depth/metadata'),
-                            ('input/pointcloud', 'camera/depth/color/points'),
-                            ('input/pointcloud_metadata', 'camera/depth/metadata'),
-                        ]
-                )
+            namespace="camera",
+            name='realsense_splitter_node',
+            package='realsense_splitter',
+            plugin='nvblox::RealsenseSplitterNode',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'input_qos': input_qos,
+                'output_qos': output_qos,
+            }],
+            remappings=[
+                ('input/infra_1', 'camera/infra1/image_rect_raw'),
+                ('input/infra_1_metadata', 'camera/infra1/metadata'),
+                ('input/infra_2', 'camera/infra2/image_rect_raw'),
+                ('input/infra_2_metadata', 'camera/infra2/metadata'),
+                ('input/depth', 'camera/depth/image_rect_raw'),
+                ('input/depth_metadata', 'camera/depth/metadata'),
+                ('input/pointcloud', 'camera/depth/color/points'),
+                ('input/pointcloud_metadata', 'camera/depth/metadata'),
+            ]
+    )
 
     realsense_driver_component = LoadComposableNodes(
             condition=IfCondition(launch_realsense_driver),
@@ -117,7 +123,8 @@ def launch_setup(context, *args, **kwargs):
                         namespace="camera",
                         package='realsense2_camera',
                         plugin='realsense2_camera::RealSenseNodeFactory',
-                        parameters=[realsense_config_file]  # todo: pass the input QoS
+                        parameters=[realsense_config_file],  # todo: pass the input QoS
+                        extra_arguments=[{'use_intra_process_comms': intra_process_comms}]
                 )
             ]
     )
