@@ -17,10 +17,12 @@ from ament_index_python.packages import get_package_share_directory
 
 def launch_setup(context, *args, **kwargs):
     # Get package directories
-    realsense_config_dir = get_package_share_directory('nvblox_examples_bringup')  # todo: switch to my realsense config
+    # realsense_config_dir = get_package_share_directory('nvblox_examples_bringup')  # todo: switch to my realsense config
+    realsense_config_dir = get_package_share_directory('nvblox_examples_bringup')
 
     # Setup default directories
-    realsense_config_file_path = os.path.join(realsense_config_dir, 'config', 'sensors', 'realsense.yaml')
+    # realsense_config.yaml, realsense.yaml
+    realsense_config_file_path = os.path.join(realsense_config_dir, 'config', 'sensors', 'realsense_config.yaml')
 
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
