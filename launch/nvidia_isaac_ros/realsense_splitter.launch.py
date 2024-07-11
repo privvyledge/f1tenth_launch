@@ -56,7 +56,8 @@ def launch_setup(context, *args, **kwargs):
 
     intra_process_comms_arg = DeclareLaunchArgument('intra_process_comms',
                                                     default_value=intra_process_comms,
-                                                    description="Whether to launch components with intra process communication.")
+                                                    description="Whether to launch "
+                                                                "components with intra process communication.")
 
     realsense_config_file_arg = DeclareLaunchArgument('realsense_config_file', default_value=realsense_config_file,
                                                       description="Path to a config file")
