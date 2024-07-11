@@ -21,6 +21,8 @@
     enable_infra1: true
     enable_infra2: true
     pointcloud.enable: true  # overridden by launch files
+    colorizer.enable: false
+    align_depth.enable: true # Overridden by launch files
     enable_gyro: true
     enable_accel: true
     enable_rgbd: false
@@ -43,15 +45,7 @@
       infra1_format: "Y8"
       infra2_format: "Y8"
       emitter_enabled: 0  # set to 0 if using infra.  Overridden by launch files
-      emitter_on_off: false  # Overridden by launch files
-
-#    auto_exposure_priority: false
-
-    colorizer:
-      enable: false
-
-    align_depth:
-      enable: true
+      emitter_on_off: False  # Overridden by launch files
 
     pointcloud:
       ordered_pc: true
@@ -82,14 +76,14 @@
 #    hole_filling_filter:
 #      enable: false
 
-    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
-    color_qos: "SENSOR_DATA"
-    color_info_qos: "SENSOR_DATA"
-    infra_qos: "SENSOR_DATA"
-    infra1_qos: "SENSOR_DATA"
-    infra2_qos: "SENSOR_DATA"
-    depth_qos: "SENSOR_DATA"
-    depth_info_qos: "SENSOR_DATA"
-    pointcloud.pointcloud_qos: "SENSOR_DATA"
-    gyro_qos: "SENSOR_DATA"
-    accel_qos: "SENSOR_DATA"
+#    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
+#    color_qos: "SENSOR_DATA"
+#    color_info_qos: "SENSOR_DATA"
+#    infra_qos: "SENSOR_DATA"
+#    infra1_qos: "SENSOR_DATA"
+#    infra2_qos: "SENSOR_DATA"
+#    depth_qos: "SENSOR_DATA"
+#    depth_info_qos: "SENSOR_DATA"
+#    pointcloud.pointcloud_qos: "SENSOR_DATA"
+#    gyro_qos: "SENSOR_DATA"
+#    accel_qos: "SENSOR_DATA"

@@ -37,6 +37,7 @@ def generate_launch_description():
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
     log_level = LaunchConfiguration('log_level')
     enable_pointcloud = LaunchConfiguration('enable_pointcloud')
+    align_depth = LaunchConfiguration('align_depth')
     emitter_enabled = LaunchConfiguration('emitter_enabled')
     emitter_on_off = LaunchConfiguration('emitter_on_off')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
@@ -100,6 +101,11 @@ def generate_launch_description():
             description='Whether to publish PointClouds using librealsense SDK. '
                         'Could be disabled when recording ROSBags or mapping. ')
 
+    align_depth_la = DeclareLaunchArgument(
+            'align_depth',
+            default_value='True',
+            description='Whether to align the depth to other frames')
+
     emitter_enabled_la = DeclareLaunchArgument(
             'emitter_enabled',
             default_value='1',
@@ -135,7 +141,8 @@ def generate_launch_description():
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, declare_namespace_cmd, declare_use_namespace_cmd,
                             declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
-                            realsense_params_file_cmd, enable_pointcloud_la, emitter_enabled_la, emitter_on_off_la,
+                            realsense_params_file_cmd, enable_pointcloud_la, align_depth_la,
+                            emitter_enabled_la, emitter_on_off_la,
                             realsense_imu_la, imu_only_cmd, launch_imu_filter_cmd,
                             launch_realsense_splitter_node_la])
 
@@ -151,6 +158,7 @@ def generate_launch_description():
                 {
                     "use_sim_time": use_sim_time,
                     "pointcloud.enable": enable_pointcloud,
+                    "align_depth.enable": align_depth,
                     "depth_module.emitter_enabled": emitter_enabled,
                     "depth_module.emitter_on_off": emitter_on_off,
                  },

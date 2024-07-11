@@ -87,6 +87,7 @@ def generate_launch_description():
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')
+    align_realsense_depth = LaunchConfiguration('align_realsense_depth', default='True')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
@@ -295,6 +296,10 @@ def generate_launch_description():
                                                                         'librealsense SDK. Could be disabled when '
                                                                         'recording ROSBags or mapping. ')
 
+    align_realsense_depth_la = DeclareLaunchArgument('align_realsense_depth',
+                                           default_value=align_realsense_depth,
+                                           description='Whether to align the depth to other frames')
+
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
             default_value=realsense_emitter_enabled,
@@ -350,7 +355,7 @@ def generate_launch_description():
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
-        detect_ground_and_obstacles_la, publish_realsense_pointcloud_la,
+        detect_ground_and_obstacles_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
     ]
 
@@ -398,6 +403,7 @@ def generate_launch_description():
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
                 "detect_ground_and_obstacles": detect_ground_and_obstacles,
                 "publish_realsense_pointcloud": publish_realsense_pointcloud,
+                "align_realsense_depth": align_realsense_depth,
                 "realsense_emitter_enabled": realsense_emitter_enabled,
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,

@@ -55,6 +55,7 @@ def generate_launch_description():
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud')
+    align_realsense_depth = LaunchConfiguration('align_realsense_depth')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
@@ -93,6 +94,10 @@ def generate_launch_description():
                                                                         'librealsense SDK. Could be disabled when '
                                                                         'recording ROSBags or mapping. ')
 
+    align_realsense_depth_la = DeclareLaunchArgument('align_realsense_depth',
+                                           default_value='True',
+                                           description='Whether to align the depth to other frames')
+
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
             default_value='1',
@@ -117,7 +122,7 @@ def generate_launch_description():
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
-                            publish_realsense_pointcloud_la, realsense_emitter_enabled_la,
+                            publish_realsense_pointcloud_la, align_realsense_depth_la, realsense_emitter_enabled_la,
                             realsense_emitter_on_off_la, launch_realsense_splitter_node_la])
 
     # Nodes
@@ -140,6 +145,7 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': use_sim_time,
                 'enable_pointcloud': publish_realsense_pointcloud,
+                "align_depth": align_realsense_depth,
                 'emitter_enabled': realsense_emitter_enabled,
                 'emitter_on_off': realsense_emitter_on_off,
                 'launch_realsense_splitter_node': launch_realsense_splitter_node,
