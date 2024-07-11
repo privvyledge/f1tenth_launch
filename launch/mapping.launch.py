@@ -84,11 +84,12 @@ def launch_setup(context, *args, **kwargs):
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
+    reset_realsense = LaunchConfiguration('reset_realsense', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')
     align_realsense_depth = LaunchConfiguration('align_realsense_depth', default='True')
-    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='1')
-    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='True')
-    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
+    realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
+    realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
 
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -249,6 +250,11 @@ def launch_setup(context, *args, **kwargs):
                                                            default_value=detect_ground_and_obstacles,
                                                            description='Whether to use RTABmaps obstacle detector.')
 
+    reset_realsense_la = DeclareLaunchArgument(
+            'reset_realsense',
+            default_value='False',
+            description='Whether to reset the realsense device.')
+
     publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
                                                             default_value=publish_realsense_pointcloud,
                                                             description='Whether to publish PointClouds using '
@@ -312,7 +318,7 @@ def launch_setup(context, *args, **kwargs):
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
-        detect_ground_and_obstacles_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
+        detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
     ]
 
@@ -354,6 +360,7 @@ def launch_setup(context, *args, **kwargs):
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
                 "detect_ground_and_obstacles": detect_ground_and_obstacles,
+                'reset_realsense': reset_realsense,
                 "publish_realsense_pointcloud": publish_realsense_pointcloud,
                 "align_realsense_depth": align_realsense_depth,
                 "realsense_emitter_enabled": realsense_emitter_enabled,

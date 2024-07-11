@@ -54,6 +54,7 @@ def generate_launch_description():
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles')
+    reset_realsense = LaunchConfiguration('reset_realsense')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud')
     align_realsense_depth = LaunchConfiguration('align_realsense_depth')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
@@ -88,6 +89,11 @@ def generate_launch_description():
                                                            default_value='False',
                                                            description='Whether to use RTABmaps obstacle detector.')
 
+    reset_realsense_la = DeclareLaunchArgument(
+            'reset_realsense',
+            default_value='False',
+            description='Whether to reset the realsense device.')
+
     publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
                                                             default_value='True',
                                                             description='Whether to publish PointClouds using '
@@ -100,7 +106,7 @@ def generate_launch_description():
 
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
-            default_value='1',
+            default_value='0',
             description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
                         'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
                         'VSLAM, VIO odometry, etc. '
@@ -122,7 +128,8 @@ def generate_launch_description():
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
-                            publish_realsense_pointcloud_la, align_realsense_depth_la, realsense_emitter_enabled_la,
+                            reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
+                            realsense_emitter_enabled_la,
                             realsense_emitter_on_off_la, launch_realsense_splitter_node_la])
 
     # Nodes
@@ -144,6 +151,7 @@ def generate_launch_description():
             )),
             launch_arguments={
                 'use_sim_time': use_sim_time,
+                'reset_realsense': reset_realsense,
                 'enable_pointcloud': publish_realsense_pointcloud,
                 "align_depth": align_realsense_depth,
                 'emitter_enabled': realsense_emitter_enabled,

@@ -36,6 +36,7 @@ def generate_launch_description():
     unite_imu_method = LaunchConfiguration('unite_imu_method')
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
     log_level = LaunchConfiguration('log_level')
+    reset_realsense = LaunchConfiguration('reset_realsense')
     enable_pointcloud = LaunchConfiguration('enable_pointcloud')
     align_depth = LaunchConfiguration('align_depth')
     emitter_enabled = LaunchConfiguration('emitter_enabled')
@@ -95,6 +96,11 @@ def generate_launch_description():
             default_value=realsense_config,
             description='Full path to the realsense config file to use.')
 
+    reset_realsense_la = DeclareLaunchArgument(
+            'reset_realsense',
+            default_value='False',
+            description='Whether to reset the realsense device.')
+
     enable_pointcloud_la = DeclareLaunchArgument(
             'enable_pointcloud',
             default_value='True',
@@ -108,7 +114,7 @@ def generate_launch_description():
 
     emitter_enabled_la = DeclareLaunchArgument(
             'emitter_enabled',
-            default_value='1',
+            default_value='0',
             description='Whether to enable the IR emitters to improve depth and pointcloud quality. '
                         'Unfortunately, this renders the stereo IR cameras unusable for mapping, '
                         'VSLAM, VIO odometry, etc. '
@@ -141,7 +147,7 @@ def generate_launch_description():
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, declare_namespace_cmd, declare_use_namespace_cmd,
                             declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
-                            realsense_params_file_cmd, enable_pointcloud_la, align_depth_la,
+                            realsense_params_file_cmd, reset_realsense_la, enable_pointcloud_la, align_depth_la,
                             emitter_enabled_la, emitter_on_off_la,
                             realsense_imu_la, imu_only_cmd, launch_imu_filter_cmd,
                             launch_realsense_splitter_node_la])
@@ -157,6 +163,7 @@ def generate_launch_description():
                 configured_params,
                 {
                     "use_sim_time": use_sim_time,
+                    "initial_reset": reset_realsense,
                     "pointcloud.enable": enable_pointcloud,
                     "align_depth.enable": align_depth,
                     "depth_module.emitter_enabled": emitter_enabled,
