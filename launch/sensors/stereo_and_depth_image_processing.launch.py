@@ -76,6 +76,7 @@ def generate_launch_description():
     register_depth = LaunchConfiguration('register_depth')
     rtabmap_depth_decimation = LaunchConfiguration('rtabmap_depth_decimation')
     rtabmap_voxel_size = LaunchConfiguration('rtabmap_voxel_size')
+    qos = LaunchConfiguration('qos')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -88,11 +89,11 @@ def generate_launch_description():
                 'queue_size', default_value='1',
                 description='')
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
-                                                    default_value='False',
+                                                    default_value='True',
                                                     description='Whether to publish a PointCloud2 message '
                                                                 'from stereo images.')
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='True',
+                                                        default_value='False',
                                                         description='Whether to publish a PointCloud2 message '
                                                                     'from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
@@ -135,6 +136,9 @@ def generate_launch_description():
             'rtabmap_voxel_size', default_value='0.0',
             description='Pointcloud voxel size for voxel filtering when using rtabmap. '
                         'Set to 0.0 to disable and publish full cloud.')
+    qos_la = DeclareLaunchArgument(
+            'qos', default_value='2',
+            description='Specific QoS used for image input data: 0=system default, 1=Reliable, 2=Best Effort.')
 
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la, queue_size_la,
@@ -143,7 +147,7 @@ def generate_launch_description():
                             rgb_image_topic_la, depth_image_topic_la, color_pointcloud_la,
                             use_image_proc_la, use_rtabmap_la,
                             detect_ground_and_obstacles_la, register_depth_la,
-                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la])
+                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la, qos_la])
 
     # Nodes
     # ########################## Stereo to disparity and pointcloud
@@ -160,7 +164,7 @@ def generate_launch_description():
                         plugin='stereo_image_proc::DisparityNode',
                         parameters=[{
                             'approximate_sync': approx_sync,
-                            'use_system_default_qos': True,
+                            'use_system_default_qos': False,  # True: system_default, False: sensor_data
                             'stereo_algorithm': 0,  # 0: block matching, 1: semi-global block matching
                             'prefilter_size': 9,
                             'prefilter_cap': 31,
@@ -193,7 +197,7 @@ def generate_launch_description():
                             'approximate_sync': approx_sync,
                             'avoid_point_cloud_padding': False,
                             'use_color': color_pointcloud,
-                            'use_system_default_qos': True,
+                            'use_system_default_qos': False,  # True: system_default, False: sensor_data
                             'queue_size': queue_size,
                             'use_sim_time': use_sim_time,
                         }],
@@ -268,7 +272,7 @@ def generate_launch_description():
     )
 
     # ######### RTabMap depth to pointcloud to depth.
-    # Todo: since these work with either stereo or depth. Refactore with a nested GroupAction below
+    # Todo: since these work with either stereo or depth. Refactor with a nested GroupAction below
     rtabmap_depth_to_pointcloud_xyz = GroupAction(
             condition=UnlessCondition(color_pointcloud),
             actions=[
@@ -280,7 +284,7 @@ def generate_launch_description():
                             {'decimation': rtabmap_depth_decimation},  # 1 to disable decimation
                             {'voxel_size': rtabmap_voxel_size},  # (m) 0.0 to disable filtering
                             {'min_depth ': 0.105},  # (m) 0.0 to disable filtering. 0.105 or 0.28
-                            {'max_depth ': 10.0},  # (m) 0.0 to disable filtering. 2.0, 4.0, 6.0 or 10.0
+                            {'max_depth ': 6.0},  # (m) 0.0 to disable filtering. 2.0, 4.0, 6.0 or 10.0
                             {'noise_filter_radius ': 0.2},  # (m) 0.0 to disable filtering
                             # Minimum neighbors of a point to keep. (m) 0.0 to disable filtering.
                             {'noise_filter_min_neighbors ': 5},
@@ -461,6 +465,7 @@ def generate_launch_description():
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='approx_sync', value=approx_sync),
                 SetParameter(name='queue_size', value=queue_size),
+                SetParameter(name='qos', value=qos),
                 SetParameter(name='decimation', value=rtabmap_depth_decimation),
                 SetParameter(name='voxel_size', value=rtabmap_voxel_size),
 

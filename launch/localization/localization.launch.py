@@ -78,6 +78,10 @@ def generate_launch_description():
     publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')
 
     use_gpu = LaunchConfiguration('use_gpu', default='True')
+    qos_rtabmap_camera = LaunchConfiguration('qos_rtabmap', default=2)
+    qos_rtabmap_imu = LaunchConfiguration('qos_rtabmap', default=2)
+    qos = LaunchConfiguration('qos', default='SENSOR_DATA')
+    qos_imu = LaunchConfiguration('qos_imu', default='SENSOR_DATA')
 
     # Declare default launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -191,6 +195,26 @@ def generate_launch_description():
     use_gpu_la = DeclareLaunchArgument(
             'use_gpu', default_value=use_gpu,
             description='Use GPU acceleration. Default: True')
+
+    qos_rtabmap_camera_la = DeclareLaunchArgument(
+            'qos_rtabmap_camera', default_value=qos_rtabmap_camera,
+            description='Specific QoS used for '
+                        'image input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.')
+
+    qos_rtabmap_imu_la = DeclareLaunchArgument(
+            'qos_rtabmap_imu', default_value=qos_rtabmap_imu,
+            description='Specific QoS used for '
+                        'IMU input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.')
+
+    qos_la = DeclareLaunchArgument(
+            'qos', default_value=qos,
+            description='Specific QoS used for '
+                        'image input data: SYSTEM_DEFAULT, DEFAULT, SENSOR_DATA')
+
+    qos_imu_la = DeclareLaunchArgument(
+            'qos_imu', default_value=qos_imu,
+            description='Specific QoS used for '
+                        'IMU input data: SYSTEM_DEFAULT, DEFAULT, SENSOR_DATA')
 
     lifecycle_nodes = ['map_server', 'amcl']
     remappings = [('/tf', 'tf'),
@@ -544,6 +568,8 @@ def generate_launch_description():
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='queue_size', value='10'),
                 SetParameter(name='approx_sync', value='False'),
+                SetParameter(name='qos', value=qos_rtabmap_camera),
+                SetParameter(name='qos_imu', value=qos_rtabmap_imu),
                 SetParameter(name='frame_id', value=base_frame),
                 SetParameter(name='odom_frame_id', value=odom_frame),
                 # SetParameter(name='guess_frame_id', value=odom_frame),
@@ -584,10 +610,10 @@ def generate_launch_description():
                             'publish_map_to_odom_tf': 'False',
                             'publish_odom_to_baselink_tf': publish_odom_tf,
                             'launch_realsense_driver': 'False',
-                            'left_image_topic': '/camera/realsense_splitter_node/output/infra_1',
-                            'right_image_topic': '/camera/realsense_splitter_node/output/infra_2',
-                            'image_qos': 'DEFAULT',  # todo: as RTABMAP also takes in QoS arguments
-                            'imu_qos': 'DEFAULT',
+                            'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
+                            'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
+                            'image_qos': qos,  # DEFAULT. todo: as RTABMAP also takes in QoS arguments
+                            'imu_qos': qos_imu,
                             'attach_to_shared_component_container': 'False',
                             'component_container_name': 'visual_slam_launch_container',  # todo: add to container
                         }.items()
@@ -660,6 +686,7 @@ def generate_launch_description():
     )
 
     gpu_group = GroupAction(
+            condition=IfCondition(use_gpu),
             actions=[
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
@@ -708,6 +735,7 @@ def generate_launch_description():
         rtabmap_icp_odometry,
         kiss_icp_node,
         gpu_group,
+        qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_la, qos_imu_la,
         # rtabmap_icp_odometry,
         # rf2o_odometry_node,
         # laser_scan_matcher_node

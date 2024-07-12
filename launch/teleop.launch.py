@@ -50,6 +50,7 @@ def generate_launch_description():
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
+
     reset_realsense = LaunchConfiguration('reset_realsense', default='False')
     publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')
     align_realsense_depth = LaunchConfiguration('align_realsense_depth', default='True')

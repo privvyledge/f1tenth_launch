@@ -52,6 +52,12 @@ def generate_launch_description():
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
 
+    qos_image = LaunchConfiguration('qos_image')
+    qos_camera_info = LaunchConfiguration('qos_camera_info')
+    qos_imu = LaunchConfiguration('qos_imu')
+    qos_scan = LaunchConfiguration('qos_scan')
+    qos_odom = LaunchConfiguration('qos_odom')
+
     return LaunchDescription([
 
         # Launch arguments
@@ -176,6 +182,31 @@ def generate_launch_description():
                               description='Can be used to pass RTAB-Map\'s parameters or other flags like'
                                           ' --udebug and --delete_db_on_start/-d'),
 
+        DeclareLaunchArgument(
+            'qos_image', default_value='2',
+            description='Specific QoS used for '
+                        'image input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
+
+        DeclareLaunchArgument(
+                'qos_camera_info', default_value='2',
+                description='Specific QoS used for '
+                            'camera_info input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
+
+        DeclareLaunchArgument(
+                'qos_imu', default_value='2',
+                description='Specific QoS used for '
+                            'imu input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
+
+        DeclareLaunchArgument(
+                'qos_scan', default_value='1',
+                description='Specific QoS used for '
+                            'scan input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
+
+        DeclareLaunchArgument(
+                'qos_odom', default_value='1',
+                description='Specific QoS used for '
+                            'odom  data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
+
         # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py
         IncludeLaunchDescription(
@@ -226,6 +257,12 @@ def generate_launch_description():
 
                     'scan_topic': '/lidar/scan_filtered',
                     # 'scan_cloud_topic': '/lidar/point_cloud',
+
+                    'qos': qos_image,
+                    'qos_camera_info': qos_camera_info,
+                    'qos_imu': qos_imu,
+                    'qos_scan': qos_scan,
+                    'qos_odom': qos_odom,
 
                     'approx_sync': approx_sync,
                     # 'approx_sync_max_interval': approx_sync_max_interval,
