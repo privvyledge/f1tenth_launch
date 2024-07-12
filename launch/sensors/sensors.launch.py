@@ -170,7 +170,14 @@ def generate_launch_description():
                         {'output_frame': "camera_link"},  # camera_link, sensor_kit_link
                         # {'scan_height': 1},  # number of pixel rows to use. The minimum is selected
                         {'range_min': 0.01},  # 0.45
-                        {'range_max': 10.0}],
+                        {'range_max': 10.0},
+                        # {
+                        #     'qos_overrides./parameter_events.publisher.depth': 5,
+                        #     'qos_overrides./parameter_events.publisher.reliability': 'best_effort',
+                        #     # 'qos_overrides./parameter_events.publisher.history': 'keep_last',
+                        #     # 'qos_overrides./parameter_events.publisher.durability': 'volatile'
+                        # }  # Sensor Data QoS. For now has no effect
+                        ],
             remappings=[
                 ('depth', '/camera/camera/depth/image_rect_raw'),  # /camera/camera/aligned_depth_to_color/image_raw
                 ('depth_camera_info', '/camera/camera/depth/camera_info'),
