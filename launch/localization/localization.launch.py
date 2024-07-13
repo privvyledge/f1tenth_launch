@@ -416,7 +416,12 @@ def generate_launch_description():
             condition=IfCondition(launch_rgbd_odometry),
             name='rtabmap_rgbd_odom',
             namespace='rtabmap_rgbd_odom',
-            parameters=[parameters],
+            parameters=[
+                parameters,
+                {
+                    'approx_sync': True
+                }
+            ],
             output='screen',
             remappings=[
                 ('rgb/image', '/camera/camera/color/image_raw'),
@@ -435,7 +440,12 @@ def generate_launch_description():
             condition=IfCondition(launch_stereo_odometry),
             name='rtabmap_stereo_odom',
             namespace='rtabmap_stereo_odom',
-            parameters=[parameters],
+            parameters=[
+                parameters,
+                {
+                    'approx_sync': False
+                }
+            ],
             output='screen',
             remappings=[
                 ('left/image_rect', '/camera/camera/infra1/image_rect_raw'),
@@ -499,17 +509,18 @@ def generate_launch_description():
                 parameters,
                 {
                     'qos': 1,
+                    'qos_imu': qos_rtabmap_imu,
                     'expected_update_rate': 10.0,
                     'wait_for_transform': 0.3,
                     'wait_imu_to_init': False,
                     'use_sim_time': use_sim_time,
                     'queue_size': 10,
-                    'approx_sync': False,
+                    'approx_sync': True,
                     'frame_id': base_frame,
                     'odom_frame_id': odom_frame,
                     # 'guess_frame_id': odom_frame,
-                    'guess_min_translation': 0.05,  # m
-                    'guess_min_rotation': 0.005,  # rad
+                    # 'guess_min_translation': 0.05,  # m
+                    # 'guess_min_rotation': 0.005,  # rad
                     'publish_tf': publish_odom_tf,
                     'publish_null_when_lost': True,
                     # 'rtabmap_config_path': rtabmap_database_file_path,
@@ -518,7 +529,7 @@ def generate_launch_description():
             output='screen',
             remappings=[
                 ('scan', '/lidar/scan_filtered'),
-                # ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation
+                ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation. /camera/camera/imu/filtered
                 ('odom', '/odom/rtabmap/icp'),
                 ('odom_last_frame', '/rtabmap/icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
             ]
@@ -567,7 +578,7 @@ def generate_launch_description():
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='queue_size', value='10'),
-                SetParameter(name='approx_sync', value='False'),
+                # SetParameter(name='approx_sync', value='False'),  # True: for stereo, False: otherwise
                 SetParameter(name='qos', value=qos_rtabmap_camera),
                 SetParameter(name='qos_imu', value=qos_rtabmap_imu),
                 SetParameter(name='frame_id', value=base_frame),
@@ -606,12 +617,13 @@ def generate_launch_description():
                         launch_arguments={
                             'use_sim_time': use_sim_time,
                             'two_d_mode': 'True',
-                            'base_frame': 'base_link',
+                            'base_frame': base_frame,
                             'publish_map_to_odom_tf': 'False',
                             'publish_odom_to_baselink_tf': publish_odom_tf,
                             'launch_realsense_driver': 'False',
                             'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
                             'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
+                            'imu_topic': '/camera/camera/imu',  # '/camera/camera/imu/filtered'
                             'image_qos': qos,  # DEFAULT. todo: as RTABMAP also takes in QoS arguments
                             'imu_qos': qos_imu,
                             'attach_to_shared_component_container': 'False',

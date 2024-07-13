@@ -32,6 +32,7 @@ def launch_setup(context, *args, **kwargs):
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=True)
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
+    imu_topic = LaunchConfiguration('imu_topic')
     image_qos = LaunchConfiguration('image_qos', default='DEFAULT')
     imu_qos = LaunchConfiguration('imu_qos', default='DEFAULT')
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
@@ -71,6 +72,10 @@ def launch_setup(context, *args, **kwargs):
             'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
 
+    imu_topic_la = DeclareLaunchArgument(
+            'imu_topic', default_value='/camera/camera/imu',
+            description='/camera/camera/imu or /camera/camera/imu/filtered')
+
     image_qos_arg = DeclareLaunchArgument('image_qos', default_value=image_qos,
                                           description="The QoS of the stereo image topics")
 
@@ -95,6 +100,7 @@ def launch_setup(context, *args, **kwargs):
         launch_realsense_driver_launch_arg,
         left_image_topic_la,
         right_image_topic_la,
+        imu_topic_la,
         image_qos_arg,
         imu_qos_arg,
         attach_to_shared_component_container_arg,
@@ -125,7 +131,7 @@ def launch_setup(context, *args, **kwargs):
                 'accel_fps': 200,
                 'unite_imu_method': 2,
                 'publish_tf': True,
-                'tf_publish_rate': 30.0
+                # 'tf_publish_rate': 30.0
             }]
     )
 
@@ -160,7 +166,7 @@ def launch_setup(context, *args, **kwargs):
                 'accel_random_walk': 0.003,
                 'calibration_frequency': 200.0,
                 'sync_matching_threshold_ms': 5.0,  # approximate stereo synchronization tolerance
-                'image_jitter_threshold_ms': 70.00,  # 1000 / (Hz) + buffer. Default: 34.0, realsense 22.00 (for 45 Hz)
+                'image_jitter_threshold_ms': 34.00,  # 1000 / (Hz) + buffer. Default: 34.0, realsense 22.00 (for 45 Hz)
                 'imu_jitter_threshold_ms': 10.0,
                 'image_buffer_size': 100,  # Default: 100
                 'imu_buffer_size': 50,  # Default: 50
@@ -171,8 +177,10 @@ def launch_setup(context, *args, **kwargs):
                 'imu_frame': 'camera_imu_optical_frame',
                 'publish_map_to_odom_tf': publish_map_to_odom_tf,
                 'publish_odom_to_rig_tf': publish_odom_to_baselink_tf,
+                'publish_odom_to_base_tf': publish_odom_to_baselink_tf,
                 'invert_map_to_odom_tf': False,
                 'invert_odom_to_rig_tf': False,
+                'invert_odom_to_base_tf': False,
                 'enable_slam_visualization': False,
                 'enable_landmarks_view': False,
                 'enable_observations_view': False,
@@ -187,7 +195,7 @@ def launch_setup(context, *args, **kwargs):
                         ('visual_slam/camera_info_0', 'camera/camera/infra1/camera_info'),
                         ('visual_slam/image_1', right_image_topic),
                         ('visual_slam/camera_info_1', 'camera/camera/infra2/camera_info'),
-                        ('visual_slam/imu', 'camera/camera/imu')]
+                        ('visual_slam/imu', imu_topic)]
     )
 
     visual_slam_launch_container = ComposableNodeContainer(

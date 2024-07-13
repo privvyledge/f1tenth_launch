@@ -353,7 +353,7 @@ def launch_setup(context, *args, **kwargs):
                 "max_speed": max_speed,
                 "max_steering": max_steering,
                 "launch_ackermann_to_vesc_node": launch_ackermann_to_vesc_node,
-                "launch_vesc_to_odom_node": launch_throttle_interpolator_node,
+                "launch_vesc_to_odom_node": launch_vesc_to_odom_node,
                 "launch_throttle_interpolator_node": launch_throttle_interpolator_node,
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
