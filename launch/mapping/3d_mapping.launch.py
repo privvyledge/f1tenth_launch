@@ -264,7 +264,7 @@ def generate_launch_description():
                     'scan_topic': '/lidar/scan_filtered',
                     # 'scan_cloud_topic': '/lidar/point_cloud',
 
-                    'qos': qos_image,
+                    'qos': qos,
                     'qos_image': qos_image,
                     'qos_camera_info': qos_camera_info,
                     'qos_imu': qos_imu,

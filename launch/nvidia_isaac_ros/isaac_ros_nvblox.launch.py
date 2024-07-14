@@ -41,13 +41,15 @@ def launch_setup(context, *args, **kwargs):
     realsense_config = os.path.join(specialization_dir, 'nvblox_realsense.yaml')
 
     # Setup launch configuration variables
-    use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    use_sim_time = LaunchConfiguration('use_sim_time', default=True)
     global_frame = LaunchConfiguration('global_frame', default='odom')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     launch_realsense_splitter = LaunchConfiguration('launch_realsense_splitter', default=False)
     depth_topic = LaunchConfiguration('depth_topic')
+    depth_info_topic = LaunchConfiguration('depth_info_topic')
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
+    input_qos = LaunchConfiguration('input_qos', default='SENSOR_DATA')
     remove_dynamic_objects = LaunchConfiguration('remove_dynamic_objects', default=False)
     remove_people = LaunchConfiguration('remove_people', default=False)
     launch_visual_slam = LaunchConfiguration('launch_visual_slam', default=False)
@@ -62,7 +64,8 @@ def launch_setup(context, *args, **kwargs):
                         'Also used to set mapping mode to online (False) or offline (True) ')
     global_frame_arg = DeclareLaunchArgument('global_frame',
                                              default_value=global_frame,
-                                             description="The name of the TF frame in which the map is built.")
+                                             description="The name of the TF frame in which the map is built. "
+                                                         "Set to odom since nvblox cannot create a map frame. ")
     launch_realsense_driver_arg = DeclareLaunchArgument('launch_realsense_driver',
                                                         default_value=launch_realsense_driver,
                                                         description="Whether to start the camera.")
@@ -72,7 +75,7 @@ def launch_setup(context, *args, **kwargs):
                                                                       "realsense splitter component.")
 
     depth_topic_arg = DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/realsense_splitter_node/output/depth',
+                'depth_topic', default_value='/camera/camera/aligned_depth_to_color/image_raw',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/camera/aligned_depth_to_color/image_raw", '
                             '"/camera/camera/depth/image_rect_raw", '
@@ -80,13 +83,23 @@ def launch_setup(context, *args, **kwargs):
                             '"/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                             '"/camera/realigned_depth_to_color/image_raw"')
 
+    depth_info_topic_arg = DeclareLaunchArgument(
+            'depth_info_topic', default_value='/camera/camera/aligned_depth_to_color/camera_info',
+            description='Raw unaligned depth topic to subscribe to. E.g '
+                        '"/camera/camera/aligned_depth_to_color/camera_info", '
+                        '"/camera/camera/depth/camera_info"')
+
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/realsense_splitter_node/output/infra_1',
+            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
             description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
 
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/realsense_splitter_node/output/infra_2',
+            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
+
+    input_qos_arg = DeclareLaunchArgument('input_qos', default_value=input_qos,
+                                          description="The QoS of the image and IMU topics. "
+                                                      "Options: SENSOR_DATA, DEFAULT, SYSTEM_DEFAULT")
 
     remove_dynamic_objects_arg = DeclareLaunchArgument('remove_dynamic_objects',
                                                        default_value=remove_dynamic_objects,
@@ -115,8 +128,10 @@ def launch_setup(context, *args, **kwargs):
         launch_realsense_driver_arg,
         launch_realsense_splitter_arg,
         depth_topic_arg,
+        depth_info_topic_arg,
         left_image_topic_la,
         right_image_topic_la,
+        input_qos_arg,
         remove_dynamic_objects_arg,
         remove_people_arg,
         launch_visual_slam_arg,
@@ -163,7 +178,8 @@ def launch_setup(context, *args, **kwargs):
                 'use_sim_time': use_sim_time,
                 'launch_realsense_driver': launch_realsense_driver,
                 'attach_to_shared_component_container': 'True',
-                'component_container_name': component_container_name
+                'component_container_name': component_container_name,
+                'input_qos': input_qos,
             }.items()
     )
 
@@ -185,8 +201,8 @@ def launch_setup(context, *args, **kwargs):
                             'launch_realsense_driver': 'False',
                             'left_image_topic': left_image_topic,
                             'right_image_topic': right_image_topic,
-                            'image_qos': 'DEFAULT',
-                            'imu_qos': 'DEFAULT',
+                            'image_qos': input_qos,  # 'DEFAULT'
+                            'imu_qos': input_qos,  # 'DEFAULT'
                             'attach_to_shared_component_container': 'True',
                             'component_container_name': component_container_name,
                         }.items()
@@ -203,12 +219,16 @@ def launch_setup(context, *args, **kwargs):
                 SetParametersFromFile(segmentation_config, condition=IfCondition(remove_people)),
                 SetParametersFromFile(realsense_config),
                 SetParameter(name='global_frame', value=global_frame),
+                SetParameter(name='input_qos', value=input_qos),
+                SetParameter(name='maximum_sensor_message_queue_length', value=10),
+                SetParameter(name='map_clearing_frame_id', value='base_link'),
+                SetParameter(name='slice_visualization_attachment_frame_id', value='base_link'),
 
                 # Remappings for realsense data
                 SetRemap(src=['camera_0/depth/image'],
                          dst=[depth_topic]),
                 SetRemap(src=['camera_0/depth/camera_info'],
-                         dst=['/camera/camera/depth/camera_info']),
+                         dst=[depth_info_topic]),
                 SetRemap(src=['camera_0/color/image'],
                          dst=['/camera/camera/color/image_raw']),
                 SetRemap(src=['camera_0/color/camera_info'],

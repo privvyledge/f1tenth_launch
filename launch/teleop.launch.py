@@ -280,6 +280,11 @@ def generate_launch_description():
                 "launch_ekf_map": launch_global_localization,
                 "launch_slam_toolbox_localizer": 'False',
                 "launch_rtabmap_localizer": 'False',
+                'launch_pointcloud_odometry': 'False',
+                'launch_rgbd_odometry': 'False',
+                'launch_stereo_odometry': 'True',
+                'launch_laserscan_odometry': 'False',
+                'launch_amcl': launch_global_localization,
                 "use_sim_time": use_sim_time,
                 "use_gpu": use_gpu,
             }.items()

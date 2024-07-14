@@ -51,7 +51,7 @@ def generate_launch_description():
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     use_composition = LaunchConfiguration('use_composition', default=False)
-    container_name = LaunchConfiguration('container_name', default='nav2_container')
+    container_name = LaunchConfiguration('container_name', default='f1tenth_container')
     container_name_full = (namespace, '/', container_name)
     autostart = LaunchConfiguration('autostart', default=True)
     use_respawn = LaunchConfiguration('use_respawn', default=False)
@@ -61,8 +61,8 @@ def generate_launch_description():
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
     launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=True)
-    odom_frequency = LaunchConfiguration('odom_frequency')
-    map_frequency = LaunchConfiguration('map_frequency')
+    odom_frequency = LaunchConfiguration('odom_frequency', default=30.0)
+    map_frequency = LaunchConfiguration('map_frequency', default=10.0)
     launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer', default=False)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
     log_level = LaunchConfiguration('log_level')
@@ -70,7 +70,7 @@ def generate_launch_description():
     launch_pointcloud_odometry = LaunchConfiguration('launch_pointcloud_odometry', default='False')
     launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='False')
     launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='True')
-    launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
+    launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='False')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
@@ -92,7 +92,7 @@ def generate_launch_description():
             description='Top-level namespace')
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
-            default_value='False',
+            default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
     localization_param = DeclareLaunchArgument(
             'params_file',
@@ -126,12 +126,12 @@ def generate_launch_description():
     )
     odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency',
-            default_value='30.0',  # 100.0
+            default_value=odom_frequency,  # 100.0
             description='Local/odom EKF/UKF node update/publish frequency.'
     )
     map_frequency_la = DeclareLaunchArgument(
             'map_frequency',
-            default_value='10.0',  # 30.0
+            default_value=map_frequency,  # 30.0
             description='Global/map EKF/UKF node update/publish frequency.'
     )
     launch_rtabmap_localizer_la = DeclareLaunchArgument(
@@ -634,8 +634,8 @@ def generate_launch_description():
                             'image_qos': qos,  # DEFAULT. todo: as RTABMAP also takes in QoS arguments
                             'imu_qos': qos_imu,
                             'enable_visualization_topics': 'False',
-                            'attach_to_shared_component_container': 'False',
-                            'component_container_name': 'visual_slam_launch_container',  # todo: add to container
+                            'attach_to_shared_component_container': 'False',  # use_composition
+                            'component_container_name': 'visual_slam_launch_container',  # container_name_full. todo: add to container
                         }.items()
                 )
             ]
@@ -676,7 +676,7 @@ def generate_launch_description():
             actions=[
                 PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                 Node(
-                        name='occupancy_grid_localizer_container',
+                        name='occupancy_grid_localizer_container',  # 'occupancy_grid_localizer_container', container_name_full
                         namespace='',  # namespace
                         package='rclcpp_components',
                         executable='component_container_mt',

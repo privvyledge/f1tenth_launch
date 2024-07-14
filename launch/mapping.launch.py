@@ -1,10 +1,17 @@
 """
 Launches (optionally): 2D mapping (online or offline), 3D mapping (online or offline).
-    Can also choose GPU/CPU mode
+    Can also choose GPU/CPU mode.
+
+Mapping notes:
+    * RTABMap's (CPU + 3D) 2D map is more accurate and consistent than SLAM toolbox's implementation.
+    * For now: using Depth + Color with RTABMap works better than stereo. Todo: test with good localization
+    * Both GPU (Isaac Nvblox) and RTABMap work perfectly and they both use Color + Depth
 
 Todo:
-    * add flag for CPU or GPU (nvidia) mode
-    * add isaac ros nvblox
+    * Write instructions for saving 2D maps
+    * Write instructions for saving RTABMaps
+    * Write instructions for saving Nvblox maps
+    * Write instructions for saving isaac ros vlsam maps
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -61,8 +68,8 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
     launch_visualization = LaunchConfiguration('launch_visualization', default='False')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
-    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
-    launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
+    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
+    launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
     life_long_mapping = LaunchConfiguration('life_long_mapping', default=False)
     offline_mapping_2d_param_file = LaunchConfiguration('offline_mapping_2d_param_file',
                                                         default=offline_mapping_2d_param_file_path)
@@ -402,11 +409,13 @@ def launch_setup(context, *args, **kwargs):
     left_image_topic = '/camera/camera/infra1/image_rect_raw'
     right_image_topic = '/camera/camera/infra2/image_rect_raw'
     depth_topic = '/camera/camera/aligned_depth_to_color/image_raw'  # /camera/camera/depth/image_rect_raw
+    depth_info_topic = '/camera/camera/aligned_depth_to_color/camera_info'  # /camera/camera/depth/camera_info
     if realsense_splitter_enabled_string.lower() == 'true':
         left_image_topic = '/camera/realsense_splitter_node/output/infra_1'
         right_image_topic = '/camera/realsense_splitter_node/output/infra_2'
         # todo: might need to launch RTABMaps depth realignment to color node if using realsense splitter
         depth_topic = '/camera/realsense_splitter_node/output/depth'
+        depth_info_topic = '/camera/camera/depth/camera_info'
 
     # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
     mapping_3d_cpu_node = IncludeLaunchDescription(
@@ -416,7 +425,7 @@ def launch_setup(context, *args, **kwargs):
             condition=UnlessCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "use_stereo": 'False',  # False=use_depth, True=use_stereo
+                "use_stereo": 'False',  # False=use_depth + color, True=use_stereo
                 "localization": 'False',
                 "queue_size": mapping_3d_queue_size,
                 "publish_map_tf": 'True',
@@ -480,13 +489,15 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "global_frame": 'odom',
+                "global_frame": 'odom',  # only set to map if another node is publishing the map frame
                 "launch_realsense_driver": 'False',
                 "launch_realsense_splitter": 'False',
                 # "publish_map_tf": 'True',
+                "depth_topic": depth_topic,
+                "depth_info_topic": depth_info_topic,
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
-                "depth_topic": depth_topic,
+                "input_qos": 'SENSOR_DATA',
                 "remove_dynamic_objects": 'False',
                 "remove_people": 'False',
                 "launch_visual_slam": 'False',
