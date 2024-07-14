@@ -599,7 +599,14 @@ def generate_launch_description():
 
                 # add nodes
                 rtabmap_rgbd_odometry,
-                rtabmap_stereo_odometry,
+
+                GroupAction(
+                        condition=UnlessCondition(use_gpu),
+                        actions=[
+                            rtabmap_stereo_odometry
+                        ]
+                ),
+
                 # rtabmap_icp_odometry,  # set 'wait_imu_to_init' to False
             ]
     )
@@ -623,9 +630,10 @@ def generate_launch_description():
                             'launch_realsense_driver': 'False',
                             'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
                             'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
-                            'imu_topic': '/camera/camera/imu',  # '/camera/camera/imu/filtered'
+                            'imu_topic': '/camera/camera/imu/filtered',  # '/camera/camera/imu/filtered'
                             'image_qos': qos,  # DEFAULT. todo: as RTABMAP also takes in QoS arguments
                             'imu_qos': qos_imu,
+                            'enable_visualization_topics': 'False',
                             'attach_to_shared_component_container': 'False',
                             'component_container_name': 'visual_slam_launch_container',  # todo: add to container
                         }.items()

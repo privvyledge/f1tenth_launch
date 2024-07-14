@@ -1,9 +1,5 @@
 """
-Todo:
-    * Prepare for unified use, containerization, realsense_splitting
-        https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nvblox/blob/release-2.0.0/nvblox_examples/nvblox_examples_bringup/launch/perception/vslam.launch.py |
-        https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nvblox/blob/main/nvblox_examples/nvblox_examples_bringup/launch/perception/vslam.launch.py
-    * Todo: pass topics as arguments
+
 """
 
 import os
@@ -26,15 +22,16 @@ def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     two_d_mode = LaunchConfiguration('two_d_mode', default=False)
-    base_frame = LaunchConfiguration('base_frame', default='camera_link')  # camera_link, base_link
+    base_frame = LaunchConfiguration('base_frame', default='base_link')  # camera_link, base_link
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
     publish_odom_to_baselink_tf = LaunchConfiguration('publish_odom_to_baselink_tf', default=True)
-    launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=True)
+    launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
     imu_topic = LaunchConfiguration('imu_topic')
-    image_qos = LaunchConfiguration('image_qos', default='DEFAULT')
-    imu_qos = LaunchConfiguration('imu_qos', default='DEFAULT')
+    image_qos = LaunchConfiguration('image_qos', default='SENSOR_DATA')
+    imu_qos = LaunchConfiguration('imu_qos', default='SENSOR_DATA')
+    enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=False)
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='visual_slam_launch_container')
@@ -57,7 +54,8 @@ def launch_setup(context, *args, **kwargs):
 
     publish_odom_to_baselink_tf_arg = DeclareLaunchArgument('publish_odom_to_baselink_tf',
                                                             default_value=publish_odom_to_baselink_tf,
-                                                            description="Publish the dynamic odom -> base_link transform")
+                                                            description="Publish the dynamic "
+                                                                        "odom -> base_link transform")
 
     launch_realsense_driver_launch_arg = DeclareLaunchArgument('launch_realsense_driver',
                                                                default_value=launch_realsense_driver,
@@ -77,10 +75,18 @@ def launch_setup(context, *args, **kwargs):
             description='/camera/camera/imu or /camera/camera/imu/filtered')
 
     image_qos_arg = DeclareLaunchArgument('image_qos', default_value=image_qos,
-                                          description="The QoS of the stereo image topics")
+                                          description="The QoS of the stereo image topics. "
+                                                      "Options: SENSOR_DATA, DEFAULT, SYSTEM_DEFAULT")
 
     imu_qos_arg = DeclareLaunchArgument('imu_qos', default_value=imu_qos,
-                                        description="The output QoS of the topics published by the realsense splitter.")
+                                        description="The output QoS of the IMU topic "
+                                                    "Options: SENSOR_DATA, DEFAULT, SYSTEM_DEFAULT")
+
+    enable_visualization_topics_arg = DeclareLaunchArgument('enable_visualization_topics',
+                                                            default_value=enable_visualization_topics,
+                                                            description="Whether to publish visualization topics like"
+                                                                        " the frame pointcloud, landmarks, "
+                                                                        "all poses from the start, etc.")
 
     attach_to_shared_component_container_arg = DeclareLaunchArgument('attach_to_shared_component_container',
                                                                      default_value=attach_to_shared_component_container,
@@ -103,6 +109,7 @@ def launch_setup(context, *args, **kwargs):
         imu_topic_la,
         image_qos_arg,
         imu_qos_arg,
+        enable_visualization_topics_arg,
         attach_to_shared_component_container_arg,
         component_container_name_arg
     ]
@@ -115,6 +122,7 @@ def launch_setup(context, *args, **kwargs):
             package='realsense2_camera',
             executable='realsense2_camera_node',
             parameters=[{
+                'use_sim_time': use_sim_time,
                 'enable_infra1': True,
                 'enable_infra2': True,
                 'enable_color': False,
@@ -181,15 +189,15 @@ def launch_setup(context, *args, **kwargs):
                 'invert_map_to_odom_tf': False,
                 'invert_odom_to_rig_tf': False,
                 'invert_odom_to_base_tf': False,
-                'enable_slam_visualization': False,
-                'enable_landmarks_view': False,
-                'enable_observations_view': False,
-                # 'camera_optical_frames': [
-                #     'camera_infra1_optical_frame',
-                #     'camera_infra2_optical_frame',
-                # ],  # leaving an empty list, e.g '[]' will take the parameters from messages
-                # 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
-                # 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
+                'enable_slam_visualization': enable_visualization_topics,
+                'enable_landmarks_view': enable_visualization_topics,
+                'enable_observations_view': enable_visualization_topics,
+                'camera_optical_frames': [
+                    'camera_infra1_optical_frame',
+                    'camera_infra2_optical_frame',
+                ],
+                'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
+                'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
                         ('visual_slam/camera_info_0', 'camera/camera/infra1/camera_info'),

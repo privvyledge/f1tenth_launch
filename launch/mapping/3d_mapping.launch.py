@@ -52,6 +52,7 @@ def generate_launch_description():
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
 
+    qos = LaunchConfiguration('qos')
     qos_image = LaunchConfiguration('qos_image')
     qos_camera_info = LaunchConfiguration('qos_camera_info')
     qos_imu = LaunchConfiguration('qos_imu')
@@ -183,6 +184,11 @@ def generate_launch_description():
                                           ' --udebug and --delete_db_on_start/-d'),
 
         DeclareLaunchArgument(
+                'qos', default_value='1',
+                description='General QoS for most topics in RTABMAP except otherwise specified '
+                            '0=system default, 1=Reliable, 2=Best Effort.'),
+
+        DeclareLaunchArgument(
             'qos_image', default_value='2',
             description='Specific QoS used for '
                         'image input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.'),
@@ -259,6 +265,7 @@ def generate_launch_description():
                     # 'scan_cloud_topic': '/lidar/point_cloud',
 
                     'qos': qos_image,
+                    'qos_image': qos_image,
                     'qos_camera_info': qos_camera_info,
                     'qos_imu': qos_imu,
                     'qos_scan': qos_scan,
