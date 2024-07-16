@@ -1,10 +1,8 @@
 """
 Currently untested with "namespace". Might fail if a namespace is specified
 todo:
-    * add default booleans to LaunchConfigurations instead of LaunchArguments to streamline
+    * setup joining containers for visual slam and occupancy grid
     * run tests and remove todos below
-    * add isaac ros visual slam
-todo: if odom nodes fail, test using the sensors base_frame instead
 todo: load nodes using composition (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L145)
 This node sets up local and global localization.
 * Load map (yaml and/or posegraph)
@@ -47,7 +45,7 @@ def generate_launch_description():
     #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')
 
     # declare launch configurations
-    namespace = LaunchConfiguration('namespace')
+    namespace = LaunchConfiguration('namespace', default='')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     use_composition = LaunchConfiguration('use_composition', default=False)
@@ -88,7 +86,7 @@ def generate_launch_description():
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
     declare_namespace_cmd = DeclareLaunchArgument(
             'namespace',
-            default_value='',
+            default_value=namespace,
             description='Top-level namespace')
     declare_use_sim_time_cmd = DeclareLaunchArgument(
             'use_sim_time',
@@ -223,7 +221,7 @@ def generate_launch_description():
     param_substitutions = {
         'use_sim_time': use_sim_time,
         'yaml_filename': map_file,
-        'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: test
+        # 'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: update to compare use_gpu and launch_amcl/global
     }
 
     # It only applys when `use_namespace` is True.

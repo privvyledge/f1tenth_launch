@@ -32,6 +32,9 @@
     # car wheelbase is about 25cm
     wheelbase: .25
 
+    # USB polling rate, i.e IMU and odometry update rate
+    poll_rate: 100.0  # default: 50.0
+
 #throttle_interpolator:
 #  ros__parameters:
     # throttle interpolator parameters

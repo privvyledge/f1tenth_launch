@@ -9,9 +9,11 @@ import os
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
 from launch_ros.descriptions import ParameterFile
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, \
+    EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable, LogInfo
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
+    SetEnvironmentVariable, LogInfo
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
@@ -49,9 +51,9 @@ def generate_launch_description():
     use_gpu = LaunchConfiguration('use_gpu', default=True)
     params_file = LaunchConfiguration('params_file',
                                       default=nav2_params_file_path)
-    autostart = LaunchConfiguration('autostart')
-    use_composition = LaunchConfiguration('use_composition')
-    use_respawn = LaunchConfiguration('use_respawn')
+    autostart = LaunchConfiguration('autostart', default='True')
+    use_composition = LaunchConfiguration('use_composition', default='True')
+    use_respawn = LaunchConfiguration('use_respawn', default='True')
     log_level = LaunchConfiguration('log_level')
 
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
@@ -64,8 +66,9 @@ def generate_launch_description():
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
-    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=True)
+    launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
+    life_long_mapping = LaunchConfiguration('life_long_mapping', default=False)
     offline_mapping_2d_param_file = LaunchConfiguration('offline_mapping_2d_param_file',
                                                         default=offline_mapping_2d_param_file_path)
     online_mapping_2d_param_file = LaunchConfiguration('online_mapping_2d_param_file',
@@ -165,15 +168,15 @@ def generate_launch_description():
             description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_autostart_cmd = DeclareLaunchArgument(
-            'autostart', default_value='true',
+            'autostart', default_value=autostart,
             description='Automatically startup the nav2 stack')
 
     declare_use_composition_cmd = DeclareLaunchArgument(
-            'use_composition', default_value='True',
+            'use_composition', default_value=use_composition,
             description='Whether to use composed bringup')
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
-            'use_respawn', default_value='False',
+            'use_respawn', default_value=use_respawn,
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
 
     declare_log_level_cmd = DeclareLaunchArgument(
@@ -203,8 +206,8 @@ def generate_launch_description():
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
     launch_navigation_arg = DeclareLaunchArgument('launch_navigation',
-                                                           default_value=launch_navigation,
-                                                           description="Launch the navigation.")
+                                                  default_value=launch_navigation,
+                                                  description="Launch the navigation.")
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
@@ -218,6 +221,12 @@ def generate_launch_description():
     launch_3d_mapping_arg = DeclareLaunchArgument('launch_3d_mapping',
                                                   default_value=launch_3d_mapping,
                                                   description="Enable 3D mapping.")
+
+    life_long_mapping_arg = DeclareLaunchArgument('life_long_mapping',
+                                                  default_value=life_long_mapping,
+                                                  description="If set to True, the map will not be deleted but will "
+                                                              "instead add to a preexisting map. Setting to false "
+                                                              "deletes the old map and starts again.")
 
     offline_mapping_2d_param_file_la = DeclareLaunchArgument('offline_mapping_2d_param_file',
                                                              default_value=offline_mapping_2d_param_file,
@@ -304,8 +313,8 @@ def generate_launch_description():
                                                                         'recording ROSBags or mapping. ')
 
     align_realsense_depth_la = DeclareLaunchArgument('align_realsense_depth',
-                                           default_value=align_realsense_depth,
-                                           description='Whether to align the depth to other frames')
+                                                     default_value=align_realsense_depth,
+                                                     description='Whether to align the depth to other frames')
 
     realsense_emitter_enabled_la = DeclareLaunchArgument(
             'realsense_emitter_enabled',
@@ -353,6 +362,7 @@ def generate_launch_description():
         rviz_config_arg,
         launch_2d_mapping_arg,
         launch_3d_mapping_arg,
+        life_long_mapping_arg,
         offline_mapping_2d_param_file_la,
         online_mapping_2d_param_file_la,
         map_2d_file_la,
@@ -462,7 +472,7 @@ def generate_launch_description():
                             'launch_stereo_odometry': 'True',
                             'launch_laserscan_odometry': 'False',
                             'launch_amcl': launch_global_localization,
-                            "map": map_file,
+                            "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,
                         }.items()
@@ -478,14 +488,14 @@ def generate_launch_description():
             output='screen',
             arguments=['-d', rviz_config_file],
             parameters=[{'use_sim_time': use_sim_time}]
-        )
-    
+    )
+
     mapping_launch = TimerAction(
-            period=8.0,
+            period=3.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
-                            os.path.join(f1tenth_launch_bringup_dir, 'mapping.launch.py')),
+                                os.path.join(f1tenth_launch_bringup_dir, 'mapping.launch.py')),
                         condition=IfCondition(slam),
                         launch_arguments={'namespace': namespace,
                                           'use_namespace': use_namespace,
@@ -505,6 +515,7 @@ def generate_launch_description():
                                           # "rviz_config_file": rviz_config_file,
                                           "launch_2d_mapping": launch_2d_mapping,
                                           "launch_3d_mapping": launch_3d_mapping,
+                                          "life_long_mapping": life_long_mapping,
                                           "offline_mapping_2d_param_file": offline_mapping_2d_param_file,
                                           "online_mapping_2d_param_file": online_mapping_2d_param_file,
                                           "map_2d_file": map_2d_file,
@@ -514,11 +525,11 @@ def generate_launch_description():
     )
 
     nav2_navigation_launch = TimerAction(
-            period=8.0,
+            period=3.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
-                            PathJoinSubstitution([f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
+                                PathJoinSubstitution([f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
                         condition=IfCondition(launch_navigation),
                         launch_arguments={'namespace': namespace,
                                           'use_sim_time': use_sim_time,

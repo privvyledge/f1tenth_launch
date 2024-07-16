@@ -131,6 +131,7 @@ def generate_launch_description():
             parameters=[vesc_config]
     )
 
+    # todo: move to bringup/teleop or but in nav2_navigation.launch.py
     twist_to_ackermann_node = Node(
             package='trajectory_following_ros2',   # todo: put package in this repository and make parameters input.
             executable='twist_to_ackermann',
