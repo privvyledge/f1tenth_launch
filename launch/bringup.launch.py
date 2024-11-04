@@ -3,7 +3,8 @@ Todo:
     * Setup mapping launch
     * Setup composable nodes
     * Setup nav2_navigation individual subsystem launching
-    * seetup loglevel
+    * setup loglevel
+    * add odometry topic remapping
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -379,7 +380,7 @@ def generate_launch_description():
     ''' Launch Nodes '''
     component_container_node = Node(
             condition=IfCondition(use_composition),
-            name='f1tenth_container',
+            name='f1tenth_container',  # todo: set as a launch argument
             package='rclcpp_components',
             # todo: compare 'component_container_isolated' with
             #  'component_container_mt' and 'component_container_isolated'

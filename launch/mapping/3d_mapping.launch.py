@@ -1,5 +1,8 @@
 """
 Fuses stereo images, IMU, ekf_odom
+
+Todo:
+    * remove dynamic obstacles (https://github.com/introlab/rtabmap_ros/issues/269)
 """
 # Example:
 #   $ ros2 launch velodyne_driver velodyne_driver_node-VLP16-launch.py

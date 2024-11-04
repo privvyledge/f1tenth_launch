@@ -1,7 +1,7 @@
 """
 Currently untested with "namespace". Might fail if a namespace is specified
 todo:
-    * setup joining containers for visual slam and occupancy grid
+    * setup joining containers for visual slam and occupancy grid, i.e resolve container names
     * run tests and remove todos below
 todo: load nodes using composition (https://github.com/ros-planning/navigation2/blob/humble/nav2_bringup/launch/localization_launch.py#L145)
 This node sets up local and global localization.
@@ -711,7 +711,7 @@ def generate_launch_description():
 
                 # add nodes
                 visual_slam_launch_include,
-                occupancy_grid_localizer_group,
+                # occupancy_grid_localizer_group,  # todo: enable later after testing other components
             ]
     )
 
