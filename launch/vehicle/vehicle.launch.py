@@ -32,6 +32,8 @@ def generate_launch_description():
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_servo_rate', default=3.2)
 
+    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)
+
     vesc_la = DeclareLaunchArgument(
             'vesc_config',
             default_value=vesc_config_file,
@@ -64,12 +66,18 @@ def generate_launch_description():
             default_value=max_steering_rate,
             description='The maximum steering rate in rads/s.')
 
+    vesc_poll_rate_la = DeclareLaunchArgument(
+            'vesc_poll_rate',
+            default_value=vesc_poll_rate,
+            description='The frequency at which to send/receive messages from/to the VESC.')
+
     ld = LaunchDescription([vesc_la,
                             declare_launch_imu_filter,
                             declare_launch_ackermann_to_vesc_node,
                             declare_launch_vesc_to_odom_node,
                             declare_launch_throttle_interpolator_node,
-                            max_acceleration_la, max_steering_rate_la])
+                            max_acceleration_la, max_steering_rate_la,
+                            vesc_poll_rate_la])
 
     ackermann_to_vesc_node = GroupAction(
             condition=IfCondition(launch_ackermann_to_vesc_node),
@@ -119,7 +127,12 @@ def generate_launch_description():
             namespace='vehicle',  # autoware
             respawn=True,
             respawn_delay=10.0,
-            parameters=[vesc_config]
+            parameters=[
+                vesc_config,
+                {
+                    'poll_rate': vesc_poll_rate
+                }
+            ]
     )
     throttle_interpolator_node = Node(
             condition=IfCondition(launch_throttle_interpolator_node),
@@ -156,11 +169,14 @@ def generate_launch_description():
                 'input_topic': '/vehicle/sensors/imu/raw',
                 'output_topic': '/vehicle/sensors/imu/data',
                 'remove_gravity_vector': 'False',
+                'imu_gyro_stddev': '0.005',
+                'imu_accel_stddev': '0.005',
+                'imu_orientation_stddev': '0.001',
                 'node_name': 'vesc_imu_filter',
                 'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'True',
                 'remove_imu_bias': 'True',
-                'imu_corrector_frame': 'sensor_kit_link',  # camera_imu_optical_frame, sensor_kit_link, base_link
+                'imu_corrector_frame': 'imu_link',  # imu_link, sensor_kit_link, base_link
                 'imu_corrector_node_name': 'vesc_imu_bias_removal_node',
                 'use_sim_time': 'False',
             }.items()

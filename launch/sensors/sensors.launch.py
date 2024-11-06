@@ -203,10 +203,10 @@ def generate_launch_description():
                 'left_image_topic': '/camera/camera/infra1/image_rect_raw',
                 'right_image_topic': '/camera/camera/infra2/image_rect_raw',
                 'rgb_image_topic': '/camera/camera/color/image_raw',
-                'depth_image_topic': '/camera/camera/depth/image_rect_raw',
+                'depth_image_topic': '/camera/camera/aligned_depth_to_color/image_raw', # '/camera/camera/depth/image_rect_raw',
                 'color_pointcloud': 'True',
-                'use_image_proc': 'True',
-                'use_rtabmap': 'False',
+                'use_image_proc': 'False',
+                'use_rtabmap': 'True',
                 'detect_ground_and_obstacles': detect_ground_and_obstacles,
                 'register_depth': 'False',
                 'rtabmap_depth_decimation': '2',  # 1 means no decimation,
@@ -240,7 +240,7 @@ def generate_launch_description():
 
     ld.add_action(realsense_node)
     # ld.add_action(realsense_imu_node)
-    ld.add_action(depth_to_laserscan_node)
+    # ld.add_action(depth_to_laserscan_node)  # disabled because it is not used. Costmaps can just use pointclouds instead. Also, causes significant performance drop and CPU overhead.
 
     ld.add_action(stereo_and_depth_image_processing_node)
     ld.add_action(rtabmap_obstacle_and_floor_detection_node)

@@ -1,7 +1,8 @@
 """
 Todo:
     * Setup groupActions for depth and stereo [done]
-    * Setup nested GroupActions to differentiate stereo and depth e.g for RTABMap
+    * Setup nested GroupActions to differentiate stereo and depth e.g for RTABMap. [done]
+        * Current bug is that stereo_to_pointcloud cannot be used with RTABMap without commenting/uncommenting in the launch file. [done]
     * remove parameters and remapping rules declared in GroupActions from non group action definitions
     * Rename cloud topics from /camera/* to /cloud/*
     * Switch to Components for RTABMap
@@ -89,11 +90,11 @@ def generate_launch_description():
                 'queue_size', default_value='1',
                 description='')
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
-                                                    default_value='True',
+                                                    default_value='False',
                                                     description='Whether to publish a PointCloud2 message '
                                                                 'from stereo images.')
     depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='False',
+                                                        default_value='True',
                                                         description='Whether to publish a PointCloud2 message '
                                                                     'from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
@@ -115,7 +116,7 @@ def generate_launch_description():
                         '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                         '"/camera/realigned_depth_to_color/image_raw"')
     use_image_proc_la = DeclareLaunchArgument(
-            'use_image_proc', default_value='True',
+            'use_image_proc', default_value='False',
             description='Whether to use the nodes from image_proc packages, e.g. depth and stereo image proc.')
     use_rtabmap_la = DeclareLaunchArgument(
             'use_rtabmap', default_value='True',
@@ -128,7 +129,7 @@ def generate_launch_description():
             description='Whether to detect and isolate the floor plane and obstacles from raw pointclouds.')
     register_depth_la = DeclareLaunchArgument(
             'register_depth', default_value='False',
-            description='Whether to register depth to a different frame')
+            description='Whether to register depth to a different frame, e.g color.')
     rtabmap_depth_decimation_la = DeclareLaunchArgument(
             'rtabmap_depth_decimation', default_value='1',
             description='Depth image decimation factor when using rtabmap. Set to 1 to disable and publish full cloud.')
@@ -272,12 +273,10 @@ def generate_launch_description():
     )
 
     # ######### RTabMap depth to pointcloud to depth.
-    # Todo: since these work with either stereo or depth. Refactor with a nested GroupAction below
     rtabmap_depth_to_pointcloud_xyz = GroupAction(
             condition=UnlessCondition(color_pointcloud),
             actions=[
                 Node(
-                        condition=IfCondition([depthimage_to_pointcloud]),
                         name='rtabmap_depth_to_pointcloud_xyz',
                         package='rtabmap_util', executable='point_cloud_xyz', output='screen',
                         parameters=[
@@ -291,6 +290,7 @@ def generate_launch_description():
                             {'approx_sync': approx_sync},
                             {'use_sim_time': use_sim_time},
                             {'queue_size': queue_size},
+                            {'sync_queue_size': queue_size},
                         ],
                         # remappings=[
                         #     ('depth/image', depth_image_topic),
@@ -304,12 +304,10 @@ def generate_launch_description():
     )
 
     # use either RGB and depth or stereo.
-    # Todo: since these work with either stereo or depth. Refactore with a nested GroupAction below
     rtabmap_depth_to_pointcloud_xyz_rgb = GroupAction(
             condition=IfCondition(color_pointcloud),
             actions=[
                 Node(
-                        condition=IfCondition([depthimage_to_pointcloud]),
                         name='rtabmap_depth_to_pointcloud_xyzrgb',
                         package='rtabmap_util', executable='point_cloud_xyzrgb', output='screen',
                         parameters=[
@@ -323,6 +321,7 @@ def generate_launch_description():
                             {'approx_sync': approx_sync},
                             {'use_sim_time': use_sim_time},
                             {'queue_size': queue_size},
+                            {'sync_queue_size': queue_size},
                         ],
                         # remappings=[
                         #     ('rgb/image', rgb_image_topic),
@@ -366,7 +365,7 @@ def generate_launch_description():
                 package='rtabmap_util', executable='pointcloud_to_depthimage', output='screen',
                 parameters=[
                     {'decimation': rtabmap_depth_decimation,  # 2
-                     'fixed_frame_id': 'sensor_kit_link',  # camera_link, base_link, odom
+                     'fixed_frame_id': 'odom',  # camera_link, sensor_kit_link, base_link, odom. Use odom if the robot is moving
                      'fill_holes_size': 1},
                     {'use_sim_time': use_sim_time},
                     {'queue_size': queue_size},
@@ -465,7 +464,9 @@ def generate_launch_description():
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='approx_sync', value=approx_sync),
                 SetParameter(name='queue_size', value=queue_size),
+                SetParameter(name='sync_queue_size', value=queue_size),
                 SetParameter(name='qos', value=qos),
+                SetParameter(name='qos_camera_info', value=qos),
                 SetParameter(name='decimation', value=rtabmap_depth_decimation),
                 SetParameter(name='voxel_size', value=rtabmap_voxel_size),
 
@@ -476,7 +477,7 @@ def generate_launch_description():
                 SetRemap(src='depth_raw', dst='/camera/depth_from_disparity_raw'),
 
                 # rtabmap_depth_to_pointcloud_xyz
-                SetRemap(src='depth/image', dst=depth_image_topic),  # common with xyzrgb
+                SetRemap(src='depth/image', dst=depth_image_topic, condition=IfCondition(depthimage_to_pointcloud)),  # common with xyzrgb
                 # SetRemap(src='disparity/image', dst='/disparity'),
                 SetRemap(src='depth/camera_info', dst='/camera/camera/depth/camera_info'),
                 # SetRemap(src='disparity/camera_info', dst='/camera/camera/infra1/camera_info'),
@@ -484,13 +485,12 @@ def generate_launch_description():
                 SetRemap(src='cloud', dst='/camera/downsampled_cloud_from_depth'),
 
                 # rtabmap_depth_to_pointcloud_xyzrgb. Uncomment left/right to use stereo (and comment out rgb/depth).
-                # todo: refactor with a nested GroupAction
-                SetRemap(src='rgb/image', dst=rgb_image_topic),
-                SetRemap(src='rgb/camera_info', dst='/camera/camera/color/camera_info'),
-                # SetRemap(src='left/image', dst=left_image_topic),
-                # SetRemap(src='left/camera_info', dst='/camera/camera/infra1/camera_info'),
-                # SetRemap(src='right/image', dst=right_image_topic),
-                # SetRemap(src='right/camera_info', dst='/camera/camera/infra2/camera_info'),
+                SetRemap(src='rgb/image', dst=rgb_image_topic, condition=IfCondition(depthimage_to_pointcloud)),
+                SetRemap(src='rgb/camera_info', dst='/camera/camera/color/camera_info', condition=IfCondition(depthimage_to_pointcloud)),
+                SetRemap(src='left/image', dst=left_image_topic, condition=IfCondition(stereo_to_pointcloud)),
+                SetRemap(src='left/camera_info', dst='/camera/camera/infra1/camera_info', condition=IfCondition(stereo_to_pointcloud)),
+                SetRemap(src='right/image', dst=right_image_topic, condition=IfCondition(stereo_to_pointcloud)),
+                SetRemap(src='right/camera_info', dst='/camera/camera/infra2/camera_info', condition=IfCondition(stereo_to_pointcloud)),
 
                 # rtabmap_obstacle_and_floor_detection_node
                 SetRemap(src='obstacles', dst='/camera/obstacles_from_cloud'),

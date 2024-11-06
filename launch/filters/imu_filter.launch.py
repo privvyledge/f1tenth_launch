@@ -55,6 +55,9 @@ def generate_launch_description():
     output_topic = LaunchConfiguration('output_topic')
     imu_corrector_output_topic = LaunchConfiguration('imu_corrector_output_topic')
     remove_gravity_vector = LaunchConfiguration('remove_gravity_vector')
+    imu_gyro_stddev = LaunchConfiguration('imu_gyro_stddev')
+    imu_accel_stddev = LaunchConfiguration('imu_accel_stddev')
+    imu_orientation_stddev = LaunchConfiguration('imu_orientation_stddev')
     node_name = LaunchConfiguration('node_name')
     imu_corrector_node_name = LaunchConfiguration('imu_corrector_node_name')
     use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
@@ -99,6 +102,22 @@ def generate_launch_description():
             'remove_gravity_vector',
             default_value='False',
             description='Whether or not to remove the gravity vector. Only valid for the Madgwick Filter')
+
+    imu_gyro_stddev_la = DeclareLaunchArgument(
+            'imu_gyro_stddev',
+            default_value='0.01',
+            description='Standard deviation of the gyroscope noise')
+
+    imu_accel_stddev_la = DeclareLaunchArgument(
+            'imu_accel_stddev',
+            default_value='0.01',
+            description='Standard deviation of the accelerometer noise')
+
+    imu_orientation_stddev_la = DeclareLaunchArgument(
+            'imu_orientation_stddev',
+            default_value='0.01',
+            description='Standard deviation of the orientation noise')
+
     node_name_la = DeclareLaunchArgument(
             'node_name',
             default_value='imu_filter',
@@ -120,7 +139,9 @@ def generate_launch_description():
                             declare_imu_corrector_params_file_cmd,
                             imu_frame_la, imu_corrector_frame_la, input_topic_la, output_topic_la,
                             imu_corrector_output_topic_la, imu_corrector_node_name_la,
-                            remove_gravity_vector_la, node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
+                            remove_gravity_vector_la,
+                            imu_gyro_stddev_la, imu_accel_stddev_la, imu_orientation_stddev_la,
+                            node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
 
     imu_filter_with_correction_node = GroupAction(
             condition=IfCondition(remove_imu_bias),
@@ -131,6 +152,12 @@ def generate_launch_description():
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='base_link', value=imu_corrector_frame),
+                SetParameter(name='angular_velocity_stddev_xx', value=imu_gyro_stddev),
+                SetParameter(name='angular_velocity_stddev_yy', value=imu_gyro_stddev),
+                SetParameter(name='angular_velocity_stddev_zz', value=imu_gyro_stddev),
+                SetParameter(name='acceleration_stddev', value=imu_accel_stddev),
+                SetParameter(name='orientation_stddev', value=imu_orientation_stddev),
+
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=imu_corrector_output_topic),
                 SetRemap(src='imu/data', dst=output_topic),
@@ -170,6 +197,7 @@ def generate_launch_description():
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
                             {'use_mag': False},
+                            {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},
@@ -194,6 +222,7 @@ def generate_launch_description():
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
                             {'use_mag': False},
+                            {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},
@@ -219,6 +248,8 @@ def generate_launch_description():
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetParameter(name='orientation_stddev', value=imu_orientation_stddev),
+
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=input_topic),
                 SetRemap(src='imu/data', dst=output_topic),
@@ -232,6 +263,7 @@ def generate_launch_description():
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
                             {'use_mag': False},
+                            {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},
@@ -256,6 +288,7 @@ def generate_launch_description():
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
                             {'use_mag': False},
+                            {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},

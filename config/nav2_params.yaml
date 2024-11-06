@@ -4,7 +4,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_frame: odom
-    odom_topic: /visual_slam/tracking/odometry  # /odometry/local. todo: revert
+    odom_topic: /odometry/local
     bt_loop_duration: 10
     default_server_timeout: 20
     enable_groot_monitoring: true
@@ -87,7 +87,7 @@ controller_server:
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.01  # 0.001
     failure_tolerance: 0.0 # -1.0 makes it infinite, 0 to disable, and any positive value (0.3) for the appropriate timeout
-    odom_topic: "/visual_slam/tracking/odometry"  # "/odometry/local". todo: revert
+    odom_topic: "/odometry/local"
     progress_checker_plugins: "progress_checker" # "progress_checker" for Humble and older, ["progress_checker"] otherwise
     goal_checker_plugins: ["general_goal_checker"] # "stopped_goal_checker", "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
     controller_plugins: ["FollowPath"]
@@ -255,11 +255,11 @@ controller_server_rclcpp_node:
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 20.0  # 5.0
-      publish_frequency: 20.0  # 5.0
+      update_frequency: 20.0  # 5.0. How often should sensor data be processed
+      publish_frequency: 2.0  # 5.0
       global_frame: odom
       robot_base_frame: base_link
-#      map_topic: /map  # defaults to topic set in global if commented
+#      map_topic: odom  # defaults to topic set in global if commented
       use_sim_time: False
       rolling_window: true
       width: 10  # 3
@@ -268,13 +268,13 @@ local_costmap:
       footprint: "[ [0.3302, 0.1016], [0.3302, -0.1016], [0.0, -0.1016], [0.0, 0.1016] ]"
       footprint_padding: 0.08  # 0.03
       robot_radius: 0.22
-      mark_threshold: 2  # 0
+#      mark_threshold: 2  # 0
       plugins: ["inflation_layer", "realsense_stvl_obstacle_layer", "nonpersisting_obstacle_layer", "obstacle_layer"]  # "nonpersisting_obstacle_layer" is better than "voxel_layer"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 1.5  # 1.5, 3.0, 10.0
         inflation_radius: 0.1  # 0.1, 0.55, 0.8
-      realsense_stvl_obstacle_layer:
+      realsense_stvl_obstacle_layer:  # voxel layers are for efficient 3D representation, i.e 3D sensors
         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
         enabled: true
         voxel_decay: 15.0  # seconds if linear, e^n if exponential
@@ -286,14 +286,14 @@ local_costmap:
         combination_method: 1     # 1=max, 0=override
         obstacle_range: 4.0  # meters
         origin_z: 0.0   # meters
-        publish_voxel_map: true # default off
+        publish_voxel_map: false # default off
         transform_tolerance: 0.2   # seconds
         mapping_mode: false # default off, saves map not for navigation
         map_save_duration: 60.0  # default 60s, how often to autosave
         observation_sources: rgbd1_mark rgbd1_clear
         rgbd1_mark:
           data_type: PointCloud2
-          topic: /camera/camera/depth/color/points
+          topic: /camera/camera/depth/color/points  # /camera/downsampled_cloud_from_depth, /camera/points_from_stereo_proc
           marking: true
           clearing: false
           obstacle_range: 3.0          # meters
@@ -317,7 +317,7 @@ local_costmap:
           horizontal_fov_angle: 1.048 # default 1.04, 6.29 radians
           decay_acceleration: 5.0     # default 0, 1/s^2. If laser scanner MUST be 0
           model_type: 0                # default 0, model type for frustum. 0=depth camera, 1=3d lidar like VLP16 or similar
-      nonpersisting_obstacle_layer:
+      nonpersisting_obstacle_layer:  # voxel layers are for efficient 3D representation, i.e 3D sensors
         plugin: nav2_costmap_2d/NonPersistentVoxelLayer
         enabled: true
         track_unknown_space: true
@@ -414,18 +414,18 @@ local_costmap:
 #          publish_voxel_map: False  # to visualize voxels in Rviz
 #          observation_persistence: 0.5
 
-#  local_costmap_client:
-#    ros__parameters:
-#      use_sim_time: False
-#  local_costmap_rclcpp_node:
-#    ros__parameters:
-#      use_sim_time: False
+  local_costmap_client:
+    ros__parameters:
+      use_sim_time: False
+  local_costmap_rclcpp_node:
+    ros__parameters:
+      use_sim_time: False
 
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 1.0  # 10.0
-      publish_frequency: 1.0  # 10.0
+      update_frequency: 2.0  # 10.0. How often should sensor data be processed
+      publish_frequency: 2.0  # 10.0. How often to publish the costmap mostly for visualization in RViz
       global_frame: map
       robot_base_frame: base_link
 #      map_topic: map
@@ -478,7 +478,7 @@ global_costmap:
           inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
           observation_persistence: 0.5
-      nonpersisting_obstacle_layer:
+      nonpersisting_obstacle_layer:  # voxel layers are for efficient 3D representation, i.e 3D sensors
         plugin: nav2_costmap_2d/NonPersistentVoxelLayer
         enabled: true
         track_unknown_space: true
@@ -568,12 +568,13 @@ global_costmap:
         inflation_radius: 0.1 # 0.1, 0.55
         inflate_around_unknown: true
       always_send_full_costmap: True
-#  global_costmap_client:
-#    ros__parameters:
-#      use_sim_time: False
-#  global_costmap_rclcpp_node:
-#    ros__parameters:
-#      use_sim_time: False
+
+  global_costmap_client:
+    ros__parameters:
+      use_sim_time: False
+  global_costmap_rclcpp_node:
+    ros__parameters:
+      use_sim_time: False
 
 map_server:
   ros__parameters:
@@ -637,9 +638,9 @@ planner_server:
 #        w_cost: 0.025                 # weight to steer robot away from collision and cost
 #        cost_scaling_factor: 10.0     # this should match the inflation layer's parameter
 
-#planner_server_rclcpp_node:
-#  ros__parameters:
-#    use_sim_time: False
+planner_server_rclcpp_node:
+  ros__parameters:
+    use_sim_time: False
 
 
 # Constrained smoother (https://navigation.ros.org/configuration/packages/configuring-constrained-smoother.html)
@@ -737,5 +738,5 @@ velocity_smoother:
     velocity_timeout: 1.0  # Time (s) after which if no new velocity commands are received to zero out and stop
     max_accel: [3.0, 0.0, 2.0] # Maximum acceleration, ordered [Ax, Ay, Aw]
     max_decel: [-3.0, 0.0, -2.0]  # Maximum deceleration, ordered [Ax, Ay, Aw]
-    odom_topic: "/visual_slam/tracking/odometry"  # "/odometry/local". Topic of odometry to use for estimating current velocities
+    odom_topic: "/odometry/local"  # Topic of odometry to use for estimating current velocities
     odom_duration: 0.02  # (0.1) Period of time (s) to sample odometry information in for velocity estimation

@@ -83,6 +83,7 @@ def launch_setup(context, *args, **kwargs):
     max_steering = LaunchConfiguration('max_steering', default=0.34)
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
+    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=200.0)
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
@@ -227,6 +228,11 @@ def launch_setup(context, *args, **kwargs):
             default_value=max_steering_rate,
             description='The maximum steering rate in rads/s.')
 
+    vesc_poll_rate_la = DeclareLaunchArgument(
+            'vesc_poll_rate',
+            default_value=vesc_poll_rate,
+            description='The frequency at which to send/receive messages from/to the VESC.')
+
     declare_launch_ackermann_to_vesc_node = DeclareLaunchArgument(
             'launch_ackermann_to_vesc_node',
             default_value=launch_ackermann_to_vesc_node,
@@ -322,7 +328,7 @@ def launch_setup(context, *args, **kwargs):
         map_2d_file_la,
         rtabmap_database_file_la,
         deadman_buttons_la, max_speed_la, max_steering_la,
-        max_acceleration_la, max_steering_rate_la,
+        max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
@@ -364,6 +370,7 @@ def launch_setup(context, *args, **kwargs):
                 "launch_throttle_interpolator_node": launch_throttle_interpolator_node,
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
+                "vesc_poll_rate": vesc_poll_rate,
                 "approx_sync": approx_sync,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
