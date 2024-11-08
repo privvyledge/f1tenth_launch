@@ -105,18 +105,18 @@ def generate_launch_description():
 
     imu_gyro_stddev_la = DeclareLaunchArgument(
             'imu_gyro_stddev',
-            default_value='0.01',
-            description='Standard deviation of the gyroscope noise')
+            default_value='0.1',
+            description='Standard deviation of the gyroscope noise. This will be squared to get the (co)variance.')
 
     imu_accel_stddev_la = DeclareLaunchArgument(
             'imu_accel_stddev',
-            default_value='0.01',
-            description='Standard deviation of the accelerometer noise')
+            default_value='0.1',
+            description='Standard deviation of the accelerometer noise. This will be squared to get the (co)variance.')
 
     imu_orientation_stddev_la = DeclareLaunchArgument(
             'imu_orientation_stddev',
-            default_value='0.01',
-            description='Standard deviation of the orientation noise')
+            default_value='0.1',
+            description='Standard deviation of the orientation noise. This will be squared to get the (co)variance.')
 
     node_name_la = DeclareLaunchArgument(
             'node_name',
