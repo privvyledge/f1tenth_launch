@@ -4,12 +4,12 @@
     # The frequency, in Hz, at which the filter will output a position estimate. Note that the filter will not begin
     # computation until it receives at least one message from one of the inputs. It will then run continuously at the
     # frequency specified here, regardless of whether it receives more measurements. Defaults to 30 if unspecified.
-    frequency: 30.0
+    frequency: 50.0
 
     # The period, in seconds, after which we consider a sensor to have timed out. In this event, we carry out a predict
     # cycle on the EKF without correcting it. This parameter can be thought of as the minimum frequency with which the
     # filter will generate new output. Defaults to 1 / frequency if not specified.
-    sensor_timeout: 0.13
+    sensor_timeout: 0.1
 
     # ekf_localization_node and ukf_localization_node both use a 3D omnidirectional motion model. If this parameter is
     # set to true, no 3D information will be used in your state estimate. Use this if you are operating in a planar
@@ -50,7 +50,7 @@
     reset_on_time_jump: true  # # If the filter sees a jump back in time, the filter is reset (convenient for testing with rosbags!)
 
     #smooth_lagged_data: True  # for VIO, AMCL and laserscan matching
-    #history_length: 20.0
+    #history_length: 2.0  # number of seconds of histor to keep in the filter
 
     # REP-105 (http://www.ros.org/reps/rep-0105.html) specifies four principal coordinate frames: base_link, odom, map, and
     # earth. base_link is the coordinate frame that is affixed to the robot. Both odom and map are world-fixed frames.
@@ -137,31 +137,31 @@
                    false, false, false,  # , , true
                    false, false, false ]
     odom1_queue_size: 2
-    odom1_differential: true  # true: use IMU as the main orientation source, false: use visual odometry as the main orientation source
+    odom1_differential: false  # false: use visual odometry as the main orientation source [good since the covariance is accurate], true: use IMU(s) as the main orientation source
     odom1_relative: true  # false
     #odom1_pose_rejection_threshold: 1.0
     #odom1_twist_rejection_threshold: 0.5
 
-#    odom2: /odom/rtabmap/icp  # /odom/rtabmap/rgbd, /odom/rtabmap/icp, /odom/rtabmap/stereo
-#    odom2_config: [ true,  true,  false,  # true, true,
-#                    false, false, true,
-#                    false, false, false,  # true, true
-#                    false, false, false,  # , , true
-#                    false, false, false ]
-#    odom2_queue_size: 2
-#    odom2_differential: true  # true
-#    odom2_relative: true  # false
+    odom2: /odom/rtabmap/icp  # /odom/rtabmap/rgbd, /odom/rtabmap/icp, /odom/rtabmap/stereo
+    odom2_config: [ true,  true,  true,  # true, true,
+                    true, true, true,
+                    false, false, false,  # true, true
+                    false, false, false,  # , , true
+                    false, false, false ]
+    odom2_queue_size: 2
+    odom2_differential: true  # true
+    odom2_relative: false  # false
     #odom2_pose_rejection_threshold: 1.0
     #odom2_twist_rejection_threshold: 0.5
 
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
     # the VESCs yaw drifts a lot. Will need to remove this bias after calibrating or set yaw to false below. Todo: set to true after calibrating
-    imu0: /vehicle/sensors/imu/data  # todo: test with gyro and accel data enabled
+    imu0: /vehicle/sensors/imu/raw  # /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data  # todo: test with gyro and accel data enabled
     imu0_config: [false, false, false,
-                  true,  true,  true,  # false x3
+                  true,  true,  true,  # false, false, true
                   false, false, false,
-                  false,  false,  false,  # , , false
-                  false,  false,  false]  # true, true,
+                  false,  false,  false,  # false, false, true
+                  false,  false,  false]  # false, false, true
     imu0_nodelay: false
     imu0_differential: false  # false
     imu0_relative: true  # true
@@ -173,20 +173,25 @@
     # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
     # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
     imu0_remove_gravitational_acceleration: true  # false
-    imu0_gravitational_acceleration: 9.80665
+    imu0_gravitational_acceleration: 10.035  # 9.80665
 
     imu1: /camera/camera/imu/filtered  # todo: test with gyro and accel data enabled and disable orientation
     imu1_config: [ false, false, false,
-                   true,  true,  true,  # false x3
+                   true,  true,  true,  # false, false, true
                    false, false, false,
-                   false,  false,  false,  # , , false
-                   false,  false,  false]  # true, true,
+                   false,  false,  false,  # false, true, false
+                   false,  false,  false]  # false, true, false
+#    imu1_config: [false, false, false,
+#                 true,  true,  true,
+#                 true,  true,  true,
+#                 true,  true,  true,
+#                 true,  true,  true]   # used by realsense in (https://github.com/IntelRealSense/realsense-ros/blob/ros1-legacy/realsense2_camera/launch/opensource_tracking.launch)
     imu1_nodelay: false
     imu1_differential: true  # false
-    imu1_relative: false  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
+    imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
     imu1_queue_size: 15
     imu1_remove_gravitational_acceleration: true  # false
-    imu1_gravitational_acceleration: 9.80665
+    imu1_gravitational_acceleration: 9.87  # 9.80665
 #    imu1_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
 #    imu1_twist_rejection_threshold: 0.8                #
 #    imu1_linear_acceleration_rejection_threshold: 1.0  #

@@ -212,9 +212,9 @@ def generate_launch_description():
                 'input_topic': '/camera/camera/imu',
                 'output_topic': '/camera/camera/imu/filtered',
                 'remove_gravity_vector': 'False',  # True
-                'imu_gyro_stddev': '0.01',
-                'imu_accel_stddev': '0.01',
-                'imu_orientation_stddev': '0.01',
+                'imu_gyro_stddev': '0.1',
+                'imu_accel_stddev': '0.1',
+                'imu_orientation_stddev': '0.1',
                 'node_name': 'realsense_imu_filter',
                 'imu_corrector_output_topic': '/camera/camera/imu/bias_removed',
                 'use_madgwick_filter': 'True',
@@ -222,7 +222,7 @@ def generate_launch_description():
                 # camera_imu_optical_frame, sensor_kit_link, base_link
                 'imu_corrector_frame': 'camera_imu_optical_frame',
                 'imu_corrector_node_name': 'realsense_imu_bias_removal_node',
-                'use_sim_time': 'False',
+                'use_sim_time': use_sim_time,
             }.items()
     )
 

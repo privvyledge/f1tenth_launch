@@ -18,9 +18,11 @@ def generate_launch_description():
             executable="scan_to_scan_filter_chain",
             namespace='lidar',
             parameters=[
-                laser_filter_param_file],
+                laser_filter_param_file,
+                {'use_sim_time': False}
+            ],
             remappings=[
-                ('output', 'scan'),
+                # ('scan_filtered', 'scan_filtered'),
                 ('scan', '/lidar/scan')
             ]
         )

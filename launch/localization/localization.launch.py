@@ -58,8 +58,8 @@ def generate_launch_description():
     launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer', default=False)
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
-    launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=True)
-    odom_frequency = LaunchConfiguration('odom_frequency', default=30.0)
+    launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=False)
+    odom_frequency = LaunchConfiguration('odom_frequency', default=50.0)
     map_frequency = LaunchConfiguration('map_frequency', default=10.0)
     launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer', default=False)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
@@ -68,7 +68,7 @@ def generate_launch_description():
     launch_pointcloud_odometry = LaunchConfiguration('launch_pointcloud_odometry', default='False')
     launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='False')
     launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='True')
-    launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='False')
+    launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
@@ -77,7 +77,8 @@ def generate_launch_description():
 
     use_gpu = LaunchConfiguration('use_gpu', default='True')
     qos_rtabmap_camera = LaunchConfiguration('qos_rtabmap', default=2)
-    qos_rtabmap_imu = LaunchConfiguration('qos_rtabmap', default=2)
+    qos_rtabmap_imu = LaunchConfiguration('qos_rtabmap_imu', default=2)
+    qos_rtabmap_laserscan = LaunchConfiguration('qos_rtabmap_laserscan', default=1)
     qos = LaunchConfiguration('qos', default='SENSOR_DATA')
     qos_imu = LaunchConfiguration('qos_imu', default='SENSOR_DATA')
 
@@ -203,6 +204,12 @@ def generate_launch_description():
             'qos_rtabmap_imu', default_value=qos_rtabmap_imu,
             description='Specific QoS used for '
                         'IMU input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.')
+
+    qos_rtabmap_laserscan_la = DeclareLaunchArgument(
+            'qos_rtabmap_laserscan', default_value=qos_rtabmap_laserscan,
+            description='Specific QoS used for '
+                        'the laserscan input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort. '
+                        'Use 1: if using a laserscan filter, else use 2.')
 
     qos_la = DeclareLaunchArgument(
             'qos', default_value=qos,
@@ -456,7 +463,7 @@ def generate_launch_description():
             ]
     )
 
-    # PointCloud Odometry (kiss-icp). todo: also make the pointcloud topic dynamic
+    # PointCloud Odometry (kiss-icp). Do not use with Realsense (RGB-D) PointCloud. Use Open3D instead.
     kiss_icp_node = Node(
             package="kiss_icp",
             executable="kiss_icp_node",
@@ -464,7 +471,7 @@ def generate_launch_description():
             name="kiss_icp_node",
             output="screen",
             remappings=[
-                ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth
+                ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth. todo: also make the pointcloud topic dynamic
             ],
             parameters=[  # todo: see Open3D's realsense settings for ideas
                 {
@@ -506,7 +513,7 @@ def generate_launch_description():
             parameters=[
                 parameters,
                 {
-                    'qos': 1,
+                    'qos': qos_rtabmap_laserscan,
                     'qos_imu': qos_rtabmap_imu,
                     'expected_update_rate': 10.0,
                     'wait_for_transform': 0.3,
@@ -629,7 +636,7 @@ def generate_launch_description():
                             'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
                             'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
                             'imu_topic': '/camera/camera/imu/filtered',  # '/camera/camera/imu/filtered'
-                            'image_qos': qos,  # DEFAULT. todo: as RTABMAP also takes in QoS arguments
+                            'image_qos': qos,  # DEFAULT.
                             'imu_qos': qos_imu,
                             'enable_visualization_topics': 'False',
                             'attach_to_shared_component_container': 'False',  # use_composition
@@ -750,11 +757,10 @@ def generate_launch_description():
         publish_odom_tf_la,
         use_gpu_la,
         rtabmap_group,
-        rtabmap_icp_odometry,
+        rtabmap_icp_odometry,  # separate from rtabmap group due to different parameters
         kiss_icp_node,
         gpu_group,
-        qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_la, qos_imu_la,
-        # rtabmap_icp_odometry,
+        qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
         # rf2o_odometry_node,
         # laser_scan_matcher_node
     ])

@@ -76,6 +76,48 @@ def generate_launch_description():
             arguments=['0.0', '0.0', '-0.033', '0.0', '0.0', '0.0', 'base_link', 'base_footprint']
     )  # rear axle to ground
 
+    base_link_to_rear_axle_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_rear_axle',
+            arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'rear_axle']  # wheelbase
+    )  # base_link == rear_axle
+
+    rear_axle_to_front_axle_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_front_axle',
+            arguments=['0.256', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'front_axle']  # wheelbase
+    )  # rear axle to front axle
+
+    rear_axle_to_right_rear_wheel_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_right_rear_wheel',
+            arguments=['0.0', '-0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'right_rear_wheel']
+    )  # rear axle to right rear wheel
+
+    rear_axle_to_left_rear_wheel_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_left_rear_wheel',
+            arguments=['0.0', '0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'left_rear_wheel']
+    )  # rear axle to left rear wheel
+
+    rear_axle_to_right_front_wheel_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_right_front_wheel',
+            arguments=['0.256', '-0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'right_front_wheel']
+    )  # rear axle to right front wheel
+
+    rear_axle_to_left_front_wheel_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_baselink_to_left_front_wheel',
+            arguments=['0.256', '0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'left_front_wheel']
+    )  # rear axle to left front wheel
+
     static_tf_group = GroupAction(
             actions=[
                 SetParameter(name='use_sim_time', value=use_sim_time),
@@ -85,6 +127,12 @@ def generate_launch_description():
                 robot_state_publisher_node,
                 vesc_imu_static_tf_node,
                 base_footprint_tf_node,
+                base_link_to_rear_axle_tf_node,
+                rear_axle_to_front_axle_tf_node,
+                rear_axle_to_right_rear_wheel_tf_node,
+                rear_axle_to_left_rear_wheel_tf_node,
+                rear_axle_to_right_front_wheel_tf_node,
+                rear_axle_to_left_front_wheel_tf_node
             ]
     )
 
