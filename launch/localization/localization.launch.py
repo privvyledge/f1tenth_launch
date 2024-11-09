@@ -396,7 +396,7 @@ def generate_launch_description():
             }.items()
     )
 
-    # common rtabmap parameters (to avoid having to create multiple LaunchConfigurations to cast as strings)
+    # common rtabmap parameters (to avoid having to create multiple LaunchConfigurations to cast as strings). Source: https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h
     parameters = {
         'Odom/Strategy': '0',  # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
         'Odom/Holonomic': 'False',
@@ -408,10 +408,6 @@ def generate_launch_description():
         'Odom/ResetCountdown': '1',  # reset X frames after losing odometry
         'Rtabmap/StartNewMapOnLoopClosure': 'True',
         'Optimizer/GravitySigma': '0',
-        'Icp/VoxelSize': '0.05',
-        # 'Icp/RangeMax': '12.0',
-        # 'Icp/Force4DoF': 'True'
-        # 'Reg/Force3DoF': 'True',  # leads to instability for now
     }
 
     # RGB-D odometry
@@ -504,6 +500,35 @@ def generate_launch_description():
     )
 
     # LaserScan odometry
+    icp_parameters = {
+        'Odom/Strategy': '0',  # 0=Frame-to-map (accurate), 1=Frame-to-Frame (faster)
+        'Odom/Holonomic': 'True',
+        # should be False, but the ICP node occasionally fails and yields worse odometry when set to False. Either comment out or set to True
+        'Odom/FilteringStrategy': '0',
+        # odom output filtering. 0=None, 1=KF, 2=PF. When testing, setting to any value other than 0 leads to no computation.
+        'OdomF2M/BundleAdjustment': '1',  # 0=disabled, 1=g2o
+        'Odom/GuessMotion': 'True',
+        'Odom/KeyFrameThr': '0.15',  # default = 0.3. 0.6
+        'Odom/ScanKeyFrameThr': '0.7',  # default=0.9. Try 0.75, 0.3
+        'Odom/ResetCountdown': '1',  # reset X frames after losing odometry
+        'OdomF2M/ScanSubtractRadius': '0.05',
+        # Could also set to the same as voxel size. reduce from 0.05 for performance boost at the cost of accuracy
+        'OdomF2M/ScanMaxSize': '2000',  # reduce from 2000 for performance boost at the cost of accuracy
+        'Rtabmap/StartNewMapOnLoopClosure': 'True',
+        'Icp/Strategy': '1',  # 0=PointCloud Library (PCL), 1=libpointmatcher [default]
+        'Icp/MaxCorrespondenceDistance': '0.1',
+        'Icp/MaxTranslation': '0.4',
+        # Maximum ICP translation correction accepted (meters). Note. This should be increased for a fast moving robot or low frequency LIDAR or both. Should be scaled based on max vehicle speed expected vs highest lidar frequency. For example, for a LIDAR publishing scans at 8.5 Hz, with a maximum expected robot speed of 10 m/s, max_translation = max_speed (10) * sample_time (1 / 8.5) = 10 * 0.1176470588 = 1.176470588. Default = 0.2
+        'Icp/MaxRotation': '1.6',
+        # Maximum ICP rotation correction accepted (in radians). See MaxTranslation explanation above. max_rotation = max_yaw_rate * sample_time. Default = 0.78 (45 degrees)
+        'Optimizer/GravitySigma': '0',
+        'Icp/VoxelSize': '0.05',  # increase to 0.2 for performance boost at the cost of accuracy
+        'Icp/Epsilon': '0.0001',  # increase for performance boost at the cost of accuracy. Default=0.0
+        'Icp/Iterations': '10',  # set to 10 for performance boost at the cost of accuracy. Default=30
+        'Icp/RangeMax': '12.0',
+        'Icp/Force4DoF': 'True',
+        'Reg/Force3DoF': 'True',
+    }
     rtabmap_icp_odometry = Node(
             package='rtabmap_odom',
             executable='icp_odometry',
@@ -511,7 +536,7 @@ def generate_launch_description():
             name='rtabmap_icp_odom',
             namespace='rtabmap_icp_odom',
             parameters=[
-                parameters,
+                icp_parameters,
                 {
                     'qos': qos_rtabmap_laserscan,
                     'qos_imu': qos_rtabmap_imu,
@@ -523,7 +548,10 @@ def generate_launch_description():
                     'approx_sync': True,
                     'frame_id': base_frame,
                     'odom_frame_id': odom_frame,
-                    # 'guess_frame_id': odom_frame,
+                    'scan_range_min': 0.1,
+                    'scan_range_max': 12.0,
+                    'deskewing': True,
+                    'guess_frame_id': odom_frame,  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
                     # 'guess_min_translation': 0.05,  # m
                     # 'guess_min_rotation': 0.005,  # rad
                     'publish_tf': publish_odom_tf,
@@ -531,10 +559,10 @@ def generate_launch_description():
                     # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
-            output='screen',
+            output='log',
             remappings=[
                 ('scan', '/lidar/scan_filtered'),
-                ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation. /camera/camera/imu/filtered
+                ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation. /camera/camera/imu/filtered
                 ('odom', '/odom/rtabmap/icp'),
                 ('odom_last_frame', '/rtabmap/icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
             ]
