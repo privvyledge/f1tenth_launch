@@ -8,7 +8,7 @@ from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNode
     SetParametersFromFile, SetParameter
 from launch_ros.descriptions import ParameterFile, ComposableNode
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, \
-    EnvironmentVariable
+    EnvironmentVariable, FindExecutable
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
     OpaqueFunction, SetEnvironmentVariable
@@ -25,6 +25,9 @@ def launch_setup(context, *args, **kwargs):
     base_frame = LaunchConfiguration('base_frame', default='base_link')  # camera_link, base_link
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
     publish_odom_to_baselink_tf = LaunchConfiguration('publish_odom_to_baselink_tf', default=True)
+    save_map = LaunchConfiguration('save_map', default=False)
+    load_map = LaunchConfiguration('load_map', default=False)
+    map_path = LaunchConfiguration('map_path', default='/shared_dir/maps/nvidia/vslam_map')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
@@ -56,6 +59,24 @@ def launch_setup(context, *args, **kwargs):
                                                             default_value=publish_odom_to_baselink_tf,
                                                             description="Publish the dynamic "
                                                                         "odom -> base_link transform")
+
+    save_map_arg = DeclareLaunchArgument('save_map',
+                                         default_value=save_map,
+                                         description="Save the map to a file. Localization and mapping must be true. "
+                                                     "I recommend running the action separately on the CLI."
+                                                     "Warning: this deletes the entire directory specified.")
+
+    load_map_arg = DeclareLaunchArgument('load_map',
+                                         default_value=load_map,
+                                         description="Load the map from a file. "
+                                                     "I recommend running the action separately on the CLI.")
+
+    map_path_arg = DeclareLaunchArgument('map_path',
+                                         default_value=map_path,
+                                         description="Path to the map to load. "
+                                                     "Examples: "
+                                                     "/f1tenth_ws/src/f1tenth_launch/data/maps/nvidia/vslam_map, "
+                                                     "/shared_dir/maps/nvidia/vslam_map")
 
     launch_realsense_driver_launch_arg = DeclareLaunchArgument('launch_realsense_driver',
                                                                default_value=launch_realsense_driver,
@@ -103,6 +124,9 @@ def launch_setup(context, *args, **kwargs):
         base_frame_arg,
         publish_map_to_odom_tf_arg,
         publish_odom_to_baselink_tf_arg,
+        save_map_arg,
+        load_map_arg,
+        map_path_arg,
         launch_realsense_driver_launch_arg,
         left_image_topic_la,
         right_image_topic_la,
@@ -162,6 +186,7 @@ def launch_setup(context, *args, **kwargs):
                 'use_sim_time': use_sim_time,
                 'num_cameras': 2,  # two for a single stereo camera
                 'enable_image_denoising': False,
+                'enable_rectified_pose': True,
                 'rectified_images': True,
                 'enable_imu_fusion': True,
                 'enable_planar_mode': two_d_mode,
@@ -206,6 +231,47 @@ def launch_setup(context, *args, **kwargs):
                         ('visual_slam/imu', imu_topic)]
     )
 
+    # get map path context from launch configuration
+    map_path_string = map_path.perform(context)
+
+    # create the directory if it doesn't exist using python os module
+    if not os.path.exists(map_path_string):
+        os.makedirs(map_path_string, exist_ok=True)
+
+    # to save a map (ros2 action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap "{map_url: /shared_dir/maps/nvidia/vslam_map}")
+    # warning must be in an empty directory cause this wipes out the directory
+    save_map_trigger = TimerAction(
+            period=60.0,
+            actions=[
+                ExecuteProcess(
+                        cmd=[[
+                            FindExecutable(name='ros2'),
+                            ' action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap '
+                            '"{map_url: ' + map_path_string + '}"'
+                        ]],
+                        shell=True,
+                        condition=IfCondition(save_map)
+                )
+            ]
+    )
+
+    # to load a saved map (ros2 action send_goal /visual_slam/load_map_and_localize isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize "{map_url: /shared_dir/maps/nvidia/vslam_map, localize_near_point: {x: x_val, y: y_val, z: z_val}}")
+    load_map_trigger = TimerAction(
+            period=1.5,
+            actions=[
+                ExecuteProcess(
+                        cmd=[[
+                            FindExecutable(name='ros2'),
+                            ' action send_goal /visual_slam/load_map_and_localize '
+                            'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
+                            '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
+                        ]],
+                        shell=True,
+                        condition=IfCondition(load_map)
+                )
+            ]
+    )
+
     visual_slam_launch_container = ComposableNodeContainer(
             name='visual_slam_launch_container',
             namespace='',
@@ -225,7 +291,9 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments and nodes to the launch description
     ld = launch_args + [realsense_camera_node,
                         visual_slam_launch_container,
-                        load_composable_nodes
+                        load_composable_nodes,
+                        save_map_trigger,
+                        load_map_trigger
                         ]
     return ld
 

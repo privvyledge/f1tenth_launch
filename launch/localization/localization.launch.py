@@ -59,7 +59,7 @@ def generate_launch_description():
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
     launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=False)
-    odom_frequency = LaunchConfiguration('odom_frequency', default=50.0)
+    odom_frequency = LaunchConfiguration('odom_frequency', default=30.0)  # 50.0
     map_frequency = LaunchConfiguration('map_frequency', default=10.0)
     launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer', default=False)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
@@ -350,9 +350,15 @@ def generate_launch_description():
             condition=IfCondition(launch_rtabmap_localizer),
             launch_arguments={
                 'use_sim_time': use_sim_time,
+                'qos': '1',
+                'qos_image': qos_rtabmap_camera,
+                'qos_camera_info': qos_rtabmap_camera,
+                'qos_imu': qos_rtabmap_imu,
+                'qos_scan': qos_rtabmap_laserscan,
+                'qos_odom': '1',
                 'use_stereo': 'False',
                 'localization': 'True',
-                'queue_size': '10',
+                'queue_size': '5',  # 10
                 'approx_sync': 'True',
                 'publish_map_tf': 'False',
                 'wait_imu_to_init': 'True',
@@ -660,6 +666,9 @@ def generate_launch_description():
                             'base_frame': base_frame,
                             'publish_map_to_odom_tf': 'False',
                             'publish_odom_to_baselink_tf': publish_odom_tf,
+                            'save_map': 'False',
+                            'load_map': 'True',
+                            'map_path': '/shared_dir/maps/nvidia/vslam_map',
                             'launch_realsense_driver': 'False',
                             'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
                             'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',

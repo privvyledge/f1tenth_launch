@@ -5,7 +5,8 @@ Launches (optionally): 2D mapping (online or offline), 3D mapping (online or off
 Mapping notes:
     * RTABMap's (CPU + 3D) 2D map is more accurate and consistent than SLAM toolbox's implementation.
     * For now: using Depth + Color with RTABMap works better than stereo. Todo: test with good localization
-    * Both GPU (Isaac Nvblox) and RTABMap work perfectly and they both use Color + Depth
+    * Both GPU (Isaac Nvblox) and RTABMap work perfectly and they both use Color + Depth.
+    * Use RTABMap for future localization support
 
 Todo:
     * Write instructions for saving 2D maps
@@ -55,7 +56,7 @@ def launch_setup(context, *args, **kwargs):
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
-    use_gpu = LaunchConfiguration('use_gpu', default=True)
+    use_gpu = LaunchConfiguration('use_gpu', default=False)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
@@ -99,6 +100,8 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
+
+    publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
 
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -299,6 +302,12 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    publish_map_to_odom_tf_la = DeclareLaunchArgument(
+            'publish_map_to_odom_tf',
+            default_value=publish_map_to_odom_tf,
+            description='Whether to publish the map to the odometry frame transformation.'
+    )
+
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
@@ -333,7 +342,8 @@ def launch_setup(context, *args, **kwargs):
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
-        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        publish_map_to_odom_tf_la
     ]
 
     ''' Launch Nodes '''
@@ -435,7 +445,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_stereo": 'False',  # False=use_depth + color, True=use_stereo
                 "localization": 'False',
                 "queue_size": mapping_3d_queue_size,
-                "publish_map_tf": 'True',
+                "publish_map_tf": publish_map_to_odom_tf,
                 "wait_imu_to_init": 'True',
                 "imu_topic": '/camera/camera/imu/filtered',
                 "left_image_topic": left_image_topic,
@@ -456,8 +466,8 @@ def launch_setup(context, *args, **kwargs):
                                 '--RGBD/LinearUpdate 0.001 '
                                 '--RGBD/AngularUpdate 0.001 '
                                 '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0 '
-                                '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                '--Stereo/MinDisparity 0.0 '
+                                '--Stereo/MaxDisparity 64.0 '  # default=128.0, 64 [tested]
                                 '--Stereo/OpticalFlow true '  # default=false
                                 # '--Vis/RoiRatios 0,0,0,.2 '
                                 # "--Kp/RoiRatios 0,0,0,.2 "
@@ -469,22 +479,26 @@ def launch_setup(context, *args, **kwargs):
                                 '--Reg/Force3DoF true '
                                 '--RGBD/NeighborLinkRefining true '  # when using laserscan
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp.
+                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1. todo: test
                                 '--Icp/VoxelSize 0.05 '  
-                                '--Icp/MaxCorrespondenceDistance 0.1 '  
-                                '--Grid/FromDepth False '  
+                                '--Icp/MaxCorrespondenceDistance 0.1 '
                                 # set DetectionRate to 0 to use image rate. Default=1
                                 '--Rtabmap/DetectionRate 30 '
-                                # '--RGBD/CreateOccupancyGrid true '
+                                '--RGBD/CreateOccupancyGrid false '  # tested with false. todo: test
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
-                                '--Grid/Sensor 0 '
-                                '--Grid/RangeMax 15.0 '  # 0=inf
+                                '--Grid/Sensor 0 '  # tested with 0. todo: test
+                                '--Grid/RangeMax 12.0 '  # 0=inf
                                 # enable ray-tracing to clear out cells and mark as free 
                                 # space in occupancy grid map
-                                # '--Grid/RayTracing False '
-                                # '--Grid/FromDepth False '  # generate 2D map from depth
+                                # '--Grid/RayTracing False '  # todo: test
+                                ##'--Grid/FromDepth False '  # generate 2D map from depth. Warning: do not use as this wrongly transfers its value as a boolean to Grid/Sensor. Use Grid/Sensor instead
                                 # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
+                                # A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
+                                # Set to false if you want only a 2D map, the cloud will be projected on xy plane.
+                                # A 2D map can be still generated if checked, but it requires more memory and time to generate it.
+                                # Ignored if laser scan is 2D and Grid/Sensor is 0.
+                                # '--Grid/3D true '  # todo: test true
                                 '--Optimizer/GravitySigma 0',
             }.items()
     )

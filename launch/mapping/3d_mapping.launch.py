@@ -231,6 +231,7 @@ def generate_launch_description():
                     'database_path': database_path,
 
                     'queue_size': queue_size,  # default: 10
+                    'topic_queue_size': queue_size,
                     'wait_for_transform': '0.2',
 
                     'frame_id': 'base_link',
