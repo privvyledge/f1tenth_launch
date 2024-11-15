@@ -17,10 +17,8 @@ from launch_ros.actions import LifecycleNode
 from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, TimerAction, GroupAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.actions import LogInfo
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -60,6 +58,8 @@ def generate_launch_description():
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
+    camera_launch_delay = LaunchConfiguration('camera_launch_delay', default=6.0)
+    laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default=2.0)
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -124,19 +124,37 @@ def generate_launch_description():
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    camera_launch_delay_la = DeclareLaunchArgument(
+            'camera_launch_delay', default_value=camera_launch_delay,
+            description='Delay in seconds before launching the camera nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
+    laserscan_launch_delay_la = DeclareLaunchArgument(
+            'laserscan_launch_delay', default_value=laserscan_launch_delay,
+            description='Delay in seconds before launching the laserscan nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
     # Create Launch Description
     ld = LaunchDescription([use_sim_time_la, approx_sync_la,
                             lidar_la, depth_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la, detect_ground_and_obstacles_la,
                             reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
                             realsense_emitter_enabled_la,
-                            realsense_emitter_on_off_la, launch_realsense_splitter_node_la])
+                            realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+                            camera_launch_delay_la, laserscan_launch_delay_la])
 
     # Nodes
-    lidar_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(PathJoinSubstitution(
-                    [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
-            ))
+    lidar_node = TimerAction(
+            period=laserscan_launch_delay,
+            actions=[
+                IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(PathJoinSubstitution(
+                                [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
+                        ))
+                )
+            ]
     )
 
     # depth_image_node = IncludeLaunchDescription(
@@ -235,13 +253,28 @@ def generate_launch_description():
             ]
     )
 
+    image_processing_group = TimerAction(
+            period=camera_launch_delay,
+            actions=[
+                GroupAction([
+                    realsense_node,
+                    # realsense_imu_node,
+                    # depth_to_laserscan_node,
+                    stereo_and_depth_image_processing_node,
+                    rtabmap_obstacle_and_floor_detection_node
+                ])
+            ]
+    )
+
     # Add nodes to launch description
     ld.add_action(lidar_node)
 
-    ld.add_action(realsense_node)
-    # ld.add_action(realsense_imu_node)
-    # ld.add_action(depth_to_laserscan_node)  # disabled because it is not used. Costmaps can just use pointclouds instead. Also, causes significant performance drop and CPU overhead.
+    # ld.add_action(realsense_node)
+    # # ld.add_action(realsense_imu_node)
+    # # ld.add_action(depth_to_laserscan_node)  # disabled because it is not used. Costmaps can just use pointclouds instead. Also, causes significant performance drop and CPU overhead.
+    #
+    # ld.add_action(stereo_and_depth_image_processing_node)
+    # ld.add_action(rtabmap_obstacle_and_floor_detection_node)
 
-    ld.add_action(stereo_and_depth_image_processing_node)
-    ld.add_action(rtabmap_obstacle_and_floor_detection_node)
+    ld.add_action(image_processing_group)
     return ld

@@ -99,6 +99,9 @@ def generate_launch_description():
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
 
+    camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
+    laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
+
     # Setup Remappings/renamings
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -343,6 +346,18 @@ def generate_launch_description():
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    camera_launch_delay_la = DeclareLaunchArgument(
+            'camera_launch_delay', default_value=camera_launch_delay,
+            description='Delay in seconds before launching the camera nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
+    laserscan_launch_delay_la = DeclareLaunchArgument(
+            'laserscan_launch_delay', default_value=laserscan_launch_delay,
+            description='Delay in seconds before launching the laserscan nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
@@ -380,7 +395,8 @@ def generate_launch_description():
         declare_launch_throttle_interpolator_node,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
-        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la
+        realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        camera_launch_delay_la, laserscan_launch_delay_la
     ]
 
     ''' Launch Nodes '''
@@ -432,6 +448,8 @@ def generate_launch_description():
                 "realsense_emitter_enabled": realsense_emitter_enabled,
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
+                "camera_launch_delay": camera_launch_delay,
+                "laserscan_launch_delay": laserscan_launch_delay
             }.items()
     )
 
@@ -462,7 +480,7 @@ def generate_launch_description():
     )
 
     localization_launch = TimerAction(
-            period=1.0,
+            period=10.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
@@ -478,7 +496,7 @@ def generate_launch_description():
                             'launch_pointcloud_odometry': 'False',
                             'launch_rgbd_odometry': 'False',
                             'launch_stereo_odometry': 'True',
-                            'launch_laserscan_odometry': 'False',
+                            'launch_laserscan_odometry': 'True',
                             'launch_amcl': launch_global_localization,
                             "map_file": map_file,
                             "use_sim_time": use_sim_time,
@@ -499,7 +517,7 @@ def generate_launch_description():
     )
 
     mapping_launch = TimerAction(
-            period=3.0,
+            period=15.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
@@ -533,7 +551,7 @@ def generate_launch_description():
     )
 
     nav2_navigation_launch = TimerAction(
-            period=3.0,
+            period=15.0,
             actions=[
                 IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(

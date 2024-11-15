@@ -101,6 +101,9 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
 
+    camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
+    laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
+
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
 
     # Declare launch arguments
@@ -302,6 +305,18 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    camera_launch_delay_la = DeclareLaunchArgument(
+            'camera_launch_delay', default_value=camera_launch_delay,
+            description='Delay in seconds before launching the camera nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
+    laserscan_launch_delay_la = DeclareLaunchArgument(
+            'laserscan_launch_delay', default_value=laserscan_launch_delay,
+            description='Delay in seconds before launching the laserscan nodes. '
+                        'Used to avoid USB bandwidth limitations, '
+                        'especially startup current draw caused by booting multiple USB devices simultaneously.')
+
     publish_map_to_odom_tf_la = DeclareLaunchArgument(
             'publish_map_to_odom_tf',
             default_value=publish_map_to_odom_tf,
@@ -343,6 +358,7 @@ def launch_setup(context, *args, **kwargs):
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        camera_launch_delay_la, laserscan_launch_delay_la,
         publish_map_to_odom_tf_la
     ]
 
@@ -391,6 +407,8 @@ def launch_setup(context, *args, **kwargs):
                 "realsense_emitter_enabled": realsense_emitter_enabled,
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
+                "camera_launch_delay": camera_launch_delay,
+                "laserscan_launch_delay": laserscan_launch_delay
             }.items()
     )
 
