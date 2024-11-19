@@ -541,6 +541,8 @@ def generate_launch_description():
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
             namespace='rtabmap_icp_odom',
+            respawn=use_respawn,
+            respawn_delay=2.0,
             parameters=[
                 icp_parameters,
                 {
@@ -556,7 +558,7 @@ def generate_launch_description():
                     'odom_frame_id': odom_frame,
                     'scan_range_min': 0.1,
                     'scan_range_max': 12.0,
-                    'deskewing': True,
+                    'deskewing': False,
                     'guess_frame_id': odom_frame,  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
                     # 'guess_min_translation': 0.05,  # m
                     # 'guess_min_rotation': 0.005,  # rad
