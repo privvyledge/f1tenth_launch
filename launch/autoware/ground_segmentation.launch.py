@@ -576,7 +576,7 @@ def generate_launch_description():
         "ogm_outlier_filter_param_path",
         [
             FindPackageShare("f1tenth_launch"),
-            "/config/occupancy_grid_map_outlier_filter.param.yaml",
+            "/config/autoware/occupancy_grid_map_outlier_filter.param.yaml",
         ],
     )
 

@@ -204,7 +204,7 @@
           <arg name="input/image" value="$(var image_raw0)"/>
           <arg name="output/objects" value="$(var detection_rois0)"/>
           <arg name="output/mask" value="/perception/object_recognition/detection/mask0"/>
-          <arg name="model_name" value="yolox_tiny"/> <!-- yolox-sPlus-opt-pseudoV2-T4-960x960-T4-seg16cls or yolox_tiny -->
+          <arg name="model_name" value="yolox-tiny"/> <!-- yolox-sPlus-opt-pseudoV2-T4-960x960-T4-seg16cls or yolox-tiny -->
 <!--          <arg name="yolox_param_path" value="$(find-pkg-share autoware_tensorrt_yolox)/config/yolox_s_plus_opt.param.yaml"/>-->
           <arg name="yolox_param_path" value="$(find-pkg-share autoware_tensorrt_yolox)/config/yolox_tiny.param.yaml"/>
           <arg name="use_decompress" value="false"/>

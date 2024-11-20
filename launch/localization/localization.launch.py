@@ -666,7 +666,7 @@ def generate_launch_description():
                             'use_sim_time': use_sim_time,
                             'two_d_mode': 'True',
                             'base_frame': base_frame,
-                            'publish_map_to_odom_tf': 'False',
+                            'publish_map_to_odom_tf': PythonExpression(['not ', launch_ekf_map]),
                             'publish_odom_to_baselink_tf': publish_odom_tf,
                             'save_map': 'False',
                             'load_map': 'True',
