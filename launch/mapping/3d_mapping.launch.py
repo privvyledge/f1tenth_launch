@@ -54,6 +54,7 @@ def generate_launch_description():
     right_image_topic = LaunchConfiguration('right_image_topic')
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
+    odom_topic = LaunchConfiguration('odom_topic')
 
     qos = LaunchConfiguration('qos')
     qos_image = LaunchConfiguration('qos_image')
@@ -113,6 +114,10 @@ def generate_launch_description():
                             '"/camera/depth_registered/image_rect", '
                             '"/camera/camera/realsense_splitter_node/output/depth", '  # if using realsense splitter
                             '"/camera/realigned_depth_to_color/image_raw"'),
+
+        DeclareLaunchArgument(
+            'odom_topic', default_value='/odometry/local',
+            description='Odometry topic. E.g "/odometry/local", "/visual_slam/tracking/odometry"'),
 
         DeclareLaunchArgument(
                 'approx_sync', default_value='True',
@@ -249,7 +254,7 @@ def generate_launch_description():
                     'subscribe_scan': 'true',
                     'subscribe_scan_cloud': 'false',
 
-                    'odom_topic': '/odometry/local',
+                    'odom_topic': odom_topic,
                     'odom_args': '',
 
                     'imu_topic': imu_topic,

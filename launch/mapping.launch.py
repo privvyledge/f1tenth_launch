@@ -469,8 +469,9 @@ def launch_setup(context, *args, **kwargs):
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
                 "depth_topic": depth_topic,
+                "odom_topic": '/odometry/local',
                 "approx_sync": 'True',
-                "rtabmap_viz_view": 'True',  # launch_visualization
+                "rtabmap_viz_view": 'False',  # launch_visualization
                 "rviz_view": 'False',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "rtabmap_args": f'{delete_old_map}'
@@ -478,7 +479,7 @@ def launch_setup(context, *args, **kwargs):
                                 '--Rtabmap/CreateIntermediateNodes true '
                                 # always update the map not only when the robot moves. todo
                                 # '--map_always_update False'
-                                '--Vis/MinInliers 20 '  # default=20, 15 [tested]
+                                '--Vis/MinInliers 15 '  # default=20, 15 [tested]
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
                                 '--RGBD/LinearUpdate 0.001 '
@@ -486,7 +487,7 @@ def launch_setup(context, *args, **kwargs):
                                 '--GFTT/QualityLevel 0.00001 '
                                 '--Stereo/MinDisparity 0.0 '
                                 '--Stereo/MaxDisparity 64.0 '  # default=128.0, 64 [tested]
-                                '--Stereo/OpticalFlow true '  # default=false
+                                '--Stereo/OpticalFlow false '  # default=false [tested]
                                 # '--Vis/RoiRatios 0,0,0,.2 '
                                 # "--Kp/RoiRatios 0,0,0,.2 "
                                 '--Vis/BundleAdjustment 1 '
@@ -497,7 +498,7 @@ def launch_setup(context, *args, **kwargs):
                                 '--Reg/Force3DoF true '
                                 '--RGBD/NeighborLinkRefining true '  # when using laserscan
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1. todo: test
+                                '--Reg/Strategy 2 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
                                 '--Icp/VoxelSize 0.05 '  
                                 '--Icp/MaxCorrespondenceDistance 0.1 '
                                 # set DetectionRate to 0 to use image rate. Default=1
@@ -516,7 +517,7 @@ def launch_setup(context, *args, **kwargs):
                                 # Set to false if you want only a 2D map, the cloud will be projected on xy plane.
                                 # A 2D map can be still generated if checked, but it requires more memory and time to generate it.
                                 # Ignored if laser scan is 2D and Grid/Sensor is 0.
-                                # '--Grid/3D true '  # todo: test true
+                                # '--Grid/3D true '
                                 '--Optimizer/GravitySigma 0',
             }.items()
     )

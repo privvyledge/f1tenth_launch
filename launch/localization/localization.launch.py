@@ -364,6 +364,7 @@ def generate_launch_description():
                 'wait_imu_to_init': 'True',
                 'imu_topic': '/camera/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
                 "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',
+                "odom_topic": '/odometry/local',
                 'rtabmap_viz_view': 'False',
                 'rviz_view': 'False',
                 'database_path': rtabmap_database_file,
