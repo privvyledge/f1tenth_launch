@@ -55,7 +55,7 @@ def launch_setup(context, *args, **kwargs):
     # todo: refactor namespaces for multiple F1/10s
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
-    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
     namespace = LaunchConfiguration('namespace', '')  # todo: remove from here and nested launch files
     use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     map_file = LaunchConfiguration('map_file', default=map_file_path)

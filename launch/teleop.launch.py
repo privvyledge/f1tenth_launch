@@ -27,7 +27,7 @@ def launch_setup(context, *args, **kwargs):
     # Declare launch configuration variables
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
-    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default="False")
     use_gpu = LaunchConfiguration('use_gpu', default=True)
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
@@ -372,7 +372,7 @@ def launch_setup(context, *args, **kwargs):
     )  # append F1/10 namespace to all nodes
 
     # return the launch description
-    ld = LaunchDescription(launch_args + [nodes_to_launch])
+    ld = launch_args + [nodes_to_launch]
     return ld
 
 

@@ -41,7 +41,7 @@ def generate_launch_description():
     align_depth = LaunchConfiguration('align_depth')
     emitter_enabled = LaunchConfiguration('emitter_enabled')
     emitter_on_off = LaunchConfiguration('emitter_on_off')
-    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
 
     # Create a dictionary for substitutable parameters
     param_substitutions = {

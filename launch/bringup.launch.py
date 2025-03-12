@@ -46,7 +46,7 @@ def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
-    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
     namespace = LaunchConfiguration('namespace')  # todo: remove from here and nested launch files
     use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     slam = LaunchConfiguration('slam', default=False)
@@ -646,11 +646,9 @@ def launch_setup(context, *args, **kwargs):
                 nav2_bringup_group,
             ]
     )  # append F1/10 namespace to all nodes
-    ld = LaunchDescription(
-            launch_args + [
+    ld = launch_args + [
                 nodes_to_launch
             ]
-    )
     return ld
 
 def generate_launch_description():
