@@ -52,8 +52,12 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
-    namespace = LaunchConfiguration('namespace')
-    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    # todo: refactor namespaces for multiple F1/10s
+    f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
+                                            default='')  # used to distinguish between multiple F1/10s
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
+    namespace = LaunchConfiguration('namespace', '')  # todo: remove from here and nested launch files
+    use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
     use_gpu = LaunchConfiguration('use_gpu', default=False)
@@ -110,9 +114,19 @@ def launch_setup(context, *args, **kwargs):
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
 
+    declare_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'f1tenth_namespace',
+            default_value=f1tenth_namespace,
+            description='Top-level namespace to distinguish between each F1/10 (robot).')
+
+    declare_use_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'use_f1tenth_namespace',
+            default_value=use_f1tenth_namespace,
+            description='Whether to apply a namespace to the entire stack.')
+
     declare_namespace_cmd = DeclareLaunchArgument(
             'namespace',
-            default_value='',
+            default_value=namespace,
             description='Top-level namespace')
 
     declare_use_namespace_cmd = DeclareLaunchArgument(
@@ -326,6 +340,8 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
+        declare_f1tenth_namespace_cmd,
+        declare_use_f1tenth_namespace_cmd,
         declare_namespace_cmd,
         declare_use_namespace_cmd,
         declare_map_yaml_cmd,
@@ -368,6 +384,9 @@ def launch_setup(context, *args, **kwargs):
     #  https://robotics.stackexchange.com/a/103368 |
     #  https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/ |
     #  https://robotics.stackexchange.com/a/104402
+    use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
+    f1tenth_namespace_string = f1tenth_namespace.perform(context)
+
     use_sim_time_string = use_sim_time.perform(context)
     life_long_mapping_string = life_long_mapping.perform(context)
     realsense_splitter_enabled_string = launch_realsense_splitter_node.perform(context)
@@ -558,10 +577,32 @@ def launch_setup(context, *args, **kwargs):
             ]
     )
 
-    ld = launch_args + [
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER')
+            )
+
+    nodes_to_launch = GroupAction(
+            actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_f1tenth_namespace),
+                        namespace=f1tenth_namespace
+                ),
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                # nodes
                 teleop_launch,
                 mapping_2d_node,
                 mapping_3d_group
+            ]
+    )  # append F1/10 namespace to all nodes
+
+    ld = launch_args + [
+                nodes_to_launch
             ]
     return ld
 

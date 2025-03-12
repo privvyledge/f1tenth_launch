@@ -5,16 +5,16 @@ Todo: setup loglevel
 import os
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, SetRemap, PushRosNamespace, SetParametersFromFile, SetParameter
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, LogInfo, TimerAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, OpaqueFunction, SetEnvironmentVariable, LogInfo, TimerAction
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
 
@@ -25,6 +25,9 @@ def generate_launch_description():
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
 
     # Declare launch configuration variables
+    f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
+                                            default='')  # used to distinguish between multiple F1/10s
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
     use_sim_time = LaunchConfiguration('use_sim_time', default="False")
     use_gpu = LaunchConfiguration('use_gpu', default=True)
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
@@ -63,6 +66,16 @@ def generate_launch_description():
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
 
     # Declare launch arguments
+    declare_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'f1tenth_namespace',
+            default_value=f1tenth_namespace,
+            description='Top-level namespace to distinguish between each F1/10 (robot).')
+
+    declare_use_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'use_f1tenth_namespace',
+            default_value=use_f1tenth_namespace,
+            description='Whether to apply a namespace to the entire stack.')
+
     use_gpu_la = DeclareLaunchArgument(
             'use_gpu', default_value=use_gpu,
             description='Use GPU acceleration. Default: True')
@@ -209,6 +222,8 @@ def generate_launch_description():
                         'especially startup current draw caused by booting multiple USB devices simultaneously.')
 
     launch_args = [
+        declare_f1tenth_namespace_cmd,
+        declare_use_f1tenth_namespace_cmd,
         use_gpu_la,
         launch_joystick_arg,
         launch_sensors_arg,
@@ -231,6 +246,9 @@ def generate_launch_description():
     ]
 
     # Launch nodes
+    use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
+    f1tenth_namespace_string = f1tenth_namespace.perform(context)
+
     joystick_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'joystick.launch.py'])
@@ -323,7 +341,42 @@ def generate_launch_description():
 
     visualization_launch = None
 
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER')
+            )
+
+    nodes_to_launch = GroupAction(
+            actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_f1tenth_namespace),
+                        namespace=f1tenth_namespace
+                ),
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                # nodes
+                joystick_launch,
+                ackermann_mux_launch,
+                sensors_launch,
+                vehicle_launch,
+                tf_launch,
+                localization_launch
+            ]
+    )  # append F1/10 namespace to all nodes
+
     # return the launch description
-    ld = LaunchDescription(launch_args + [joystick_launch, ackermann_mux_launch, sensors_launch,
-                                          vehicle_launch, tf_launch, localization_launch])
+    ld = LaunchDescription(launch_args + [nodes_to_launch])
     return ld
+
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )

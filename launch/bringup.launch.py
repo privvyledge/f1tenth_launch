@@ -14,7 +14,7 @@ from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitut
     EnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
-    SetEnvironmentVariable, LogInfo
+    OpaqueFunction, SetEnvironmentVariable, LogInfo
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
@@ -22,7 +22,7 @@ from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
@@ -44,8 +44,11 @@ def generate_launch_description():
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
-    namespace = LaunchConfiguration('namespace')
-    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
+                                            default='')  # used to distinguish between multiple F1/10s
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)
+    namespace = LaunchConfiguration('namespace')  # todo: remove from here and nested launch files
+    use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     slam = LaunchConfiguration('slam', default=False)
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
@@ -137,6 +140,16 @@ def generate_launch_description():
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
             'RCUTILS_LOGGING_BUFFERED_STREAM', '1')
+
+    declare_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'f1tenth_namespace',
+            default_value=f1tenth_namespace,
+            description='Top-level namespace to distinguish between each F1/10 (robot).')
+
+    declare_use_f1tenth_namespace_cmd = DeclareLaunchArgument(
+            'use_f1tenth_namespace',
+            default_value=use_f1tenth_namespace,
+            description='Whether to apply a namespace to the entire stack.')
 
     declare_namespace_cmd = DeclareLaunchArgument(
             'namespace',
@@ -361,6 +374,8 @@ def generate_launch_description():
     # Add launch arguments to a list
     launch_args = [
         stdout_linebuf_envvar,
+        declare_f1tenth_namespace_cmd,
+        declare_use_f1tenth_namespace_cmd,
         declare_namespace_cmd,
         declare_use_namespace_cmd,
         declare_slam_cmd,
@@ -400,6 +415,9 @@ def generate_launch_description():
     ]
 
     ''' Launch Nodes '''
+    use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
+    f1tenth_namespace_string = f1tenth_namespace.perform(context)
+
     component_container_node = Node(
             condition=IfCondition(use_composition),
             name='f1tenth_container',  # todo: set as a launch argument
@@ -602,10 +620,40 @@ def generate_launch_description():
     )
 
     # Add launch arguments and nodes to the launch description
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER')
+            )
+    nodes_to_launch = GroupAction(
+            actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_f1tenth_namespace),
+                        namespace=f1tenth_namespace
+                ),
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                # nodes
+                component_container_node,
+                visualization_launch,
+                vehicle_bringup_group,
+                nav2_bringup_group,
+            ]
+    )  # append F1/10 namespace to all nodes
     ld = LaunchDescription(
             launch_args + [
-                component_container_node, visualization_launch,
-                vehicle_bringup_group, nav2_bringup_group,
+                nodes_to_launch
             ]
     )
     return ld
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )
