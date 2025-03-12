@@ -175,7 +175,7 @@ def generate_launch_description():
                 'node_name': 'vesc_imu_filter',
                 'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'True',
-                'remove_imu_bias': 'True',
+                'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
                 'imu_corrector_frame': 'imu_link',  # imu_link, sensor_kit_link, base_link
                 'imu_corrector_node_name': 'vesc_imu_bias_removal_node',
                 'use_sim_time': 'False',

@@ -218,7 +218,7 @@ def generate_launch_description():
                 'node_name': 'realsense_imu_filter',
                 'imu_corrector_output_topic': '/camera/camera/imu/bias_removed',
                 'use_madgwick_filter': 'True',
-                'remove_imu_bias': 'True',
+                'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
                 # camera_imu_optical_frame, sensor_kit_link, base_link
                 'imu_corrector_frame': 'camera_imu_optical_frame',
                 'imu_corrector_node_name': 'realsense_imu_bias_removal_node',

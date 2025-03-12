@@ -27,7 +27,7 @@ def launch_setup(context, *args, **kwargs):
     publish_odom_to_baselink_tf = LaunchConfiguration('publish_odom_to_baselink_tf', default=True)
     save_map = LaunchConfiguration('save_map', default=False)
     load_map = LaunchConfiguration('load_map', default=False)
-    map_path = LaunchConfiguration('map_path', default='/shared_dir/maps/nvidia/vslam_map')
+    map_path = LaunchConfiguration('map_path', default='/mnt/data/maps/nvidia/vslam_map')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
@@ -73,8 +73,10 @@ def launch_setup(context, *args, **kwargs):
 
     map_path_arg = DeclareLaunchArgument('map_path',
                                          default_value=map_path,
-                                         description="Path to the map to load. "
+                                         description="Path to save/load the visual slam map to/from. "
                                                      "Examples: "
+                                                     "/mnt/shared_dir/maps/nvidia/vslam_map, "
+                                                     "/mnt/data/maps/nvidia/vslam_map, "
                                                      "/f1tenth_ws/src/f1tenth_launch/data/maps/nvidia/vslam_map, "
                                                      "/shared_dir/maps/nvidia/vslam_map")
 

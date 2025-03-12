@@ -68,6 +68,7 @@ def generate_launch_description():
     launch_pointcloud_odometry = LaunchConfiguration('launch_pointcloud_odometry', default='False')
     launch_rgbd_odometry = LaunchConfiguration('launch_rgbd_odometry', default='False')
     launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='True')
+    visual_slam_map_path = LaunchConfiguration('visual_slam_map_path', default='/mnt/data/maps/nvidia/vslam_map')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
 
@@ -170,6 +171,15 @@ def generate_launch_description():
             'launch_stereo_odometry', default_value=launch_stereo_odometry,
             description='Whether to launch stereo odometry. '
                         'For realsense cameras, this is probably more accurate than RGB-D')
+
+    visual_slam_map_path_la = DeclareLaunchArgument(
+            'visual_slam_map_path', default_value=visual_slam_map_path,
+            description="Path to save/load the visual slam map to/from. "
+                                                     "Examples: "
+                                                     "/mnt/shared_dir/maps/nvidia/vslam_map, "
+                                                     "/mnt/data/maps/nvidia/vslam_map, "
+                                                     "/f1tenth_ws/src/f1tenth_launch/data/maps/nvidia/vslam_map, "
+                                                     "/shared_dir/maps/nvidia/vslam_map")
 
     launch_laserscan_odometry_la = DeclareLaunchArgument(
             'launch_laserscan_odometry', default_value=launch_laserscan_odometry,
@@ -671,7 +681,7 @@ def generate_launch_description():
                             'publish_odom_to_baselink_tf': publish_odom_tf,
                             'save_map': 'False',
                             'load_map': 'True',
-                            'map_path': '/shared_dir/maps/nvidia/vslam_map',
+                            'map_path': visual_slam_map_path,
                             'launch_realsense_driver': 'False',
                             'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
                             'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
@@ -770,6 +780,7 @@ def generate_launch_description():
         launch_pointcloud_odometry_la,
         launch_rgbd_odometry_la,
         launch_stereo_odometry_la,
+        visual_slam_map_path_la,
         launch_laserscan_odometry_la,
         launch_amcl_la,
         localization_param,
