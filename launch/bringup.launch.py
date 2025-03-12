@@ -149,7 +149,10 @@ def launch_setup(context, *args, **kwargs):
     declare_use_f1tenth_namespace_cmd = DeclareLaunchArgument(
             'use_f1tenth_namespace',
             default_value=use_f1tenth_namespace,
-            description='Whether to apply a namespace to the entire stack.')
+            description='Whether to apply a namespace to the entire stack. '
+                        'If launch argument for f1tenth_namespace is empty and this is true, '
+                        'uses the $VEHICLE_NAME environment variable. '
+                        'Defaults to the username if $VEHICLE_NAME doesn\'t exist and the namespace argument is empty.')
 
     declare_namespace_cmd = DeclareLaunchArgument(
             'namespace',
