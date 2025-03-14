@@ -21,6 +21,7 @@ def generate_launch_description():
 
     joy_config = LaunchConfiguration('joy_config')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
 
@@ -34,6 +35,11 @@ def generate_launch_description():
             default_value=deadman_buttons,
             description='Buttons used to arm the vehicle actuators.')
 
+    steering_button_la = DeclareLaunchArgument(
+            'steering_button',
+            default_value=steering_button,
+            description='Button used to control the steering angle. 2 for DualShock/DualSense, 3 for Logitech F710')
+
     max_speed_la = DeclareLaunchArgument(
             'max_speed',
             default_value=max_speed,
@@ -44,7 +50,7 @@ def generate_launch_description():
             default_value=max_steering,
             description='The maximum steering angle in rads.')
 
-    ld = LaunchDescription([joy_la, deadman_buttons_la, max_speed_la, max_steering_la])
+    ld = LaunchDescription([joy_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
 
     joy_node = Node(
             package='joy',
@@ -63,6 +69,7 @@ def generate_launch_description():
                 joy_config,
                 {
                     'human_control.deadman_buttons': deadman_buttons,
+                    'human_control.axis_mappings.drive-steering_angle.axis': steering_button,
                     'human_control.axis_mappings.drive-speed.scale': max_speed,  # max speed in m/s
                     'human_control.axis_mappings.drive-steering_angle.scale': max_steering,  # max steering in rads
                 }

@@ -84,6 +84,7 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
@@ -231,6 +232,11 @@ def launch_setup(context, *args, **kwargs):
             default_value=deadman_buttons,
             description='Buttons used to arm the vehicle actuators.')
 
+    steering_button_la = DeclareLaunchArgument(
+            'steering_button',
+            default_value=steering_button,
+            description='Button used to control the steering angle. 2 for DualShock/DualSense, 3 for Logitech F710')
+
     max_speed_la = DeclareLaunchArgument(
             'max_speed',
             default_value=max_speed,
@@ -370,7 +376,7 @@ def launch_setup(context, *args, **kwargs):
         online_mapping_2d_param_file_la,
         map_2d_file_la,
         rtabmap_database_file_la,
-        deadman_buttons_la, max_speed_la, max_steering_la,
+        deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la,
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
@@ -411,6 +417,7 @@ def launch_setup(context, *args, **kwargs):
                 "launch_visualization": 'False',
                 "rviz_config_file": rviz_config_file,
                 "deadman_buttons": deadman_buttons,
+                "steering_button": steering_button,
                 "max_speed": max_speed,
                 "max_steering": max_steering,
                 "launch_ackermann_to_vesc_node": launch_ackermann_to_vesc_node,
