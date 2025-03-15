@@ -305,7 +305,7 @@ def launch_setup(context, *args, **kwargs):
             ),
             condition=IfCondition(launch_vehicle),
             launch_arguments={
-                "launch_imu_filter": 'True',
+                "launch_imu_filter": 'False',  # disabled since not all the vehicle controllers have IMUs.
                 "launch_ackermann_to_vesc_node": launch_ackermann_to_vesc_node,
                 "launch_vesc_to_odom_node": launch_vesc_to_odom_node,
                 "launch_throttle_interpolator_node": launch_throttle_interpolator_node,

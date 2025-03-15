@@ -40,7 +40,7 @@ def generate_launch_description():
             description='Descriptions for vesc configs')
     declare_launch_imu_filter = DeclareLaunchArgument(
             'launch_imu_filter',
-            default_value='True',
+            default_value='False',
             description='Whether to start the joystick node.')
     declare_launch_ackermann_to_vesc_node = DeclareLaunchArgument(
             'launch_ackermann_to_vesc_node',
