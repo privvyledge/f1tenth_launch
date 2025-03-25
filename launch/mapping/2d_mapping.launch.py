@@ -104,6 +104,7 @@ def generate_launch_description():
 
     offline_slam_launch = Node(
             condition=IfCondition([offline_mapping]),
+            namespace=namespace,
             parameters=[
                 offline_mapping_param_file,
                 {'use_sim_time': use_sim_time}
@@ -116,6 +117,7 @@ def generate_launch_description():
 
     online_slam_launch = Node(
             condition=IfCondition(PythonExpression(['not ', offline_mapping])),
+            namespace=namespace,
             parameters=[
                 online_mapping_param_file,
                 {'use_sim_time': use_sim_time}
@@ -130,6 +132,7 @@ def generate_launch_description():
             package='rviz2',
             executable='rviz2',
             name='rviz2',
+            namespace=namespace,
             condition=IfCondition(with_rviz),
             arguments=['-d', rviz_cfg_path_param]
     )
@@ -141,6 +144,7 @@ def generate_launch_description():
     start_map_saver_server_cmd = Node(
             package='nav2_map_server',
             executable='map_saver_server',
+            namespace=namespace,
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
             parameters=[
@@ -155,6 +159,7 @@ def generate_launch_description():
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
             name='lifecycle_manager',
+            namespace=namespace,
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
             parameters=[{'use_sim_time': use_sim_time},

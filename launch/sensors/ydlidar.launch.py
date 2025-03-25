@@ -22,6 +22,7 @@ def generate_launch_description():
     # Create the launch configuration variables
     lidar_config = LaunchConfiguration('lidar_config')
     launch_filter = LaunchConfiguration('launch_filter')
+    namespace = LaunchConfiguration('namespace', default='')
 
     # Launch arguments
     lidar_config_file = os.path.join(
@@ -38,8 +39,12 @@ def generate_launch_description():
             default_value='True',
             description='Whether to launch the LIDAR filter')
 
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+
     # Create Launch Description
-    ld = LaunchDescription([lidar_la, declare_launch_filter_cmd])
+    ld = LaunchDescription([lidar_la, declare_launch_filter_cmd, namespace_la])
 
     # Setup nodes
     lidar_node = LifecycleNode(package='ydlidar_ros2_driver',
@@ -48,13 +53,16 @@ def generate_launch_description():
                                output='screen',
                                emulate_tty=True,
                                parameters=[lidar_config],
-                               namespace='lidar')
+                               namespace=namespace)
 
     laserscan_filter = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [f1tenth_launch_dir, 'launch/filters', 'laser_filter.launch.py']
             )),
             condition=IfCondition([launch_filter]),
+            launch_arguments={
+                'namespace': namespace,
+            }.items(),
     )
 
     ld.add_action(lidar_node)

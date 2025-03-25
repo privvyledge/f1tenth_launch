@@ -1,0 +1,59 @@
+/**:
+  ros__parameters:
+#    serial_no: '' # d435i
+#    device_type: d435i
+#    camera_name: ''
+#    camera_namespace: 'camera'
+    initial_reset: false
+    base_frame_id: camera_link
+
+    accelerate_gpu_with_glsl: false  # Only available if compiled with the flag set to ON. Note: setting to true causes high cpu utilization.
+    log_level: info # DEBUG|INFO|WARN|ERROR|FATAL
+    wait_for_device_timeout: -1.0 # Timeout for waiting for device to connect (Seconds)
+    reconnect_timeout: 6.0  # Timeout(seconds) between consecutive reconnection attempts
+
+    enable_sync: false
+    enable_depth: false
+    enable_color: false
+    enable_infra: false
+    enable_infra1: false
+    enable_infra2: false
+    pointcloud.enable: false  # overridden by launch files
+    colorizer.enable: false
+    align_depth.enable: false # Overridden by launch files
+    enable_gyro: true
+    enable_accel: true
+    enable_rgbd: false
+    enable_confidence: false
+    enable_pose: false
+
+    depth_module.profile: 640x480x30
+    rgb_camera.profile: 1280x720x30
+    pointcloud.ordered_pc: false
+#    pointcloud.stream_filter: 2
+    pointcloud.allow_no_texture_points: false
+
+    gyro_fps: 400 # 200, 400
+    accel_fps: 200 # 100, 200
+    unite_imu_method: 2  # 0: no unified imu message, 1: copy, 2: linear interpolation
+    angular_velocity_cov: 0.01
+    linear_accel_cov: 0.01
+
+    publish_tf: true
+#    tf_publish_rate: 200.0
+
+    # might remove
+    enable_pointcloud: false
+    dense_pointcloud: false
+
+#    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
+#    color_qos: "SENSOR_DATA"
+#    color_info_qos: "SENSOR_DATA"
+#    infra_qos: "SENSOR_DATA"
+#    infra1_qos: "SENSOR_DATA"
+#    infra2_qos: "SENSOR_DATA"
+#    depth_qos: "SENSOR_DATA"
+#    depth_info_qos: "SENSOR_DATA"
+#    pointcloud.pointcloud_qos: "SENSOR_DATA"
+#    gyro_qos: "SENSOR_DATA"
+#    accel_qos: "SENSOR_DATA"

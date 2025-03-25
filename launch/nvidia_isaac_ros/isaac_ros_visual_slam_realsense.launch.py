@@ -3,6 +3,8 @@
 """
 
 import os
+from tkinter.font import names
+
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, \
     SetParametersFromFile, SetParameter
@@ -21,6 +23,8 @@ from ament_index_python.packages import get_package_share_directory
 def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    namespace = LaunchConfiguration('namespace', default='')
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     two_d_mode = LaunchConfiguration('two_d_mode', default=False)
     base_frame = LaunchConfiguration('base_frame', default='base_link')  # camera_link, base_link
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
@@ -43,6 +47,11 @@ def launch_setup(context, *args, **kwargs):
     use_sim_time_la = DeclareLaunchArgument(
             'use_sim_time', default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+    camera_name_launch_arg = DeclareLaunchArgument('camera_name', default_value=camera_name,
+                                                 description='The name of the camera node.')
     two_d_mode_arg = DeclareLaunchArgument('two_d_mode',
                                            default_value=two_d_mode,
                                            description="Whether to apply 2D constraints, e.g. for cars and WMR.")
@@ -86,15 +95,15 @@ def launch_setup(context, *args, **kwargs):
                                                                            "launch the Realsense Camera.")
 
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
+            'left_image_topic', default_value='infra1/image_rect_raw',
             description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
 
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
+            'right_image_topic', default_value='infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
 
     imu_topic_la = DeclareLaunchArgument(
-            'imu_topic', default_value='/camera/camera/imu',
+            'imu_topic', default_value='imu',
             description='/camera/camera/imu or /camera/camera/imu/filtered')
 
     image_qos_arg = DeclareLaunchArgument('image_qos', default_value=image_qos,
@@ -122,6 +131,7 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments to a list
     launch_args = [
         use_sim_time_la,
+        namespace_la,
         two_d_mode_arg,
         base_frame_arg,
         publish_map_to_odom_tf_arg,
@@ -140,11 +150,18 @@ def launch_setup(context, *args, **kwargs):
         component_container_name_arg
     ]
 
+    # Get string values from launch configuration
+    namespace_string = namespace.perform(context)
+    camera_name_string = camera_name.perform(context)
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
     # Run nodes
     realsense_camera_node = Node(
             condition=IfCondition(launch_realsense_driver),
-            name='camera',
-            namespace='camera',
+            name=camera_name,
+            namespace=namespace,
             package='realsense2_camera',
             executable='realsense2_camera_node',
             parameters=[{
@@ -171,8 +188,8 @@ def launch_setup(context, *args, **kwargs):
 
     # realsense_camera_node_composed = ComposableNode(
     #         condition=IfCondition(launch_realsense_driver),
-    #         # name='camera',
-    #         namespace="camera",
+    #         # name=camera_name,
+    #         namespace=namespace,
     #         package='realsense2_camera',
     #         plugin='realsense2_camera::RealSenseNodeFactory',
     #         extra_arguments=[{'use_intra_process_comms': LaunchConfiguration("intra_process_comms")}],
@@ -227,9 +244,9 @@ def launch_setup(context, *args, **kwargs):
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
-                        ('visual_slam/camera_info_0', 'camera/camera/infra1/camera_info'),
+                        ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),
                         ('visual_slam/image_1', right_image_topic),
-                        ('visual_slam/camera_info_1', 'camera/camera/infra2/camera_info'),
+                        ('visual_slam/camera_info_1', camera_name_string + 'infra2/camera_info'),
                         ('visual_slam/imu', imu_topic)]
     )
 
@@ -248,7 +265,7 @@ def launch_setup(context, *args, **kwargs):
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            ' action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap '
+                            f' action send_goal {namespace_string}/visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap '
                             '"{map_url: ' + map_path_string + '}"'
                         ]],
                         shell=True,
@@ -264,7 +281,7 @@ def launch_setup(context, *args, **kwargs):
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            ' action send_goal /visual_slam/load_map_and_localize '
+                            f' action send_goal {namespace_string}/visual_slam/load_map_and_localize '
                             'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
                             '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
                         ]],
@@ -276,7 +293,7 @@ def launch_setup(context, *args, **kwargs):
 
     visual_slam_launch_container = ComposableNodeContainer(
             name='visual_slam_launch_container',
-            namespace='',
+            namespace=namespace,
             package='rclcpp_components',
             executable='component_container_mt',  # use component_container_mt for multithreading support
             condition=UnlessCondition(attach_to_shared_component_container),

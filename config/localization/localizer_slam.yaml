@@ -1,4 +1,4 @@
-slam_toolbox:
+/**: # slam_toolbox:
   ros__parameters:
 
     # Plugin params
@@ -13,7 +13,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_link
-    scan_topic: /lidar/scan_filtered
+    scan_topic: scan_filtered
     mode: localization
 
     # if you'd like to start localizing on bringup in a map and pose. todo: replace in launch file

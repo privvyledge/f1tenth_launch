@@ -50,18 +50,20 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import LogInfo
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable, LogInfo
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction, LogInfo
 from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
 
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
+    use_namespace = LaunchConfiguration('use_namespace')
+    namespace = LaunchConfiguration('namespace')
     approx_sync = LaunchConfiguration('approx_sync')
     queue_size = LaunchConfiguration('queue_size')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
@@ -78,11 +80,18 @@ def generate_launch_description():
     rtabmap_depth_decimation = LaunchConfiguration('rtabmap_depth_decimation')
     rtabmap_voxel_size = LaunchConfiguration('rtabmap_voxel_size')
     qos = LaunchConfiguration('qos')
+    use_system_default_qos = LaunchConfiguration('use_system_default_qos')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
                 'use_sim_time', default_value='False',
                 description='Use simulation (Gazebo) clock if true')
+    use_namespace_la = DeclareLaunchArgument(
+                'use_namespace', default_value='False',
+                description='Use namespace if true')
+    namespace_la = DeclareLaunchArgument(
+                'namespace', default_value='',
+                description='Namespace for the nodes')
     approx_sync_la = DeclareLaunchArgument(
                 'approx_sync', default_value='True',
                 description='Synchronize topics')
@@ -98,16 +107,16 @@ def generate_launch_description():
                                                         description='Whether to publish a PointCloud2 message '
                                                                     'from a depth image.')
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
-            description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
+            'left_image_topic', default_value='camera/infra1/image_rect_raw',
+            description='camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
-            description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
+            'right_image_topic', default_value='camera/infra2/image_rect_raw',
+            description='camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
     rgb_image_topic_la = DeclareLaunchArgument(
-            'rgb_image_topic', default_value='/camera/camera/color/image_raw',
+            'rgb_image_topic', default_value='camera/color/image_raw',
             description='')
     depth_image_topic_la = DeclareLaunchArgument(
-            'depth_image_topic', default_value='/camera/camera/depth/image_rect_raw',
+            'depth_image_topic', default_value='camera/depth/image_rect_raw',
             description='Raw unaligned depth topic to subscribe to. E.g '
                         '"/camera/camera/depth/image_rect_raw", '
                         '"/camera/camera/aligned_depth_to_color/image_raw", '
@@ -139,23 +148,27 @@ def generate_launch_description():
                         'Set to 0.0 to disable and publish full cloud.')
     qos_la = DeclareLaunchArgument(
             'qos', default_value='2',
-            description='Specific QoS used for image input data: 0=system default, 1=Reliable, 2=Best Effort.')
+            description='Specific QoS used for image input data to RTABMAP: '
+                        '0=system default, 1=Reliable, 2=Best Effort.')
+    use_system_default_qos_la = DeclareLaunchArgument(
+            'use_system_default_qos', default_value='False',
+            description='Use system default QoS if true for image_proc nodes. ')
 
     # Create Launch Description
-    ld = LaunchDescription([use_sim_time_la, approx_sync_la, queue_size_la,
+    ld = LaunchDescription([use_sim_time_la, use_namespace_la, namespace_la, approx_sync_la, queue_size_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
                             left_image_topic_la, right_image_topic_la,
                             rgb_image_topic_la, depth_image_topic_la, color_pointcloud_la,
                             use_image_proc_la, use_rtabmap_la,
                             detect_ground_and_obstacles_la, register_depth_la,
-                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la, qos_la])
+                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la, qos_la, use_system_default_qos_la])
 
     # Nodes
     # ########################## Stereo to disparity and pointcloud
     stereo_to_pointcloud_node = ComposableNodeContainer(
             condition=IfCondition([stereo_to_pointcloud]),
             name='stereo_image_container',
-            namespace='',
+            # namespace=namespace,
             package='rclcpp_components',
             executable='component_container',
             composable_node_descriptions=[
@@ -194,11 +207,12 @@ def generate_launch_description():
                         condition=IfCondition(stereo_to_pointcloud),
                         package='stereo_image_proc',
                         plugin='stereo_image_proc::PointCloudNode',
+                        # namespace=namespace,
                         parameters=[{
                             'approximate_sync': approx_sync,
-                            'avoid_point_cloud_padding': False,
+                            'avoid_point_cloud_padding': use_system_default_qos,
                             'use_color': color_pointcloud,
-                            'use_system_default_qos': False,  # True: system_default, False: sensor_data
+                            'use_system_default_qos': use_system_default_qos,  # True: system_default, False: sensor_data
                             'queue_size': queue_size,
                             'use_sim_time': use_sim_time,
                         }],
@@ -206,7 +220,7 @@ def generate_launch_description():
                             # ('left/camera_info', '/camera/camera/infra1/camera_info'),
                             # ('right/camera_info', '/camera/camera/infra2/camera_info'),
                             # ('left/image_rect_color', left_image_topic),
-                            ('points2', '/camera/points_from_stereo_proc'),
+                            ('points2', 'camera/points_from_stereo_proc'),
                         ]
                 ),
             ],
@@ -216,6 +230,7 @@ def generate_launch_description():
     # ########################## Disparity to depth
     rtabmap_disparity_to_depth = Node(
                 condition=IfCondition(stereo_to_pointcloud),
+                # namespace=namespace,
                 package='rtabmap_util', executable='disparity_to_depth', output='screen',
                 parameters=[
                     {'approx_sync': approx_sync},
@@ -233,7 +248,7 @@ def generate_launch_description():
     depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
             condition=IfCondition(depthimage_to_pointcloud),
             name='depth_image_container',
-            namespace='',
+            # namespace=namespace,
             package='rclcpp_components',
             executable='component_container',
             composable_node_descriptions=[
@@ -250,7 +265,7 @@ def generate_launch_description():
                         remappings=[
                             # ('image_rect', depth_image_topic),  # or aligned depth
                             # ('camera_info', '/camera/camera/depth/camera_info'),
-                            ('points', '/camera/points_from_depth_proc')]
+                            ('points', 'camera/points_from_depth_proc')]
                 ),
                 ComposableNode(
                         condition=IfCondition(color_pointcloud),
@@ -265,7 +280,7 @@ def generate_launch_description():
                             # ('rgb/camera_info', '/camera/camera/color/camera_info'),
                             # ('rgb/image_rect_color', rgb_image_topic),
                             # ('depth_registered/image_rect', '/camera/camera/aligned_depth_to_color/image_raw'),
-                            ('points', '/camera/points_from_aligned_depth_proc')
+                            ('points', 'camera/points_from_aligned_depth_proc')
                         ]
                 )
             ],
@@ -411,10 +426,15 @@ def generate_launch_description():
     image_proc_group = GroupAction(
             condition=IfCondition(use_image_proc),
             actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_namespace),
+                        namespace=namespace
+                ),
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='approx_sync', value=approx_sync),
                 SetParameter(name='queue_size', value=queue_size),
+                SetParameter(name='use_system_default_qos', value=use_system_default_qos),
 
                 # Set remapping rules
                 # Stereo_to_disparity, Disparity_to_pointcloud
@@ -460,6 +480,10 @@ def generate_launch_description():
     rtabmap_group = GroupAction(
             condition=IfCondition(use_rtabmap),
             actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_namespace),
+                        namespace=namespace
+                ),
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='approx_sync', value=approx_sync),
@@ -523,3 +547,12 @@ def generate_launch_description():
     ld.add_action(rtabmap_group)
 
     return ld
+
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )

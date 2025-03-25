@@ -23,6 +23,12 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
 def launch_setup(context, *args, **kwargs):
+    qos_str_to_rtabmap_int = {
+        'SENSOR_DATA': 2,
+        'SYSTEM_DEFAULT': 0,
+        'DEFAULT': 1,
+    }
+
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
@@ -91,6 +97,7 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
@@ -102,6 +109,7 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
+    realsense_qos = LaunchConfiguration('realsense_qos', default='SENSOR_DATA')
 
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
@@ -316,6 +324,10 @@ def launch_setup(context, *args, **kwargs):
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
 
+    camera_name_la = DeclareLaunchArgument(
+            'camera_name', default_value=camera_name,
+            description='Name of the camera. Used to remap topics.')
+
     approx_sync_la = DeclareLaunchArgument(
             'approx_sync', default_value=approx_sync,
             description='Synchronize topics')
@@ -368,6 +380,11 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    realsense_qos_la = DeclareLaunchArgument(
+            'realsense_qos', default_value=realsense_qos,
+            description='The qos profile to use for the realsense camera. '
+                        'Default: SENSOR_DATA. See librealsense2 documentation for more details.')
+
     camera_launch_delay_la = DeclareLaunchArgument(
             'camera_launch_delay', default_value=camera_launch_delay,
             description='Delay in seconds before launching the camera nodes. '
@@ -417,15 +434,34 @@ def launch_setup(context, *args, **kwargs):
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
+        camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la
     ]
 
     ''' Launch Nodes '''
+    camera_name_string = camera_name.perform(context)
+    realsense_qos_string = realsense_qos.perform(context)
     use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
     f1tenth_namespace_string = f1tenth_namespace.perform(context)
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
+    realsense_qos_int = qos_str_to_rtabmap_int.get(realsense_qos_string, 2)
+
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER')
+            )
 
     component_container_node = Node(
             condition=IfCondition(use_composition),
@@ -466,6 +502,9 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(launch_sensors),
             launch_arguments={
                 "use_sim_time": use_sim_time,
+                "use_namespace": "True",
+                "namespace": f1tenth_namespace,
+                "camera_name": camera_name,
                 "approx_sync": approx_sync,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
@@ -477,7 +516,8 @@ def launch_setup(context, *args, **kwargs):
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
                 "camera_launch_delay": camera_launch_delay,
-                "laserscan_launch_delay": laserscan_launch_delay
+                "laserscan_launch_delay": laserscan_launch_delay,
+                "qos": realsense_qos
             }.items()
     )
 
@@ -516,6 +556,9 @@ def launch_setup(context, *args, **kwargs):
                         ),
                         condition=IfCondition(launch_localization),
                         launch_arguments={
+                            "namespace": f1tenth_namespace,
+                            "use_namespace": use_f1tenth_namespace,
+                            "camera_name": camera_name,
                             "launch_sensor_fusion": 'True',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
@@ -529,6 +572,12 @@ def launch_setup(context, *args, **kwargs):
                             "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,
+                            "qos_rtabmap": "1",
+                            "qos_rtabmap_laserscan": "1",
+                            "qos_rtabmap_camera": str(realsense_qos_int),
+                            "qos_rtabmap_imu": str(realsense_qos_int),
+                            "qos": str(realsense_qos_int),
+                            "qos_imu": realsense_qos,
                         }.items()
                 )
             ]
@@ -621,6 +670,8 @@ def launch_setup(context, *args, **kwargs):
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # nodes
                 mapping_launch,
@@ -630,15 +681,6 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Add launch arguments and nodes to the launch description
-    # determine what namespace to use
-    if use_f1tenth_namespace_string.lower() == 'true':
-        if not f1tenth_namespace_string.lower().strip():
-            # if launch argument is empty, use the VEHICLE_NAME environment variable.
-            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
-            f1tenth_namespace = EnvironmentVariable(
-                    'VEHICLE_NAME',
-                    default_value=EnvironmentVariable('USER')
-            )
     nodes_to_launch = GroupAction(
             actions=[
                 PushRosNamespace(

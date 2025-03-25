@@ -32,7 +32,7 @@ def generate_launch_description():
     imu_frame = LaunchConfiguration('imu_frame')
     imu_frame_la = DeclareLaunchArgument(
             'imu_frame',
-            default_value='',
+            default_value='base_link',
             description='Frame ID for the IMU message of the Madgwick or Complementary filter.')
 
     imu_corrector_frame = LaunchConfiguration('imu_corrector_frame')
@@ -179,6 +179,7 @@ def generate_launch_description():
                         package='imu_corrector',
                         executable='imu_corrector_node',
                         name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
+                        # namespace=namespace,
                         output={'both': 'log'},
                         parameters=[imu_corrector_params_file],
                         remappings=[
@@ -192,6 +193,7 @@ def generate_launch_description():
                         package='imu_filter_madgwick',
                         executable='imu_filter_madgwick_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -217,6 +219,7 @@ def generate_launch_description():
                         package='imu_complementary_filter',
                         executable='complementary_filter_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -258,6 +261,7 @@ def generate_launch_description():
                         package='imu_filter_madgwick',
                         executable='imu_filter_madgwick_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -283,6 +287,7 @@ def generate_launch_description():
                         package='imu_complementary_filter',
                         executable='complementary_filter_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},

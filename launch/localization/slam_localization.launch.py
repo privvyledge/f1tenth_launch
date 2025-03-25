@@ -1,4 +1,7 @@
 import os
+
+from datashader.datashape.dispatch import namespace
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
@@ -13,6 +16,7 @@ def generate_launch_description():
     # declare launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
     params_file = LaunchConfiguration('params_file')
+    namespace = LaunchConfiguration('namespace')
 
     # Declare default launch arguments
     localization_param_file = os.path.join(
@@ -29,6 +33,12 @@ def generate_launch_description():
             description='Path to config file for localization nodes'
     )
 
+    namespace_arg = DeclareLaunchArgument(
+            'namespace',
+            default_value='',
+            description='Namespace for the localization node'
+    )
+
     slam_toolbox_localizer_node = Node(
                 parameters=[
                     params_file,
@@ -37,9 +47,10 @@ def generate_launch_description():
                 package='slam_toolbox',
                 executable='localization_slam_toolbox_node',
                 name='slam_toolbox',
+                namespace=namespace,
                 output='screen',
                 remappings=[
-                    ('pose', '/slam_toolbox/pose'),
+                    ('pose', 'slam_toolbox/pose'),
                             ]
         )
 

@@ -9,8 +9,8 @@ from launch_ros.actions import LifecycleNode
 from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
+    OpaqueFunction, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import LogInfo
 from launch.conditions import IfCondition, LaunchConfigurationEquals
@@ -21,7 +21,7 @@ from launch_ros.descriptions import ParameterFile, ParameterValue
 from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nvidia_isaac_launch_dir = os.path.join(f1tenth_launch_dir, 'launch', 'nvidia_isaac_ros')
 
@@ -30,6 +30,8 @@ def generate_launch_description():
     config_file = LaunchConfiguration('config_file')
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace')
+    camera_name = LaunchConfiguration('camera_name', default='camera')
+    qos = LaunchConfiguration('qos', default='SENSOR_DATA')
     autostart = LaunchConfiguration('autostart')
     use_respawn = LaunchConfiguration('use_respawn')
     imu_only = LaunchConfiguration('imu_only')
@@ -78,6 +80,18 @@ def generate_launch_description():
             'use_namespace',
             default_value='false',
             description='Whether to apply a namespace to the navigation stack')
+
+    declare_camera_name_cmd = DeclareLaunchArgument(
+            'camera_name',
+            default_value=camera_name,
+            description='Name of the camera node')
+
+    declare_qos_cmd = DeclareLaunchArgument(
+            'qos',
+            default_value=qos,
+            description='Quality of Service setting for the camera node. '
+                        'Options: SENSOR_DATA, DEFAULT, SYSTEM_DEFAULT, SENSORS, PARAMETERS, SERVICES, ACTIONS. '
+                        'Recommended: SENSOR_DATA for camera nodes or SYSTEM_DEFAULT')
 
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value='true',
@@ -145,19 +159,26 @@ def generate_launch_description():
             description='Whether to launch the realsense splitter node.')
 
     # Create Launch Description
-    ld = LaunchDescription([use_sim_time_la, declare_namespace_cmd, declare_use_namespace_cmd,
-                            declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
-                            realsense_params_file_cmd, reset_realsense_la, enable_pointcloud_la, align_depth_la,
-                            emitter_enabled_la, emitter_on_off_la,
-                            realsense_imu_la, imu_only_cmd, launch_imu_filter_cmd,
-                            launch_realsense_splitter_node_la])
+    launch_args = [
+        use_sim_time_la, declare_namespace_cmd, declare_use_namespace_cmd, declare_camera_name_cmd, declare_qos_cmd,
+        declare_autostart_cmd, declare_use_respawn_cmd, declare_log_level_cmd,
+        realsense_params_file_cmd, reset_realsense_la, enable_pointcloud_la, align_depth_la,
+        emitter_enabled_la, emitter_on_off_la,
+        realsense_imu_la, imu_only_cmd, launch_imu_filter_cmd,
+        launch_realsense_splitter_node_la
+    ]
+
+    # Get name string from the LaunchConfiguration
+    camera_name_str = camera_name.perform(context)
+    if camera_name_str != '':
+        camera_name_str += '/'
 
     # Setup nodes
     realsense_node = Node(
             condition=IfCondition(PythonExpression(['not ', imu_only])),
             package='realsense2_camera',
-            namespace='camera',
-            name='camera',
+            namespace=namespace,
+            name=camera_name,
             executable='realsense2_camera_node',
             parameters=[
                 configured_params,
@@ -168,6 +189,15 @@ def generate_launch_description():
                     "align_depth.enable": align_depth,
                     "depth_module.emitter_enabled": emitter_enabled,
                     "depth_module.emitter_on_off": emitter_on_off,
+                    "color_qos": qos,
+                    "color_info_qos": qos,
+                    "infra_qos": qos,
+                    "infra1_qos": qos,
+                    "infra2_qos": qos,
+                    "depth_qos": qos,
+                    "pointcloud.pointcloud_qos": qos,
+                    "gyro_qos": qos,
+                    "accel_qos": qos,
                  },
             ],
             arguments=['--ros-args', '--log-level', log_level],
@@ -184,7 +214,12 @@ def generate_launch_description():
             condition=IfCondition(launch_realsense_splitter_node),
             launch_arguments={
                 'use_sim_time': use_sim_time,
+                'namespace': namespace,
+                'camera_name': camera_name,
                 'launch_realsense_driver': 'False',
+                'depth_topic': camera_name_str + 'depth/image_rect_raw',
+                'input_qos': qos,
+                'output_qos': qos,
                 'attach_to_shared_component_container': 'False',
                 # 'component_container_name': 'realsense_container_name'
             }.items()
@@ -193,10 +228,23 @@ def generate_launch_description():
     realsense_imu_node = Node(
             condition=IfCondition([imu_only]),
             package='realsense2_camera',
-            # namespace='sensors/camera',
-            name='camera',
+            # namespace=namespace,
+            name=camera_name,
             executable='realsense2_camera_node',
-            parameters=[LaunchConfiguration('realsense_imu_config')],
+            parameters=[
+                LaunchConfiguration('realsense_imu_config'),
+                {
+                    "color_qos": qos,
+                    "color_info_qos": qos,
+                    "infra_qos": qos,
+                    "infra1_qos": qos,
+                    "infra2_qos": qos,
+                    "depth_qos": qos,
+                    "pointcloud.pointcloud_qos": qos,
+                    "gyro_qos": qos,
+                    "accel_qos": qos,
+                },
+            ],
             output='screen',
             respawn=True,
             respawn_delay=2.0,
@@ -209,14 +257,16 @@ def generate_launch_description():
             )),
             condition=IfCondition([launch_imu_filter]),
             launch_arguments={
-                'input_topic': '/camera/camera/imu',
-                'output_topic': '/camera/camera/imu/filtered',
+                'input_topic': camera_name_str + 'imu',
+                'output_topic': camera_name_str + 'imu/filtered',
+                'use_namespace': 'True',
+                'namespace': namespace,
                 'remove_gravity_vector': 'False',  # True
                 'imu_gyro_stddev': '0.1',
                 'imu_accel_stddev': '0.1',
                 'imu_orientation_stddev': '0.1',
                 'node_name': 'realsense_imu_filter',
-                'imu_corrector_output_topic': '/camera/camera/imu/bias_removed',
+                'imu_corrector_output_topic': camera_name_str + 'imu/bias_removed',
                 'use_madgwick_filter': 'True',
                 'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
                 # camera_imu_optical_frame, sensor_kit_link, base_link
@@ -226,9 +276,29 @@ def generate_launch_description():
             }.items()
     )
 
-    ld.add_action(realsense_node)
-    ld.add_action(realsense_splitter_launch_include)
-    ld.add_action(realsense_imu_node)
-    ld.add_action(imu_filter_node)
+    # Create the launch description and populate
+    ld = launch_args + [
+        LogInfo(
+                condition=IfCondition(LaunchConfigurationEquals('log_level', 'debug')),
+                msg=PythonExpression(['"Realsense node launched with camera name: "', camera_name_str])
+        ),
+        LogInfo(
+                condition=IfCondition(LaunchConfigurationEquals('log_level', 'debug')),
+                msg=PythonExpression(['"Realsense node launched with namespace: "', namespace])
+        ),
+        realsense_node,
+        realsense_splitter_launch_include,
+        realsense_imu_node,
+        imu_filter_node,
+    ]
 
     return ld
+
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )
