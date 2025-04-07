@@ -433,8 +433,16 @@ def launch_setup(context, *args, **kwargs):
             # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
             f1tenth_namespace = EnvironmentVariable(
                     'VEHICLE_NAME',
-                    default_value=EnvironmentVariable('USER')
+                    default_value=EnvironmentVariable('USER', default_value='')
             )
+
+            if f1tenth_namespace.perform(context) == '':
+                raise NameError(
+                        'The launch argument "use_f1tenth_namespace" was set to "true" '
+                        'but the launch argument "f1tenth_namespace" is empty. '
+                        'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
+                        'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
+                )
 
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

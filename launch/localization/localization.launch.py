@@ -579,7 +579,7 @@ def launch_setup(context, *args, **kwargs):
             executable='icp_odometry',
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
-            namespace=namespace_str + 'rtabmap/rtabmap_icp_odom',
+            namespace=namespace_str.rstrip('/') + '/' + 'rtabmap/rtabmap_icp_odom',
             respawn=use_respawn,
             respawn_delay=2.0,
             parameters=[

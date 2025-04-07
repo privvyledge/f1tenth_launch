@@ -278,14 +278,6 @@ def launch_setup(context, *args, **kwargs):
 
     # Create the launch description and populate
     ld = launch_args + [
-        LogInfo(
-                condition=IfCondition(LaunchConfigurationEquals('log_level', 'debug')),
-                msg=PythonExpression(['"Realsense node launched with camera name: "', camera_name_str])
-        ),
-        LogInfo(
-                condition=IfCondition(LaunchConfigurationEquals('log_level', 'debug')),
-                msg=PythonExpression(['"Realsense node launched with namespace: "', namespace])
-        ),
         realsense_node,
         realsense_splitter_launch_include,
         realsense_imu_node,

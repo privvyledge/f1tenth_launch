@@ -168,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
     stereo_to_pointcloud_node = ComposableNodeContainer(
             condition=IfCondition([stereo_to_pointcloud]),
             name='stereo_image_container',
-            # namespace=namespace,
+            namespace=namespace,
             package='rclcpp_components',
             executable='component_container',
             composable_node_descriptions=[
@@ -248,7 +248,7 @@ def launch_setup(context, *args, **kwargs):
     depth_image_to_pointcloud_xyz_node = ComposableNodeContainer(
             condition=IfCondition(depthimage_to_pointcloud),
             name='depth_image_container',
-            # namespace=namespace,
+            namespace=namespace,
             package='rclcpp_components',
             executable='component_container',
             composable_node_descriptions=[
@@ -397,7 +397,7 @@ def launch_setup(context, *args, **kwargs):
     depth_image_proc_registration_node = ComposableNodeContainer(
                 condition=IfCondition(register_depth),
                 name='depth_registration_container',  # todo: add to depth_image_container
-                namespace='',
+                namespace=namespace,
                 package='rclcpp_components',
                 executable='component_container',
                 composable_node_descriptions=[
