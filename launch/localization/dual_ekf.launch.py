@@ -35,6 +35,8 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_ekf_odom = LaunchConfiguration('use_ekf_odom')  # ekf_node, ukf_node
     use_ekf_map = LaunchConfiguration('use_ekf_map')  # ekf_node, ukf_node
+    publish_odom_tf = LaunchConfiguration('publish_odom_tf')
+    publish_map_tf = LaunchConfiguration('publish_map_tf')
     odom_frequency = LaunchConfiguration('odom_frequency')
     map_frequency = LaunchConfiguration('map_frequency')
     odom_node_name = LaunchConfiguration('odom_node_name')  # ekf_filter_node, ukf_filter_node
@@ -77,6 +79,14 @@ def generate_launch_description():
             'use_ekf_map', default_value='True',
             description='whether to use ekf. If false uses ukf instead')
 
+    declare_publish_odom_tf = DeclareLaunchArgument(
+            'publish_odom_tf', default_value='True',
+            description='whether to publish odometry tf')
+
+    declare_publish_map_tf = DeclareLaunchArgument(
+            'publish_map_tf', default_value='True',
+            description='whether to publish map tf')
+
     declare_odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency', default_value='100.0',
             description='Sensor fusion frequency')
@@ -115,6 +125,7 @@ def generate_launch_description():
                     'node_name': odom_node_name,
                     'use_namespace': use_namespace,
                     'namespace': namespace,
+                    'publish_tf': publish_odom_tf,
                 }.items()
         ),
 
@@ -132,6 +143,7 @@ def generate_launch_description():
                     'node_name': map_node_name,
                     'use_namespace': use_namespace,
                     'namespace': namespace,
+                    'publish_tf': publish_map_tf,
                 }.items()
         )
     ])
@@ -150,6 +162,8 @@ def generate_launch_description():
     ld.add_action(declare_map_params_file_cmd)
     ld.add_action(declare_kf_odom_type)
     ld.add_action(declare_kf_map_type)
+    ld.add_action(declare_publish_odom_tf)
+    ld.add_action(declare_publish_map_tf)
     ld.add_action(declare_odom_frequency_la)
     ld.add_action(declare_map_frequency_la)
     ld.add_action(declare_odom_node_name)

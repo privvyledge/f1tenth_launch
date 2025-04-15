@@ -44,8 +44,8 @@
     # Whether to publish the acceleration state. Defaults to false if unspecified.
     publish_acceleration: true
 
-    # Whether to broadcast the transformation over the /tf topic. Defaults to true if unspecified.
-    publish_tf: true
+#    # Whether to broadcast the transformation over the /tf topic. Defaults to true if unspecified.
+#    publish_tf: true
 
     reset_on_time_jump: true  # # If the filter sees a jump back in time, the filter is reset (convenient for testing with rosbags!)
 

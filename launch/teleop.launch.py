@@ -386,6 +386,8 @@ def launch_setup(context, *args, **kwargs):
                             "launch_sensor_fusion": 'True',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
+                            "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
+                            "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
                             "launch_slam_toolbox_localizer": 'False',
                             "launch_rtabmap_localizer": 'False',
                             'launch_pointcloud_odometry': 'False',
@@ -400,7 +402,7 @@ def launch_setup(context, *args, **kwargs):
                             "qos_rtabmap_laserscan": "1",
                             "qos_rtabmap_camera": str(realsense_qos_int),
                             "qos_rtabmap_imu": str(realsense_qos_int),
-                            "qos": str(realsense_qos_int),
+                            "qos": realsense_qos,
                             "qos_imu": realsense_qos,
                         }.items()
                 )

@@ -71,6 +71,8 @@ def launch_setup(context, *args, **kwargs):
     visual_slam_map_path = LaunchConfiguration('visual_slam_map_path', default='/mnt/data/maps/nvidia/vslam_map')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
@@ -192,6 +194,16 @@ def launch_setup(context, *args, **kwargs):
             'launch_amcl', default_value=launch_amcl,
             description='Whether to launch AMCL global localizer.')
 
+    odom_tf_publisher_la = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='The node responsible for publishing the odometry tf. '
+                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud.')
+
+    map_tf_publisher_la = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='The node responsible for publishing the map tf. '
+                        'Options: amcl, ekf, vslam.')
+
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
             description='Robot frame, e.g base_link, sensor_kit_link.')
@@ -248,9 +260,19 @@ def launch_setup(context, *args, **kwargs):
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
+    # Get strings from LaunchConfiguration
+    namespace_str = namespace.perform(context)
+    camera_name_str = camera_name.perform(context)
+    odom_tf_publisher_str = odom_tf_publisher.perform(context)
+    map_tf_publisher_str = map_tf_publisher.perform(context)
+
+    if camera_name_str != '':
+        camera_name_str += '/'
+
     param_substitutions = {
         'use_sim_time': use_sim_time,
         'yaml_filename': map_file,
+        'tf_broadcast': 'True' if map_tf_publisher_str.lower() == 'amcl' else 'False',
         # 'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: update to compare use_gpu and launch_amcl/global
     }
 
@@ -270,13 +292,6 @@ def launch_setup(context, *args, **kwargs):
                     param_rewrites=param_substitutions,
                     convert_types=True),
             allow_substs=True)
-
-    # Get strings from LaunchConfiguration
-    namespace_str = namespace.perform(context)
-    camera_name_str = camera_name.perform(context)
-
-    if camera_name_str != '':
-        camera_name_str += '/'
 
     # Load Nodes
     load_nodes = GroupAction(
@@ -374,6 +389,8 @@ def launch_setup(context, *args, **kwargs):
                 'use_ekf_odom': launch_ekf_odom,
                 'use_ekf_map': launch_ekf_map,
                 'odom_frequency': odom_frequency,
+                'publish_odom_tf': 'True' if odom_tf_publisher_str.lower() == 'ekf' else 'False',
+                'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'ekf' else 'False',
                 'map_frequency': map_frequency,
             }.items()
     )
@@ -461,11 +478,12 @@ def launch_setup(context, *args, **kwargs):
             executable='rgbd_odometry',
             condition=IfCondition(launch_rgbd_odometry),
             name='rtabmap_rgbd_odom',
-            namespace=namespace_str + 'rtabmap/rtabmap_rgbd_odom',
+            namespace=namespace_str,
             parameters=[
                 parameters,
                 {
-                    'approx_sync': True
+                    'approx_sync': True,
+                    'publish_tf': True if odom_tf_publisher_str.lower() == 'rgbd' else False,
                 }
             ],
             output='screen',
@@ -485,11 +503,12 @@ def launch_setup(context, *args, **kwargs):
             executable='stereo_odometry',
             condition=IfCondition(launch_stereo_odometry),
             name='rtabmap_stereo_odom',
-            namespace=namespace_str + 'rtabmap/rtabmap_stereo_odom',
+            namespace=namespace_str,
             parameters=[
                 parameters,
                 {
-                    'approx_sync': False
+                    'approx_sync': False,
+                    'publish_tf': True if odom_tf_publisher_str.lower() in ['vslam', 'stereo'] else False,
                 }
             ],
             output='screen',
@@ -519,7 +538,7 @@ def launch_setup(context, *args, **kwargs):
                     # ROS node configuration
                     "base_frame": "base_link",
                     "odom_frame": odom_frame,
-                    "publish_odom_tf": publish_odom_tf,
+                    "publish_odom_tf": True if odom_tf_publisher_str.lower() == 'pointcloud' else False,
                     # KISS-ICP configuration
                     "max_range": 10.0,  # todo: tune using realsense viewer
                     "min_range": 0.105,  # 0.105 or 0.28, todo: tune
@@ -579,7 +598,7 @@ def launch_setup(context, *args, **kwargs):
             executable='icp_odometry',
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
-            namespace=namespace_str.rstrip('/') + '/' + 'rtabmap/rtabmap_icp_odom',
+            namespace=namespace_str,
             respawn=use_respawn,
             respawn_delay=2.0,
             parameters=[
@@ -601,7 +620,7 @@ def launch_setup(context, *args, **kwargs):
                     'guess_frame_id': odom_frame,  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
                     # 'guess_min_translation': 0.05,  # m
                     # 'guess_min_rotation': 0.005,  # rad
-                    'publish_tf': publish_odom_tf,
+                    'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                     'publish_null_when_lost': True,
                     # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
@@ -624,7 +643,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{
                 'laser_scan_topic': 'scan_filtered',
                 'odom_topic': 'odom/rf2o',
-                'publish_tf': False,
+                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                 'base_frame_id': 'base_link',
                 'odom_frame_id': 'odom',
                 'init_pose_from_topic': '',
@@ -640,7 +659,7 @@ def launch_setup(context, *args, **kwargs):
             output='screen',
             parameters=[{
                 'publish_odom': 'odom/laser_scan_matcher',
-                'publish_tf': False,
+                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                 'laser_frame': 'lidar',
                 'base_frame': 'base_link',
                 'odom_frame': 'odom_laser_scan_matcher',
@@ -655,7 +674,7 @@ def launch_setup(context, *args, **kwargs):
     # RTabMap Group
     rtabmap_group = GroupAction(
             actions=[
-                # PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='queue_size', value='10'),
@@ -667,7 +686,7 @@ def launch_setup(context, *args, **kwargs):
                 # SetParameter(name='guess_frame_id', value=odom_frame),
                 SetParameter(name='guess_min_translation', value='0.05'),  # m
                 SetParameter(name='guess_min_rotation', value='0.005'),  # rad
-                SetParameter(name='publish_tf', value=publish_odom_tf),
+                # SetParameter(name='publish_tf', value=publish_odom_tf),
                 SetParameter(name='wait_for_transform', value='0.3'),
                 SetParameter(name='wait_imu_to_init', value='False'),
                 SetParameter(name='publish_null_when_lost', value='True'),
@@ -708,8 +727,8 @@ def launch_setup(context, *args, **kwargs):
                             'camera_name': camera_name,
                             'two_d_mode': 'True',
                             'base_frame': base_frame,
-                            'publish_map_to_odom_tf': PythonExpression(['not ', launch_ekf_map]),
-                            'publish_odom_to_baselink_tf': publish_odom_tf,
+                            'publish_map_to_odom_tf': 'True' if map_tf_publisher_str.lower() == 'vslam' else 'False',
+                            'publish_odom_to_baselink_tf': 'True' if odom_tf_publisher_str.lower() in ['vslam', 'stereo'] else 'False',
                             'save_map': 'False',
                             'load_map': 'True',
                             'map_path': visual_slam_map_path,
@@ -814,6 +833,8 @@ def launch_setup(context, *args, **kwargs):
         visual_slam_map_path_la,
         launch_laserscan_odometry_la,
         launch_amcl_la,
+        odom_tf_publisher_la,
+        map_tf_publisher_la,
         localization_param,
         map_file_la,
         launch_slam_toolbox_localizer_la,

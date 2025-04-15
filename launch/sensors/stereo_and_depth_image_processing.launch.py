@@ -155,13 +155,13 @@ def launch_setup(context, *args, **kwargs):
             description='Use system default QoS if true for image_proc nodes. ')
 
     # Create Launch Description
-    ld = LaunchDescription([use_sim_time_la, use_namespace_la, namespace_la, approx_sync_la, queue_size_la,
+    launch_args = [use_sim_time_la, use_namespace_la, namespace_la, approx_sync_la, queue_size_la,
                             stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
                             left_image_topic_la, right_image_topic_la,
                             rgb_image_topic_la, depth_image_topic_la, color_pointcloud_la,
                             use_image_proc_la, use_rtabmap_la,
                             detect_ground_and_obstacles_la, register_depth_la,
-                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la, qos_la, use_system_default_qos_la])
+                            rtabmap_depth_decimation_la, rtabmap_voxel_size_la, qos_la, use_system_default_qos_la]
 
     # Nodes
     # ########################## Stereo to disparity and pointcloud
@@ -543,8 +543,17 @@ def launch_setup(context, *args, **kwargs):
     # ld.add_action(rtabmap_pointcloud_to_depth)
     # ld.add_action(depth_image_proc_registration_node)
 
-    ld.add_action(image_proc_group)
-    ld.add_action(rtabmap_group)
+    ld = launch_args + [
+        image_proc_group,
+        rtabmap_group,
+        # depth_image_to_pointcloud_xyz_node,
+        # stereo_to_pointcloud_node,
+        # rtabmap_disparity_to_depth,
+        # rtabmap_depth_to_pointcloud_xyz,
+        # rtabmap_obstacle_and_floor_detection_node,
+        # rtabmap_pointcloud_to_depth,
+        # depth_image_proc_registration_node
+    ]
 
     return ld
 

@@ -30,6 +30,7 @@ def generate_launch_description():
     use_composition = LaunchConfiguration('use_composition')
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
+    publish_tf = LaunchConfiguration('publish_tf')
     use_ekf = LaunchConfiguration('use_ekf')  # ekf_node, ukf_node
     frequency = LaunchConfiguration('frequency')
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
@@ -99,6 +100,10 @@ def generate_launch_description():
             'log_level', default_value='info',
             description='log level')
 
+    declare_publish_tf_cmd = DeclareLaunchArgument(
+            'publish_tf', default_value='True',
+            description='Whether or not to publish the TF')
+
     declare_kf_type = DeclareLaunchArgument(
             'use_ekf', default_value='True',
             description='whether to use ekf. If false uses ukf instead')
@@ -133,7 +138,13 @@ def generate_launch_description():
                 executable='ekf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': frequency}],
+                parameters=[
+                    configured_params,
+                    {
+                        'frequency': frequency,
+                        'publish_tf': publish_tf
+                     }
+                ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[
                     ('odometry/filtered', 'odometry/local'),
@@ -147,7 +158,13 @@ def generate_launch_description():
                 executable='ukf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': frequency}],
+                parameters=[
+                    configured_params,
+                    {
+                        'frequency': frequency,
+                        'publish_tf': publish_tf
+                    }
+                ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[
                     ('odometry/filtered', 'odometry/local'),
@@ -170,6 +187,7 @@ def generate_launch_description():
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
+    ld.add_action(declare_publish_tf_cmd)
     ld.add_action(declare_kf_type)
     ld.add_action(declare_frequency_la)
     ld.add_action(declare_node_name)
