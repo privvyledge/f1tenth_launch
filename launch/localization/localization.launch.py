@@ -276,15 +276,7 @@ def launch_setup(context, *args, **kwargs):
         # 'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: update to compare use_gpu and launch_amcl/global
     }
 
-    # It only applys when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
-
+    # todo: use the file directly since configured_params can lead to issues
     configured_params = ParameterFile(
             RewrittenYaml(
                     source_file=params_file,
@@ -492,7 +484,7 @@ def launch_setup(context, *args, **kwargs):
                 ('rgb/camera_info', camera_name_str + 'color/camera_info'),
                 ('depth/image', camera_name_str + 'aligned_depth_to_color/image_raw'),
                 # ('imu', 'vehicle/sensors/imu/data'),  # imu must have orientation
-                ('odom', 'odom/rtabcamera_name_str + map/rgbd'),
+                ('odom', 'odom/rtabmap/rgbd'),
                 ('odom_last_frame', 'rtabmap/rgbd/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
             ]
     )

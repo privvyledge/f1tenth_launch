@@ -1,3 +1,7 @@
+"""
+Todo:
+    Switch to PushRosNameSpace with IfCondition to handle None namespace when being namespace is being pushed from higher level launch files
+"""
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_ros.actions import LifecycleNode

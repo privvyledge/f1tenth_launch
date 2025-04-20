@@ -12,7 +12,7 @@ from launch.actions import (DeclareLaunchArgument, GroupAction,
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PythonExpression
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import PushRosNamespace
 from launch_ros.descriptions import ParameterFile
@@ -50,23 +50,6 @@ def generate_launch_description():
     # Create our own temporary YAML files that include substitutions
     param_substitutions = {
         'use_sim_time': use_sim_time}
-
-    # It only applies when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements. todo: remove and just add the namespace a node argument instead
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
-
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=params_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
 
     # declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -125,13 +108,15 @@ def generate_launch_description():
         PushRosNamespace(
                 condition=IfCondition(use_namespace),
                 namespace=namespace),
+        # Set common parameters
+        SetParameter(name='use_sim_time', value=use_sim_time),
 
         # Node(
         #         condition=IfCondition(use_composition),
         #         name='nav2_container',
         #         package='rclcpp_components',
         #         executable='component_container_isolated',
-        #         parameters=[configured_params, {'autostart': autostart}],
+        #         parameters=[params_file, {'autostart': autostart}],
         #         arguments=['--ros-args', '--log-level', log_level],
         #         remappings=remappings,
         #         output='screen'),
@@ -143,7 +128,7 @@ def generate_launch_description():
                 name=node_name,
                 output='screen',
                 parameters=[
-                    configured_params,
+                    params_file,
                     {
                         'frequency': frequency,
                         'publish_tf': publish_tf,
@@ -163,7 +148,7 @@ def generate_launch_description():
                 name=node_name,
                 output='screen',
                 parameters=[
-                    configured_params,
+                    params_file,
                     {
                         'frequency': frequency,
                         'publish_tf': publish_tf

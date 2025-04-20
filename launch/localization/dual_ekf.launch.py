@@ -18,7 +18,7 @@ import pathlib
 import launch.actions
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import PushRosNamespace
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 
 
 def generate_launch_description():
@@ -110,6 +110,8 @@ def generate_launch_description():
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
         PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+        # Set common parameters
+        SetParameter(name='use_sim_time', value=use_sim_time),
 
         # Local/odom
         IncludeLaunchDescription(
@@ -123,8 +125,8 @@ def generate_launch_description():
                     'use_ekf': use_ekf_odom,
                     'frequency': odom_frequency,
                     'node_name': odom_node_name,
-                    'use_namespace': use_namespace,
-                    'namespace': namespace,
+                    'use_namespace': 'False',
+                    'namespace': '',
                     'publish_tf': publish_odom_tf,
                 }.items()
         ),
@@ -141,8 +143,8 @@ def generate_launch_description():
                     'use_ekf': use_ekf_map,
                     'frequency': map_frequency,
                     'node_name': map_node_name,
-                    'use_namespace': use_namespace,
-                    'namespace': namespace,
+                    'use_namespace': 'False',
+                    'namespace': '',
                     'publish_tf': publish_map_tf,
                 }.items()
         )

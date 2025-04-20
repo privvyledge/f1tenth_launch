@@ -3,7 +3,6 @@
 """
 
 import os
-from tkinter.font import names
 
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, \
@@ -292,12 +291,12 @@ def launch_setup(context, *args, **kwargs):
     )
 
     visual_slam_launch_container = ComposableNodeContainer(
-            name='visual_slam_launch_container',
+            name=component_container_name,
             namespace=namespace,
             package='rclcpp_components',
             executable='component_container_mt',  # use component_container_mt for multithreading support
             condition=UnlessCondition(attach_to_shared_component_container),
-            # composable_node_descriptions=[visual_slam_node],
+            # composable_node_descriptions=[visual_slam_node],  # if using this, disable load_composable_nodes
             output='screen'
     )
 

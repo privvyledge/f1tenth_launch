@@ -1,7 +1,10 @@
 """
 Launches: vehicle driver, joystick driver, mux, and sensors
 Todo:
-    * Fix bug where steering_button launch argument is not forwarded to the joystick.launch.py file
+    * Fix sensor namespace issues.
+        1. Launch sensors separately, i.e don't use GroupAction. Temporary fix. See below for a permanent fix.
+        2. Set namespace=None or remove/comment out every "namespace" when declaring nodes. Check if namespace="" and set to None.
+            Could also use PushRosNamespace to set the namespace for nodes in the group with a condition.
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -330,7 +333,7 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(launch_sensors),
             launch_arguments={
                 "approx_sync": approx_sync,
-                "use_namespace": "True",
+                "use_namespace": use_f1tenth_namespace,
                 "namespace": f1tenth_namespace,
                 "camera_name": camera_name,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
@@ -423,7 +426,7 @@ def launch_setup(context, *args, **kwargs):
                 # nodes
                 joystick_launch,
                 ackermann_mux_launch,
-                sensors_launch,
+                # sensors_launch,
                 vehicle_launch,
                 tf_launch,
                 localization_launch
@@ -431,7 +434,10 @@ def launch_setup(context, *args, **kwargs):
     )  # append F1/10 namespace to all nodes
 
     # return the launch description
-    ld = launch_args + [nodes_to_launch]
+    ld = launch_args + [
+        nodes_to_launch,
+        sensors_launch,  # launched here due to namespace issues
+    ]
     return ld
 
 

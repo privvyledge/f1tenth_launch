@@ -510,7 +510,7 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(launch_sensors),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "use_namespace": "True",
+                "use_namespace": use_f1tenth_namespace,
                 "namespace": f1tenth_namespace,
                 "camera_name": camera_name,
                 "approx_sync": approx_sync,

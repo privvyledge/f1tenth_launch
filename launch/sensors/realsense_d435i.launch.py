@@ -45,19 +45,6 @@ def launch_setup(context, *args, **kwargs):
     emitter_on_off = LaunchConfiguration('emitter_on_off')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
 
-    # Create a dictionary for substitutable parameters
-    param_substitutions = {
-        # 'unite_imu_method': unite_imu_method,
-    }
-
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=config_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
-
     # Launch arguments
     realsense_config = os.path.join(
             get_package_share_directory('f1tenth_launch'),
@@ -181,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
             name=camera_name,
             executable='realsense2_camera_node',
             parameters=[
-                configured_params,
+                config_file,
                 {
                     "use_sim_time": use_sim_time,
                     "initial_reset": reset_realsense,
