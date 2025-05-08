@@ -47,6 +47,8 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
 
@@ -118,6 +120,17 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    odom_tf_publisher_la = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='The node responsible for publishing the odometry tf. '
+                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud.')
+
+    map_tf_publisher_la = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='The node responsible for publishing the map tf. '
+                        'Options: amcl, ekf, vslam, rtabmap.')
+
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
@@ -262,6 +275,8 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        odom_tf_publisher_la,
+        map_tf_publisher_la,
         launch_visualization_arg,
         declare_use_sim_time_cmd,
         rviz_config_arg,
@@ -389,8 +404,8 @@ def launch_setup(context, *args, **kwargs):
                             "launch_sensor_fusion": 'True',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
-                            "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
-                            "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
+                            "odom_tf_publisher": odom_tf_publisher,  # ekf, vslam|stereo, icp, rgbd, pointcloud
+                            "map_tf_publisher": map_tf_publisher,  # amcl, ekf, vslam.
                             "launch_slam_toolbox_localizer": 'False',
                             "launch_rtabmap_localizer": 'False',
                             'launch_pointcloud_odometry': 'False',

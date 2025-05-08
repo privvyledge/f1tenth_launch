@@ -255,9 +255,9 @@ def launch_setup(context, *args, **kwargs):
 
                 # Remappings for realsense data
                 SetRemap(src=['camera_0/depth/image'],
-                         dst=[camera_name_str + depth_topic]),
+                         dst=[camera_name_str + depth_topic.perform(context)]),
                 SetRemap(src=['camera_0/depth/camera_info'],
-                         dst=[camera_name_str + depth_info_topic]),
+                         dst=[camera_name_str + depth_info_topic.perform(context)]),
                 SetRemap(src=['camera_0/color/image'],
                          dst=[camera_name_str + 'color/image_raw']),
                 SetRemap(src=['camera_0/color/camera_info'],

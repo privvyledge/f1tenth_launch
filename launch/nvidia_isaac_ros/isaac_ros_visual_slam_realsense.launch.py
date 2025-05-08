@@ -37,7 +37,7 @@ def launch_setup(context, *args, **kwargs):
     imu_topic = LaunchConfiguration('imu_topic')
     image_qos = LaunchConfiguration('image_qos', default='SENSOR_DATA')
     imu_qos = LaunchConfiguration('imu_qos', default='SENSOR_DATA')
-    enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=False)
+    enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=True)
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='visual_slam_launch_container')
@@ -241,6 +241,9 @@ def launch_setup(context, *args, **kwargs):
                 ],
                 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
+                'save_map_folder_path': map_path,
+                'load_map_folder_path': map_path,
+                'localize_on_startup': True,
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
                         ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),
@@ -264,25 +267,60 @@ def launch_setup(context, *args, **kwargs):
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            f' action send_goal {namespace_string}/visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap '
-                            '"{map_url: ' + map_path_string + '}"'
+                            f' service call {namespace_string}/visual_slam/save_map isaac_ros_visual_slam_interfaces/srv/FilePath '
+                            '"{file_path: ' + map_path_string + '}"'
                         ]],
                         shell=True,
                         condition=IfCondition(save_map)
                 )
             ]
-    )
+    )  # ros2 service call /visual_slam/save_map isaac_ros_visual_slam_interfaces/srv/FilePath "{file_path: /path/to/save/the/map}"
 
     # to load a saved map (ros2 action send_goal /visual_slam/load_map_and_localize isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize "{map_url: /shared_dir/maps/nvidia/vslam_map, localize_near_point: {x: x_val, y: y_val, z: z_val}}")
+    # ros2 service call /visual_slam/localize_in_map isaac_ros_visual_slam_interfaces/srv/LocalizeInMap "
+    #   map_folder_path: '/path/to/save/the/map'
+    #   pose_hint:
+    #     position:
+    #       x: x-position
+    #       y: y-position
+    #       z: z-position
+    #     orientation:
+    #       x: 0.0
+    #       y: 0.0
+    #       z: 0.0
+    #       w: 1.0"
+    # Construct the YAML payload as a single string
+    yaml_request = (
+        f'{{map_folder_path: "{map_path_string}", '
+        'pose_hint: {'
+        'position: {x: 0.0, y: 0.0, z: 0.0}, '
+        'orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}'
+        '}}'
+    )
+    # load_map_trigger = TimerAction(
+    #         period=1.5,
+    #         actions=[
+    #             ExecuteProcess(
+    #                     cmd=[[
+    #                         FindExecutable(name='ros2'),
+    #                         f' action send_goal {namespace_string}/visual_slam/load_map_and_localize '
+    #                         'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
+    #                         '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
+    #                     ]],
+    #                     shell=True,
+    #                     condition=IfCondition(load_map)
+    #             )
+    #         ]
+    # )  #
     load_map_trigger = TimerAction(
             period=1.5,
             actions=[
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            f' action send_goal {namespace_string}/visual_slam/load_map_and_localize '
-                            'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
-                            '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
+                            f' service call {namespace_string}/visual_slam/localize_in_map '
+                            'isaac_ros_visual_slam_interfaces/srv/LocalizeInMap '
+                            f'"{yaml_request}"'
                         ]],
                         shell=True,
                         condition=IfCondition(load_map)

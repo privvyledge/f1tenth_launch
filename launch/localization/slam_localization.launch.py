@@ -51,6 +51,12 @@ def generate_launch_description():
                 output='screen',
                 remappings=[
                     ('pose', 'slam_toolbox/pose'),
+                    ('/tf', 'tf'),
+                    ('/tf_static', 'tf_static'),
+                    ('/scan', 'scan'),
+                    ('/scan_filtered', 'scan_filtered'),
+                    ('/map', 'map'),
+                    ('/map_metadata', 'map_metadata')
                             ]
         )
 

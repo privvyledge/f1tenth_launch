@@ -8,6 +8,11 @@ Mapping notes:
     * Both GPU (Isaac Nvblox) and RTABMap work perfectly and they both use Color + Depth.
     * Use RTABMap for future localization support
 
+Mapping Sensor recommendations in order of detail:
+    1. RGB + (aligned) Depth + LaserScan + IMU
+    2. Left Infrared (infra1) + Depth + LaserScan + IMU
+    3. Left Infrared (infra1) + Right Infrared (infra2) + LaserScan + IMU
+
 Todo:
     * Write instructions for saving 2D maps
     * Write instructions for saving RTABMaps
@@ -62,7 +67,7 @@ def launch_setup(context, *args, **kwargs):
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
     use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
-    namespace = LaunchConfiguration('namespace', '')  # todo: remove from here and nested launch files
+    namespace = LaunchConfiguration('namespace', default='')  # todo: remove from here and nested launch files
     use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
@@ -540,21 +545,23 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "namespace": f1tenth_namespace,
-                "use_stereo": 'False',  # False=use_depth + color, True=use_stereo
+                "use_stereo": 'false',  # False=use_depth + color, True=use_stereo
                 "localization": 'False',
                 "queue_size": mapping_3d_queue_size,
                 "publish_map_tf": publish_map_to_odom_tf,
-                "publish_odom_tf": 'False',
+                "publish_odom_tf": 'True',  # set to False if some other node, e.g robot_localization EKF is publishing
+                "visual_odometry": 'True',
+                "icp_odometry": 'True',
                 "wait_imu_to_init": 'True',
                 "imu_topic": camera_name_string + 'imu/filtered',
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
                 "left_camera_info_topic": camera_name_string + 'infra1/camera_info',
                 "right_camera_info_topic": camera_name_string + 'infra2/camera_info',
-                "rgb_topic": camera_name_string + 'color/image_raw',
-                "depth_topic": depth_topic,
+                "rgb_topic": camera_name_string + 'color/image_raw',  # camera_name_string + 'color/image_raw', left_image_topic
+                "depth_topic": depth_topic,  # depth_topic, camera_name_string + 'depth/image_rect_raw'
                 "odom_topic": 'odometry/local',
-                "camera_info_topic": camera_name_string + 'color/camera_info',
+                "camera_info_topic": camera_name_string + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
                 "scan_topic": 'scan_filtered',
                 "approx_sync": 'True',
                 "rtabmap_viz_view": 'False',  # launch_visualization
@@ -569,43 +576,69 @@ def launch_setup(context, *args, **kwargs):
                 "rtabmap_args": f'{delete_old_map}'
                                 '--RGBD/LoopClosureReextractFeatures true '
                                 '--Rtabmap/CreateIntermediateNodes true '
-                                # always update the map not only when the robot moves. todo
+                                # always update the map not only when the robot moves.
                                 # '--map_always_update False'
                                 '--Vis/MinInliers 15 '  # default=20, 15 [tested]
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
-                                '--Vis/MaxDepth 0 '
-                                '--RGBD/LinearUpdate 0.001 '
-                                '--RGBD/AngularUpdate 0.001 '
+                                '--RGBD/OptimizeFromGraphEnd true '  # default=false
+                                '--Vis/MaxDepth 6 '
+                                '--RGBD/LinearUpdate 0.1 '  # 0.001
+                                '--RGBD/AngularUpdate 0.1 '  # 0.001
                                 '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0.0 '
-                                '--Stereo/MaxDisparity 64.0 '  # default=128.0, 64 [tested]
-                                '--Stereo/OpticalFlow false '  # default=false [tested]
+                                '--Stereo/MinDisparity 0.5 '
+                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
+                                '--Stereo/OpticalFlow true '  # default=false [tested]
+                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
                                 # '--Vis/RoiRatios 0,0,0,.2 '
                                 # "--Kp/RoiRatios 0,0,0,.2 "
                                 '--Vis/BundleAdjustment 1 '
-                                '--Vis/CorNNDR 0.6 '
-                                '--Vis/CorGuessWinSize 20 '
+                                #'--Vis/CorNNDR 0.6 '
+                                #'--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
                                 '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                 '--Reg/Force3DoF true '
                                 '--RGBD/NeighborLinkRefining true '  # when using laserscan
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 2 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
-                                '--Icp/VoxelSize 0.05 '  
-                                '--Icp/MaxCorrespondenceDistance 0.1 '
+                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
+                                #'--Icp/VoxelSize 0.05 '  
+                                '--Icp/MaxCorrespondenceDistance 0.15 '
                                 # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 30 '
-                                '--RGBD/CreateOccupancyGrid false '  # tested with false. todo: test
+                                '--Rtabmap/DetectionRate 0 '
+                                '--RGBD/CreateOccupancyGrid false '  # tested with false.
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
-                                '--Grid/Sensor 0 '  # tested with 0. todo: test
+                                '--Grid/Sensor 0 '  # tested with 0.
                                 '--Grid/RangeMax 12.0 '  # 0=inf
                                 # enable ray-tracing to clear out cells and mark as free 
                                 # space in occupancy grid map
-                                # '--Grid/RayTracing False '  # todo: test
+                                '--Grid/RayTracing True '
                                 ##'--Grid/FromDepth False '  # generate 2D map from depth. Warning: do not use as this wrongly transfers its value as a boolean to Grid/Sensor. Use Grid/Sensor instead
-                                # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
+                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
-                                # A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
+                                ##
+                                '--Kp/DetectorStrategy 1 '
+                                '--Kp/MaxFeatures 1000 '
+                                #'--Optimizer/Robust true '
+                                '--RGBD/OptimizeMaxError 4 '
+                                '--RGBD/ProximityPathMaxNeighbors 10 '
+                                '--Vis/FeatureType 1 '
+                                '--Kp/MaxDepth 6 '
+                                '--Icp/Strategy 1 '
+                                '--Icp/OutlierRatio 0.75 '  # 0.85
+                                '--Mem/STMSize 50 '
+                                '--Icp/CorrespondenceRatio 0.2 '
+                                '--RGBD/LocalRadius 5 '
+                                '--Mem/NotLinkedNodesKept false '
+                                '--Icp/PointToPlaneMinComplexity 0.04 '
+                                '--Icp/MaxRotation 1.6 '
+                                '--Icp/MaxTranslation 1.0 '
+                                '--Grid/RangeMin 0.2 '
+                                '--Grid/NoiseFilteringMinNeighbors 8 '
+                                '--Grid/NoiseFilteringRadius 0.1 '
+                                '--Icp/Iterations 100 '
+                                '--Icp/Force4DoF true '
+                                '--Rtabmap/ImageBufferSize 200 '
+                                #'--Vis/CorGuessMatchToProjection False '
+                                ## A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
                                 # Set to false if you want only a 2D map, the cloud will be projected on xy plane.
                                 # A 2D map can be still generated if checked, but it requires more memory and time to generate it.
                                 # Ignored if laser scan is 2D and Grid/Sensor is 0.

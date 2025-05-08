@@ -13,8 +13,6 @@ Todo:
 
 import os
 
-from datashader.datashape.dispatch import namespace
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -44,6 +42,8 @@ def generate_launch_description():
     approx_sync_max_interval = LaunchConfiguration('approx_sync_max_interval', default=0.05)  # [sec]. 0.0 means infinite
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_odom_tf = LaunchConfiguration('publish_odom_tf')
+    visual_odometry = LaunchConfiguration('visual_odometry')
+    icp_odometry = LaunchConfiguration('icp_odometry')
     lidar_frame_id = LaunchConfiguration('lidar_frame_id')
     wait_imu_to_init = LaunchConfiguration('wait_imu_to_init')
     pointcloud_topic = LaunchConfiguration('pointcloud_topic')
@@ -103,6 +103,14 @@ def generate_launch_description():
         DeclareLaunchArgument(
                 'publish_odom_tf', default_value='False',
                 description='whether to publish odom tf or let some other node do it'),
+
+        DeclareLaunchArgument(
+                'visual_odometry', default_value='True',
+                description='whether to start RTABMap visual odometry node'),
+
+        DeclareLaunchArgument(
+                'icp_odometry', default_value='False',
+                description='whether to start RTABMap ICP odometry node'),
 
         DeclareLaunchArgument(
                 'lidar_frame_id', default_value='lidar',
@@ -281,21 +289,24 @@ def generate_launch_description():
 
                     'frame_id': 'base_link',
                     # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
-                    'vo_frame_id': 'odom',
+                    'vo_frame_id': 'odom',  # could set to vo if another node is publishing the odom tf, then set guess_frame_id to that odom
                     'map_frame_id': 'map',
                     'publish_tf_map': publish_map_tf,
                     'publish_tf_odom': publish_odom_tf,
+                    # 'odom_guess_frame_id': 'odom',
 
                     'stereo': use_stereo,
-                    'depth': PythonExpression(['not ', use_stereo]),
+                    # 'depth': PythonExpression(['not ', use_stereo]),
                     'localization': localization,
-                    'visual_odometry': 'false',  # odometry from images, eg stereo or RGB-D
-                    'icp_odometry': 'false',  # odometry from laserscans or PointClouds
+                    'visual_odometry': visual_odometry,  # odometry from images, eg stereo or RGB-D
+                    'icp_odometry': icp_odometry,  # odometry from laserscans or PointClouds
                     'subscribe_scan': 'true',
                     'subscribe_scan_cloud': 'false',
 
                     'odom_topic': odom_topic,
                     'odom_args': '',
+                    'odom_sensor_sync': 'true',
+                    'subscribe_odom_info': visual_odometry,  # set to True if using visual odometry or ICP odometry from RTABMAP
 
                     'imu_topic': imu_topic,
                     'wait_imu_to_init': wait_imu_to_init,
@@ -313,6 +324,10 @@ def generate_launch_description():
 
                     'scan_topic': scan_topic,
                     # 'scan_cloud_topic': 'point_cloud',
+
+                    # # Setup synchronization, especially when trying to fuse stereo with LaserScans and external odom
+                    'rgbd_sync': 'true',
+                    'approx_rgbd_sync': 'false',
 
                     'qos': qos,
                     'qos_image': qos_image,

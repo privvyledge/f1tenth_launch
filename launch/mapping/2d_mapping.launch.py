@@ -112,7 +112,17 @@ def generate_launch_description():
             package='slam_toolbox',
             executable='sync_slam_toolbox_node',
             name='slam_toolbox',
-            output='screen'
+            output='screen',
+            # Remaps topics used by the 'slam_toolbox' package from absolute (with slash) to relative (no slash).
+            # This is necessary to use namespaces with 'slam_toolbox'.
+            remappings = [
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+                ('/scan', 'scan'),
+                ('/scan_filtered', 'scan_filtered'),
+                ('/map', 'map'),
+                ('/map_metadata', 'map_metadata')
+            ]
     )
 
     online_slam_launch = Node(
@@ -125,7 +135,17 @@ def generate_launch_description():
             package='slam_toolbox',
             executable='async_slam_toolbox_node',
             name='slam_toolbox',
-            output='screen'
+            output='screen',
+            # Remaps topics used by the 'slam_toolbox' package from absolute (with slash) to relative (no slash).
+            # This is necessary to use namespaces with 'slam_toolbox'.
+            remappings = [
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+                ('/scan', 'scan'),
+                ('/scan_filtered', 'scan_filtered'),
+                ('/map', 'map'),
+                ('/map_metadata', 'map_metadata')
+            ]
     )
 
     rviz2 = Node(

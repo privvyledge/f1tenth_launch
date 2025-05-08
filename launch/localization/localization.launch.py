@@ -76,7 +76,7 @@ def launch_setup(context, *args, **kwargs):
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
-    publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')
+    publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')  # deprecated. todo: remove
 
     use_gpu = LaunchConfiguration('use_gpu', default='True')
     qos_rtabmap = LaunchConfiguration('qos_rtabmap', default=1)
@@ -202,7 +202,7 @@ def launch_setup(context, *args, **kwargs):
     map_tf_publisher_la = DeclareLaunchArgument(
             'map_tf_publisher', default_value=map_tf_publisher,
             description='The node responsible for publishing the map tf. '
-                        'Options: amcl, ekf, vslam.')
+                        'Options: amcl, ekf, vslam, rtabmap.')
 
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
@@ -255,8 +255,6 @@ def launch_setup(context, *args, **kwargs):
             'camera_name', default_value=camera_name,
             description='Camera name. Default: camera')
 
-
-    lifecycle_nodes = ['map_server', 'amcl']
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
@@ -265,6 +263,10 @@ def launch_setup(context, *args, **kwargs):
     camera_name_str = camera_name.perform(context)
     odom_tf_publisher_str = odom_tf_publisher.perform(context)
     map_tf_publisher_str = map_tf_publisher.perform(context)
+
+    lifecycle_nodes = ['map_server']
+    if map_tf_publisher_str.lower() == 'amcl':
+        lifecycle_nodes.append('amcl')
 
     if camera_name_str != '':
         camera_name_str += '/'
@@ -292,7 +294,7 @@ def launch_setup(context, *args, **kwargs):
                 Node(
                         package='nav2_map_server',
                         executable='map_server',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),  # launch_amcl
                         name='map_server',
                         namespace=namespace,
                         output='screen',
@@ -316,7 +318,7 @@ def launch_setup(context, *args, **kwargs):
                 Node(
                         package='nav2_lifecycle_manager',
                         executable='lifecycle_manager',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),
                         name='lifecycle_manager_localization',
                         namespace=namespace,
                         output='screen',
@@ -334,7 +336,7 @@ def launch_setup(context, *args, **kwargs):
                 ComposableNode(
                         package='nav2_map_server',
                         plugin='nav2_map_server::MapServer',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),  # launch_amcl
                         name='map_server',
                         parameters=[configured_params],
                         remappings=remappings),
@@ -348,7 +350,7 @@ def launch_setup(context, *args, **kwargs):
                 ComposableNode(
                         package='nav2_lifecycle_manager',
                         plugin='nav2_lifecycle_manager::LifecycleManager',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),
                         name='lifecycle_manager_localization',
                         parameters=[{'use_sim_time': use_sim_time,
                                      'autostart': autostart,
@@ -406,7 +408,7 @@ def launch_setup(context, *args, **kwargs):
                 'localization': 'True',
                 'queue_size': '5',  # 10
                 'approx_sync': 'True',
-                'publish_map_tf': 'False',
+                'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'rtabmap' else 'False',
                 'wait_imu_to_init': 'True',
                 'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
                 "depth_topic": camera_name_str + 'aligned_depth_to_color/image_raw',
@@ -418,6 +420,7 @@ def launch_setup(context, *args, **kwargs):
                 'rtabmap_args': '--Mem/IncrementalMemory false '  # false=localization, true=mapping
                                 '--Mem/InitWMWithAllNodes true '  # true=localization, false=mapping
                                 '--RGBD/LoopClosureReextractFeatures false '  # false=localization, true=mapping
+                                '--RGBD/SavedLocalizationIgnored true '
                                 '--Vis/MinInliers 15 '  # default=20
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
@@ -609,11 +612,11 @@ def launch_setup(context, *args, **kwargs):
                     'scan_range_min': 0.1,
                     'scan_range_max': 12.0,
                     'deskewing': False,
-                    'guess_frame_id': odom_frame,  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
+                    'guess_frame_id': odom_frame if odom_tf_publisher_str.lower() != 'icp' else '',  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
                     # 'guess_min_translation': 0.05,  # m
                     # 'guess_min_rotation': 0.005,  # rad
                     'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
-                    'publish_null_when_lost': True,
+                    'publish_null_when_lost': False,
                     # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
@@ -681,7 +684,7 @@ def launch_setup(context, *args, **kwargs):
                 # SetParameter(name='publish_tf', value=publish_odom_tf),
                 SetParameter(name='wait_for_transform', value='0.3'),
                 SetParameter(name='wait_imu_to_init', value='False'),
-                SetParameter(name='publish_null_when_lost', value='True'),
+                SetParameter(name='publish_null_when_lost', value='False'),
                 # SetParameter(name='rtabmap_config_path', value=rtabmap_database_file_path),
 
                 # Set remapping rules
@@ -722,7 +725,7 @@ def launch_setup(context, *args, **kwargs):
                             'publish_map_to_odom_tf': 'True' if map_tf_publisher_str.lower() == 'vslam' else 'False',
                             'publish_odom_to_baselink_tf': 'True' if odom_tf_publisher_str.lower() in ['vslam', 'stereo'] else 'False',
                             'save_map': 'False',
-                            'load_map': 'True',
+                            'load_map': 'False',
                             'map_path': visual_slam_map_path,
                             'launch_realsense_driver': 'False',
                             'left_image_topic': camera_name_str + 'infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
