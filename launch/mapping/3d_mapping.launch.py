@@ -271,6 +271,7 @@ def generate_launch_description():
 
         # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py
+        # todo: switch to f1tenth_launch/launch/mapping/rtabmap.launch.py
         IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution(
                         [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']
