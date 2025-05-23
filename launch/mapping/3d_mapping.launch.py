@@ -289,7 +289,7 @@ def generate_launch_description():
                     'wait_for_transform': '0.2',
 
                     'frame_id': 'base_link',
-                    # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
+                    # 'odom_frame_id': 'odom', # if empty or commented out, uses odom topic instead
                     'vo_frame_id': 'odom',  # could set to vo if another node is publishing the odom tf, then set guess_frame_id to that odom
                     'map_frame_id': 'map',
                     'publish_tf_map': publish_map_tf,

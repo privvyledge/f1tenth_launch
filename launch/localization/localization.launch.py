@@ -409,10 +409,19 @@ def launch_setup(context, *args, **kwargs):
                 'queue_size': '5',  # 10
                 'approx_sync': 'True',
                 'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "publish_odom_tf": 'False',
+                "visual_odometry": 'False',
+                "icp_odometry": 'False',
                 'wait_imu_to_init': 'True',
                 'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
+                "left_image_topic": camera_name_str + 'infra1/image_rect_raw',
+                "right_image_topic": camera_name_str + 'infra2/image_rect_raw',
+                "left_camera_info_topic": camera_name_str + 'infra1/camera_info',
+                "right_camera_info_topic": camera_name_str + 'infra2/camera_info',
+                "rgb_topic": camera_name_str + 'color/image_raw',  # camera_name_string + 'color/image_raw', left_image_topic
                 "depth_topic": camera_name_str + 'aligned_depth_to_color/image_raw',
                 "odom_topic": 'odometry/local',
+                "camera_info_topic": camera_name_str + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
                 "scan_topic": 'scan_filtered',
                 'rtabmap_viz_view': 'False',
                 'rviz_view': 'False',
@@ -424,15 +433,16 @@ def launch_setup(context, *args, **kwargs):
                                 '--Vis/MinInliers 15 '  # default=20
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
-                                '--RGBD/LinearUpdate 0.001 '
-                                '--RGBD/AngularUpdate 0.001 '
+                                '--RGBD/LinearUpdate 0.1 '  # 0.001
+                                '--RGBD/AngularUpdate 0.1 '  # 0.001
                                 '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0 '
-                                '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                '--Stereo/MinDisparity 0.5 '  # 0
+                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
                                 '--Stereo/OpticalFlow true '  # default=false
+                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
                                 '--Vis/BundleAdjustment 1 '
-                                '--Vis/CorNNDR 0.6 '
-                                '--Vis/CorGuessWinSize 20 '
+                                # '--Vis/CorNNDR 0.6 '
+                                # '--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
                                 '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                 '--Reg/Force3DoF true '
@@ -440,16 +450,39 @@ def launch_setup(context, *args, **kwargs):
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
                                 '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp.
                                 '--Icp/VoxelSize 0.05 '
-                                '--Icp/MaxCorrespondenceDistance 0.1 '
+                                '--Icp/MaxCorrespondenceDistance 0.15 '  # 0.1
                                 '--Grid/FromDepth False '
-                # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 30 '
-                # '--RGBD/CreateOccupancyGrid false '
-                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
+                                # set DetectionRate to 0 to use image rate. Default=1
+                                '--Rtabmap/DetectionRate 0 '
+                                # '--RGBD/CreateOccupancyGrid false '
+                                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
                                 '--Grid/RangeMax 12.0 '  # 0=inf
+                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
-                                '--Optimizer/GravitySigma 0',
+                                '--Optimizer/GravitySigma 0 '
+                                # new
+                                '--Kp/DetectorStrategy 8 '  # 1
+                                '--Kp/MaxFeatures 500 '  # 1000
+                                '--RGBD/OptimizeMaxError 4 '
+                                '--RGBD/ProximityPathMaxNeighbors 10 '
+                                '--Vis/FeatureType 8 '  # 1
+                                '--Kp/MaxDepth 6 '
+                                '--Icp/Strategy 1 '
+                                '--Icp/OutlierRatio 0.75 '  # 0.85
+                                '--Mem/STMSize 50 '
+                                '--Icp/CorrespondenceRatio 0.2 '
+                                '--RGBD/LocalRadius 5 '
+                                # '--Mem/NotLinkedNodesKept true ' # false
+                                '--Icp/PointToPlaneMinComplexity 0.04 '
+                                '--Icp/MaxRotation 1.6 '
+                                '--Icp/MaxTranslation 1.0 '
+                                '--Grid/RangeMin 0.2 '
+                                '--Grid/NoiseFilteringMinNeighbors 8 '
+                                '--Grid/NoiseFilteringRadius 0.1 '
+                                '--Icp/Iterations 50 '  # 100
+                                '--Icp/Force4DoF true '
+                                '--Rtabmap/ImageBufferSize 5',
             }.items()
     )
 
@@ -613,8 +646,8 @@ def launch_setup(context, *args, **kwargs):
                     'scan_range_max': 12.0,
                     'deskewing': False,
                     'guess_frame_id': odom_frame if odom_tf_publisher_str.lower() != 'icp' else '',  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
-                    # 'guess_min_translation': 0.05,  # m
-                    # 'guess_min_rotation': 0.005,  # rad
+                    # 'guess_min_translation': 0.05, # m
+                    # 'guess_min_rotation': 0.005, # rad
                     'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                     'publish_null_when_lost': False,
                     # 'rtabmap_config_path': rtabmap_database_file_path,
