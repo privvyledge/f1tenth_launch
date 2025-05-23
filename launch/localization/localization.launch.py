@@ -362,7 +362,12 @@ def launch_setup(context, *args, **kwargs):
                 'use_sim_time': use_sim_time,
                 'params_file': os.path.join(
                         f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_slam.yaml'),
+                'use_namespace': use_namespace,
                 'namespace': namespace,
+                'base_frame': base_frame,
+                'odom_frame': odom_frame,
+                'map_frame': 'map',
+                'map_file_name': map_file.rstrip('.yaml'),
             }.items()
     )
 
