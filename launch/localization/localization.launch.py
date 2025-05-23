@@ -76,7 +76,6 @@ def launch_setup(context, *args, **kwargs):
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
-    publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')  # deprecated. todo: remove
 
     use_gpu = LaunchConfiguration('use_gpu', default='True')
     qos_rtabmap = LaunchConfiguration('qos_rtabmap', default=1)
@@ -197,12 +196,12 @@ def launch_setup(context, *args, **kwargs):
     odom_tf_publisher_la = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
             description='The node responsible for publishing the odometry tf. '
-                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud.')
+                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud, rtabmap.')
 
     map_tf_publisher_la = DeclareLaunchArgument(
             'map_tf_publisher', default_value=map_tf_publisher,
             description='The node responsible for publishing the map tf. '
-                        'Options: amcl, ekf, vslam, rtabmap.')
+                        'Options: pf, amcl, ekf, vslam, rtabmap.')
 
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
@@ -211,10 +210,6 @@ def launch_setup(context, *args, **kwargs):
     odom_frame_la = DeclareLaunchArgument(
             'odom_frame', default_value=odom_frame,
             description='Odometry frame, e.g. odom')
-
-    publish_odom_tf_la = DeclareLaunchArgument(
-            'publish_odom_tf', default_value=publish_odom_tf,
-            description='Default: False')
 
     use_gpu_la = DeclareLaunchArgument(
             'use_gpu', default_value=use_gpu,
@@ -409,9 +404,9 @@ def launch_setup(context, *args, **kwargs):
                 'queue_size': '5',  # 10
                 'approx_sync': 'True',
                 'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'rtabmap' else 'False',
-                "publish_odom_tf": 'False',
-                "visual_odometry": 'False',
-                "icp_odometry": 'False',
+                "publish_odom_tf": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "visual_odometry": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "icp_odometry": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
                 'wait_imu_to_init': 'True',
                 'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
                 "left_image_topic": camera_name_str + 'infra1/image_rect_raw',
@@ -885,7 +880,6 @@ def launch_setup(context, *args, **kwargs):
         rtabmap_database_file_la,
         base_frame_la,
         odom_frame_la,
-        publish_odom_tf_la,
         use_gpu_la,
         rtabmap_group,
         rtabmap_icp_odometry,  # separate from rtabmap group due to different parameters
