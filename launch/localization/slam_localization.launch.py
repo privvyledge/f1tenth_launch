@@ -20,6 +20,7 @@ def generate_launch_description():
     odom_frame = LaunchConfiguration('odom_frame')
     map_frame = LaunchConfiguration('map_frame')
     map_file_name = LaunchConfiguration('map_file_name')
+    map_tf_publish_period = LaunchConfiguration('map_tf_publish_period')
 
     # Declare default launch arguments
     localization_param_file = os.path.join(
@@ -48,28 +49,34 @@ def generate_launch_description():
             description='Namespace for the localization node'
     )
 
-    base_frame = DeclareLaunchArgument(
+    base_frame_arg = DeclareLaunchArgument(
             'base_frame',
             default_value='base_link',
             description='Base frame'
     )
 
-    odom_frame = DeclareLaunchArgument(
+    odom_frame_arg = DeclareLaunchArgument(
             'odom_frame',
             default_value='odom',
             description='Odom frame'
     )
 
-    map_frame = DeclareLaunchArgument(
+    map_frame_arg = DeclareLaunchArgument(
             'map_frame',
             default_value='map',
             description='Map frame'
     )
 
-    map_file_name = DeclareLaunchArgument(
+    map_file_name_arg = DeclareLaunchArgument(
             'map_file_name',
             default_value='/mnt/shared_dir/maps/slam_toolbox/raslab',
             description='Map file name'
+    )
+
+    map_tf_publish_period_arg = DeclareLaunchArgument(
+            'map_tf_publish_period',
+            default_value='0.0',
+            description='Map tf publish rate'
     )
 
     slam_toolbox_localizer_node = Node(
@@ -80,7 +87,8 @@ def generate_launch_description():
                         'base_frame': base_frame,
                         'odom_frame': odom_frame,
                         'map_frame': map_frame,
-                        'map_file_name': map_file_name
+                        'map_file_name': map_file_name,
+                        'transform_publish_period': map_tf_publish_period
                     },
                 ],
                 package='slam_toolbox',
@@ -104,10 +112,11 @@ def generate_launch_description():
     ld.add_action(localization_param)
     ld.add_action(use_namespace_arg)
     ld.add_action(namespace_arg)
-    ld.add_action(base_frame)
-    ld.add_action(odom_frame)
-    ld.add_action(map_frame)
-    ld.add_action(map_file_name)
+    ld.add_action(base_frame_arg)
+    ld.add_action(odom_frame_arg)
+    ld.add_action(map_frame_arg)
+    ld.add_action(map_file_name_arg)
+    ld.add_action(map_tf_publish_period_arg)
     ld.add_action(slam_toolbox_localizer_node)
 
     return ld

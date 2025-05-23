@@ -201,7 +201,7 @@ def launch_setup(context, *args, **kwargs):
     map_tf_publisher_la = DeclareLaunchArgument(
             'map_tf_publisher', default_value=map_tf_publisher,
             description='The node responsible for publishing the map tf. '
-                        'Options: pf, amcl, ekf, vslam, rtabmap.')
+                        'Options: pf, amcl, ekf, vslam, rtabmap, slam (for slam_toolbox).')
 
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
@@ -368,6 +368,7 @@ def launch_setup(context, *args, **kwargs):
                 'odom_frame': odom_frame,
                 'map_frame': 'map',
                 'map_file_name': map_file.rstrip('.yaml'),
+                'map_tf_publish_period': '0.05' if map_tf_publisher_str.lower() == 'slam' else '0.0',
             }.items()
     )
 
