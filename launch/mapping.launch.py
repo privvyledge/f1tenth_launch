@@ -63,17 +63,15 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
-    # todo: refactor namespaces for multiple F1/10s
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
     use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
-    namespace = LaunchConfiguration('namespace', default='')  # todo: remove from here and nested launch files
-    use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
     use_gpu = LaunchConfiguration('use_gpu', default=False)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
+    container_name = LaunchConfiguration('container_name', default='f1tenth_container')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
     launch_joystick = LaunchConfiguration('launch_joystick', default=False)
     launch_sensors = LaunchConfiguration('launch_sensors', default=False)
@@ -141,16 +139,6 @@ def launch_setup(context, *args, **kwargs):
                         'uses the $VEHICLE_NAME environment variable. '
                         'Defaults to the username if $VEHICLE_NAME doesn\'t exist and the namespace argument is empty.')
 
-    declare_namespace_cmd = DeclareLaunchArgument(
-            'namespace',
-            default_value=namespace,
-            description='Top-level namespace')
-
-    declare_use_namespace_cmd = DeclareLaunchArgument(
-            'use_namespace',
-            default_value=use_namespace,
-            description='Whether to apply a namespace to the navigation stack')
-
     declare_map_yaml_cmd = DeclareLaunchArgument(
             'map_file',
             default_value=map_file,
@@ -172,6 +160,10 @@ def launch_setup(context, *args, **kwargs):
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value=use_composition,
             description='Whether to use composed bringup')
+
+    declare_container_name_cmd = DeclareLaunchArgument(
+            'container_name', default_value=container_name,
+            description='Name of the container node used for composition.')
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
             'use_respawn', default_value=use_respawn,
@@ -373,13 +365,12 @@ def launch_setup(context, *args, **kwargs):
         stdout_linebuf_envvar,
         declare_f1tenth_namespace_cmd,
         declare_use_f1tenth_namespace_cmd,
-        declare_namespace_cmd,
-        declare_use_namespace_cmd,
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
         use_gpu_la,
         declare_autostart_cmd,
         declare_use_composition_cmd,
+        declare_container_name_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         launch_joystick_arg,
@@ -426,6 +417,18 @@ def launch_setup(context, *args, **kwargs):
     life_long_mapping_string = life_long_mapping.perform(context)
     realsense_splitter_enabled_string = launch_realsense_splitter_node.perform(context)
 
+    launch_localization_string = launch_localization.perform(context)
+    launch_local_localization_string = launch_local_localization.perform(context)
+    launch_global_localization_string = launch_global_localization.perform(context)
+
+    use_composition_string = use_composition.perform(context)
+    use_gpu_string = use_gpu.perform(context)
+
+    # whether this launch file is responsible for starting up odometry
+    enable_odom_here = True
+    if launch_localization_string.lower() == 'true' and launch_local_localization_string.lower() == 'true':
+        enable_odom_here = False
+
     if camera_name_string != '':
         camera_name_string += '/'
 
@@ -449,6 +452,35 @@ def launch_setup(context, *args, **kwargs):
                         'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
                 )
 
+    component_container_node = GroupAction(
+            condition=IfCondition(use_composition),
+            actions=[
+                # PushRosNamespace(
+                #         condition=IfCondition(use_f1tenth_namespace),
+                #         namespace=f1tenth_namespace),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                SetParameter(name='thread_num', value=os.cpu_count()),
+                # number of threads to use with component_container_mt
+                Node(
+                        condition=IfCondition(use_composition),
+                        name=container_name,
+                        package='rclcpp_components',
+                        # https://docs.ros.org/en/humble/Concepts/Intermediate/About-Composition.html#componentcontainer
+                        # https://docs.ros.org/en/humble/Tutorials/Intermediate/Composition.html#component-container-types
+                        # executables: 'component_container_mt', 'component_container_isolated', 'component_container'
+                        executable='component_container_isolated',
+                        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+                        arguments=[
+                            '--use_multi_threaded_executor',
+                            # launch each component in a separate thread with component_container_isolated
+                            '--ros-args', '--log-level', 'info'
+                        ],
+                        output='screen'),
+            ]
+    )
+
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'teleop.launch.py'])
@@ -457,7 +489,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_sim_time": use_sim_time,
                 "use_f1tenth_namespace": use_f1tenth_namespace,
                 "f1tenth_namespace": f1tenth_namespace,
-                "use_gpu": use_gpu,
+                "use_gpu": 'True' if (use_gpu_string.lower() == 'true' or not enable_odom_here) else 'False',
                 "launch_joystick": launch_joystick,
                 "launch_sensors": launch_sensors,
                 "launch_vehicle": launch_vehicle,
@@ -491,6 +523,9 @@ def launch_setup(context, *args, **kwargs):
                 "camera_launch_delay": camera_launch_delay,
                 "laserscan_launch_delay": laserscan_launch_delay,
                 "realsense_qos": realsense_qos,
+                "use_composition": use_composition,
+                "attach_to_shared_component_container": use_composition,  # this launch file starts a container
+                "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
             }.items()
     )
 
@@ -503,8 +538,8 @@ def launch_setup(context, *args, **kwargs):
             ),
             condition=IfCondition(launch_2d_mapping),
             launch_arguments={
-                "namespace": f1tenth_namespace,
-                "use_namespace": use_f1tenth_namespace,
+                "namespace": '', # f1tenth_namespace,
+                "use_namespace": 'False', # use_f1tenth_namespace,
                 "offline_mapping": use_sim_time,
                 "use_sim_time": use_sim_time,
                 "offline_mapping_param_file": offline_mapping_2d_param_file,
@@ -544,15 +579,15 @@ def launch_setup(context, *args, **kwargs):
             condition=UnlessCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "namespace": f1tenth_namespace,
+                "namespace": f1tenth_namespace if use_f1tenth_namespace_string.lower() == 'true' else '',
                 "use_stereo": 'false',  # False=use_depth + color, True=use_stereo
-                "localization": 'False',
+                "localization": 'false',
                 "queue_size": mapping_3d_queue_size,
                 "publish_map_tf": publish_map_to_odom_tf,
-                "publish_odom_tf": 'True',  # set to False if some other node, e.g robot_localization EKF is publishing
-                "visual_odometry": 'True',
-                "icp_odometry": 'True',
-                "wait_imu_to_init": 'True',
+                "publish_odom_tf": str(enable_odom_here).lower(),  # set to False if some other node, e.g robot_localization EKF is publishing
+                "visual_odometry": str(enable_odom_here).lower(),
+                "icp_odometry": 'false',
+                "wait_imu_to_init": 'true',
                 "imu_topic": camera_name_string + 'imu/filtered',
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
@@ -560,12 +595,12 @@ def launch_setup(context, *args, **kwargs):
                 "right_camera_info_topic": camera_name_string + 'infra2/camera_info',
                 "rgb_topic": camera_name_string + 'color/image_raw',  # camera_name_string + 'color/image_raw', left_image_topic
                 "depth_topic": depth_topic,  # depth_topic, camera_name_string + 'depth/image_rect_raw'
-                "odom_topic": 'odometry/local',
+                "odom_topic": 'rtabmap/odom' if enable_odom_here else 'odometry/local',
                 "camera_info_topic": camera_name_string + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
-                "scan_topic": 'scan_filtered',
-                "approx_sync": 'True',
-                "rtabmap_viz_view": 'False',  # launch_visualization
-                "rviz_view": 'False',  # launch_visualization
+                "scan_topic": 'lidar/scan_filtered',
+                "approx_sync": 'true',
+                "rtabmap_viz_view": 'false',  # launch_visualization
+                "rviz_view": 'false',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "qos": "1",
                 "qos_scan": "1",
@@ -655,7 +690,7 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "use_namespace": use_f1tenth_namespace,
-                "camera_name": camera_name,
+                "camera_name": '', # camera_name,
                 "namespace": f1tenth_namespace,
                 "global_frame": 'odom',  # only set to map if another node is publishing the map frame
                 "launch_realsense_driver": 'False',
@@ -668,9 +703,9 @@ def launch_setup(context, *args, **kwargs):
                 "input_qos": realsense_qos,
                 "remove_dynamic_objects": 'False',
                 "remove_people": 'False',
-                "launch_visual_slam": 'False',
-                "attach_to_shared_component_container": 'False',
-                "component_container_name": 'nvblox_container',
+                "launch_visual_slam": str(enable_odom_here),
+                "attach_to_shared_component_container": use_composition,
+                "component_container_name": container_name if use_composition_string.lower() == 'true' else 'nvblox_container',
             }.items()
     )
 
@@ -695,15 +730,18 @@ def launch_setup(context, *args, **kwargs):
                         namespace=f1tenth_namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 # nodes
-                teleop_launch,
+                component_container_node,
                 mapping_2d_node,
-                mapping_3d_group
             ]
     )  # append F1/10 namespace to all nodes
 
     ld = launch_args + [
-                nodes_to_launch
+                nodes_to_launch,
+                teleop_launch,
+                mapping_3d_group
             ]
     return ld
 

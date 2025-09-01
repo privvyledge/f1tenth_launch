@@ -35,7 +35,9 @@ def generate_launch_description():
             name='ackermann_mux',
             parameters=[mux_config],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
-                        ('ackermann_cmd', 'vehicle/ackermann_cmd')]
+                        ('ackermann_cmd', 'vehicle/ackermann_cmd'),
+                        ('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')]
     )
 
     # add nodes to the launch description

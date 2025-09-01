@@ -138,6 +138,7 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    *remappings
                 ]
         ),
 
@@ -158,6 +159,7 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    *remappings
                 ]
         ),
     ])

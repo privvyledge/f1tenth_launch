@@ -22,14 +22,16 @@ def generate_launch_description():
         Node(
             package="laser_filters",
             executable="scan_to_scan_filter_chain",
-            namespace=namespace,
+            #namespace=namespace,
             parameters=[
                 laser_filter_param_file,
                 {'use_sim_time': False}
             ],
-            # remappings=[
-            #     # ('scan_filtered', 'scan_filtered'),
-            #     ('scan', 'lidar/scan')
-            # ]
+            remappings=[
+                # # ('scan_filtered', 'scan_filtered'),
+                # ('scan', 'lidar/scan'),
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+            ]
         )
     ])

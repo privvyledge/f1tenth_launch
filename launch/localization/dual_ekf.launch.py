@@ -18,7 +18,7 @@ import pathlib
 import launch.actions
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import PushRosNamespace
-from launch_ros.actions import Node, SetParameter
+from launch_ros.actions import Node, SetParameter, SetRemap
 
 
 def generate_launch_description():
@@ -112,6 +112,8 @@ def generate_launch_description():
         PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
         # Set common parameters
         SetParameter(name='use_sim_time', value=use_sim_time),
+        SetRemap(src=['/tf'], dst=['tf']),
+        SetRemap(src=['/tf_static'], dst=['tf_static']),
 
         # Local/odom
         IncludeLaunchDescription(

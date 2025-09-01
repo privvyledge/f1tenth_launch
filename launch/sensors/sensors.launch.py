@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
+Notes:
+    * This launch file and inherited (children) launch files support Pushed namespaces.
+    Therefore, we can add a 'sensing' namespace for all sensors here, then each node/include can have its own namespace appended.
+
 Todo: launch realsense URDF/Xacro with robot state publisher using _d435i.urdf.xacro or test_d435i_camera.urdf.xacro (https://navigation.ros.org/setup_guides/urdf/setup_urdf.html  | https://github.com/IntelRealSense/realsense-ros/blob/ros2-development/realsense2_description/launch/view_model.launch.py)
-Todo: switch to XML launch to simplify.
 
 Steps:
     * include lidar launch file and pass launch filter argument bool to lidar launch file
@@ -11,13 +14,13 @@ Steps:
     * (optional) publish visual odometry
 """
 from launch import LaunchDescription
-from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.actions import Node, ComposableNodeContainer, PushRosNamespace, SetRemap
 from launch_ros.descriptions import ComposableNode
 from launch_ros.actions import LifecycleNode
 from launch.substitutions import Command
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, GroupAction, \
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, ExecuteProcess, TimerAction, GroupAction, \
     OpaqueFunction, SetEnvironmentVariable, LogInfo
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition, LaunchConfigurationEquals
@@ -54,8 +57,8 @@ def launch_setup(context, *args, **kwargs):
     # )
 
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
-    use_namespace = LaunchConfiguration('use_namespace', default='True')
-    namespace = LaunchConfiguration('namespace', default='')
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    namespace = LaunchConfiguration('namespace', default='sensing')
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud')
@@ -66,11 +69,16 @@ def launch_setup(context, *args, **kwargs):
     align_realsense_depth = LaunchConfiguration('align_realsense_depth')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off')
-    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=True)
+    launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default=6.0)
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default=2.0)
     depth_to_laserscan = LaunchConfiguration('depth_to_laserscan', default='False')
     qos = LaunchConfiguration('qos', default='SENSOR_DATA')
+    use_composition = LaunchConfiguration('use_composition', default=False)
+    component_container_name = LaunchConfiguration('component_container_name', default='sensing_container')
+    attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container', default=False)
+    intra_process_comms = LaunchConfiguration("intra_process_comms", default=True)
+    container_name_full = (namespace, '/', component_container_name)
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -100,10 +108,12 @@ def launch_setup(context, *args, **kwargs):
                                                     default_value='False',
                                                     description='Whether to publish a PointCloud2 message from stereo '
                                                                 'images.')
-    depthimage_to_pointcloud_la = DeclareLaunchArgument('depthimage_to_pointcloud',
-                                                        default_value='False',
-                                                        description='Whether to publish a PointCloud2 message from a '
-                                                                    'depth image.')
+    depthimage_to_pointcloud_la = DeclareLaunchArgument(
+            'depthimage_to_pointcloud',
+            default_value='True',
+            description='Whether to publish a PointCloud2 message from a depth image. '
+                        'This method is recommended over stereo if depth is available.'
+    )
     detect_ground_and_obstacles_la = DeclareLaunchArgument('detect_ground_and_obstacles',
                                                            default_value='False',
                                                            description='Whether to use RTABmaps obstacle detector.')
@@ -114,7 +124,7 @@ def launch_setup(context, *args, **kwargs):
             description='Whether to reset the realsense device.')
 
     publish_realsense_pointcloud_la = DeclareLaunchArgument('publish_realsense_pointcloud',
-                                                            default_value='True',
+                                                            default_value='False',
                                                             description='Whether to publish PointClouds using '
                                                                         'librealsense SDK. Could be disabled when '
                                                                         'recording ROSBags or mapping. ')
@@ -168,6 +178,19 @@ def launch_setup(context, *args, **kwargs):
                         'Options: SENSOR_DATA, DEFAULT, SYSTEM_DEFAULT, SENSORS, PARAMETERS, SERVICES, ACTIONS. '
                         'Recommended: SENSOR_DATA for camera nodes or SYSTEM_DEFAULT')
 
+    use_composition_cmd = DeclareLaunchArgument('use_composition', default_value=use_composition,
+                                                description='Whether to use composition for the realsense camera.')
+    component_container_name_cmd = DeclareLaunchArgument('component_container_name',
+                                                         default_value=component_container_name,
+                                                         description='Name of the component container to use.')
+    attach_to_shared_component_container_cmd = DeclareLaunchArgument('attach_to_shared_component_container',
+                                                                     default_value=attach_to_shared_component_container,
+                                                                     description="Whether or not to join a container")
+    intra_process_comms_arg = DeclareLaunchArgument('intra_process_comms',
+                                                    default_value=intra_process_comms,
+                                                    description="Whether to launch "
+                                                                "components with intra process communication.")
+
     # Create Launch Description
     launch_args = [
         use_sim_time_la, use_namespace_la, namespace_la,
@@ -178,30 +201,40 @@ def launch_setup(context, *args, **kwargs):
         reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la,
         realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
-        camera_launch_delay_la, laserscan_launch_delay_la, depth_to_laserscan_la, declare_qos_cmd
+        camera_launch_delay_la, laserscan_launch_delay_la, depth_to_laserscan_la, declare_qos_cmd,
+        use_composition_cmd, component_container_name_cmd, attach_to_shared_component_container_cmd,
+        intra_process_comms_arg
     ]
 
     # Get camera name string from LaunchConfiguration
     camera_name_str = camera_name.perform(context)
     qos_str = qos.perform(context)
+    use_namespace_str = use_namespace.perform(context)
+    namespace_str = namespace.perform(context)
     if camera_name_str != '':
         camera_name_str += '/'
 
     qos_int = qos_str_to_rtabmap_int.get(qos_str, 2)
 
     # Nodes
-    lidar_node = TimerAction(
+    lidar_group = TimerAction(
             period=laserscan_launch_delay,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(PathJoinSubstitution(
-                                [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
-                        )),
-                        launch_arguments={
-                            'launch_filter': 'True',
-                            'namespace': namespace,
-                        }.items()
-                )
+                GroupAction([
+                    PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                    SetRemap(src=['/tf'], dst=['tf']),
+                    SetRemap(src=['/tf_static'], dst=['tf_static']),
+                    IncludeLaunchDescription(
+                            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                                    [f1tenth_launch_dir, 'launch/sensors', 'ydlidar.launch.py']
+                            )),
+                            launch_arguments={
+                                'launch_filter': 'True',
+                                'use_namespace': 'True',  # use_namespace,
+                                'namespace': 'lidar',  # namespace
+                            }.items()
+                    )
+                ])
             ]
     )
 
@@ -211,7 +244,8 @@ def launch_setup(context, *args, **kwargs):
             )),
             launch_arguments={
                 'use_sim_time': use_sim_time,
-                'namespace': namespace,
+                'use_namespace': 'False',
+                'namespace': namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
                 'camera_name': camera_name,
                 'qos': qos,
                 'reset_realsense': reset_realsense,
@@ -220,6 +254,10 @@ def launch_setup(context, *args, **kwargs):
                 'emitter_enabled': realsense_emitter_enabled,
                 'emitter_on_off': realsense_emitter_on_off,
                 'launch_realsense_splitter_node': launch_realsense_splitter_node,
+                'use_composition': use_composition,
+                'component_container_name': component_container_name,
+                'attach_to_shared_component_container': attach_to_shared_component_container,
+                'intra_process_comms': intra_process_comms,
             }.items()
     )
 
@@ -227,7 +265,7 @@ def launch_setup(context, *args, **kwargs):
             package='depthimage_to_laserscan',
             executable='depthimage_to_laserscan_node',
             name='depthimage_to_laserscan_node',
-            namespace=namespace,
+            # namespace=None,  # namespace,
             condition=IfCondition(depth_to_laserscan),
             output='screen',
             parameters=[{'scan_time': 0.0333},  # 1 / (desired_frequency, i.e 30.0 Hz)
@@ -258,8 +296,9 @@ def launch_setup(context, *args, **kwargs):
             # condition=IfCondition([imu_only]),
             launch_arguments={
                 'use_sim_time': use_sim_time,
-                'use_namespace': use_namespace,
-                'namespace': namespace,
+                'use_namespace': 'False',  # use_namespace,
+                'namespace': namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',  # namespace,
+                'camera_name': camera_name,
                 'approx_sync': approx_sync,
                 'queue_size': '1',  # default: 10
                 'depthimage_to_pointcloud': depthimage_to_pointcloud,
@@ -271,12 +310,15 @@ def launch_setup(context, *args, **kwargs):
                 'color_pointcloud': 'True',
                 'use_image_proc': 'False',
                 'use_rtabmap': 'True',
+                'use_gpu': 'False',
                 'detect_ground_and_obstacles': detect_ground_and_obstacles,
                 'register_depth': 'False',
                 'rtabmap_depth_decimation': '2',  # 1 means no decimation,
                 'rtabmap_voxel_size': '0.1',  # 0.0 means no filtering
                 'qos': str(qos_int),
                 'use_system_default_qos': 'True' if qos_str == 'SYSTEM_DEFAULT' else 'False',
+                'attach_to_shared_component_container': attach_to_shared_component_container,
+                'component_container_name': component_container_name,
             }.items()
     )
 
@@ -305,6 +347,9 @@ def launch_setup(context, *args, **kwargs):
             period=camera_launch_delay,
             actions=[
                 GroupAction([
+                    PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                    SetRemap(src=['/tf'], dst=['tf']),
+                    SetRemap(src=['/tf_static'], dst=['tf_static']),
                     realsense_node,
                     depth_to_laserscan_node,
                     stereo_and_depth_image_processing_node,
@@ -315,9 +360,8 @@ def launch_setup(context, *args, **kwargs):
 
     # Add nodes to launch description
     ld = launch_args + [
-        lidar_node,
         image_processing_group,
-
+        lidar_group,
     ]
     return ld
 

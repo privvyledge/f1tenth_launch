@@ -151,7 +151,7 @@ def generate_launch_description():
     rviz2 = Node(
             package='rviz2',
             executable='rviz2',
-            name='rviz2',
+            # name='rviz2_slam_toolbox',
             namespace=namespace,
             condition=IfCondition(with_rviz),
             arguments=['-d', rviz_cfg_path_param]
@@ -173,12 +173,14 @@ def generate_launch_description():
                 {'save_map_timeout': save_map_timeout},
                 {'free_thresh_default': free_thresh_default},
                 {'occupied_thresh_default': occupied_thresh_default},
-                {'map_subscribe_transient_local': map_subscribe_transient_local}])
+                {'map_subscribe_transient_local': map_subscribe_transient_local}],
+            remappings=[('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')])
 
     start_lifecycle_manager_cmd = Node(
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
-            name='lifecycle_manager',
+            name='lifecycle_manager_2d_mapping',
             namespace=namespace,
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188

@@ -58,7 +58,11 @@ def generate_launch_description():
             name='joy',
             respawn=True,
             respawn_delay=2.0,
-            parameters=[joy_config]
+            parameters=[joy_config],
+            remappings=[
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static')
+            ]
     )
 
     joy_teleop_node = Node(
@@ -73,6 +77,10 @@ def generate_launch_description():
                     'human_control.axis_mappings.drive-speed.scale': max_speed,  # max speed in m/s
                     'human_control.axis_mappings.drive-steering_angle.scale': max_steering,  # max steering in rads
                 }
+            ],
+            remappings=[
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static')
             ]
     )
 

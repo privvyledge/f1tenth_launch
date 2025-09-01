@@ -14,9 +14,9 @@ Todo:
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.actions import Node, ComposableNodeContainer, SetRemap
 from launch_ros.descriptions import ComposableNode
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
@@ -272,79 +272,86 @@ def generate_launch_description():
         # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py
         # todo: switch to f1tenth_launch/launch/mapping/rtabmap.launch.py
-        IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(PathJoinSubstitution(
-                        [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']
-                )),
-                # condition=LaunchConfigurationEquals('mapping', 'realsense'),
-                # condition=IfCondition([imu_only]),
-                launch_arguments={
-                    # 'cfg': '',
-                    'args': rtabmap_args,
-                    'rtabmap_args': rtabmap_args,
-                    'database_path': database_path,
+        GroupAction(
+                actions=[
+                    SetRemap(src=['/tf', '/tf_static'], dst=['tf', 'tf_static']),
+                    IncludeLaunchDescription(
+                            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                                    [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']
+                            )),
+                            # condition=LaunchConfigurationEquals('mapping', 'realsense'),
+                            # condition=IfCondition([imu_only]),
+                            launch_arguments={
+                                # 'cfg': '',
+                                'args': rtabmap_args,
+                                'rtabmap_args': rtabmap_args,
+                                'database_path': database_path,
 
-                    'queue_size': queue_size,  # default: 10
-                    'topic_queue_size': queue_size,
-                    'wait_for_transform': '0.2',
+                                'queue_size': queue_size,  # default: 10
+                                'topic_queue_size': queue_size,
+                                'wait_for_transform': '0.2',
 
-                    'frame_id': 'base_link',
-                    # 'odom_frame_id': 'odom', # if empty or commented out, uses odom topic instead
-                    'vo_frame_id': 'odom',  # could set to vo if another node is publishing the odom tf, then set guess_frame_id to that odom
-                    'map_frame_id': 'map',
-                    'publish_tf_map': publish_map_tf,
-                    'publish_tf_odom': publish_odom_tf,
-                    # 'odom_guess_frame_id': 'odom',
+                                'frame_id': 'base_link',
+                                # 'odom_frame_id': 'odom', # if empty or commented out, uses odom topic instead
+                                'vo_frame_id': 'odom',
+                                # could set to vo if another node is publishing the odom tf, then set guess_frame_id to that odom
+                                'map_frame_id': 'map',
+                                'publish_tf_map': publish_map_tf,
+                                'publish_tf_odom': publish_odom_tf,
+                                # 'odom_guess_frame_id': 'odom',
 
-                    'stereo': use_stereo,
-                    # 'depth': PythonExpression(['not ', use_stereo]),
-                    'localization': localization,
-                    'visual_odometry': visual_odometry,  # odometry from images, eg stereo or RGB-D
-                    'icp_odometry': icp_odometry,  # odometry from laserscans or PointClouds
-                    'subscribe_scan': 'true',
-                    'subscribe_scan_cloud': 'false',
+                                'stereo': use_stereo,
+                                # 'depth': PythonExpression(['not ', use_stereo]),
+                                'localization': localization,
+                                'visual_odometry': visual_odometry,  # odometry from images, eg stereo or RGB-D
+                                'icp_odometry': icp_odometry,  # odometry from laserscans or PointClouds
+                                'subscribe_scan': 'true',
+                                'subscribe_scan_cloud': 'false',
 
-                    'odom_topic': odom_topic,
-                    'odom_args': '',
-                    'odom_sensor_sync': 'true',
-                    'subscribe_odom_info': visual_odometry,  # set to True if using visual odometry or ICP odometry from RTABMAP
+                                'odom_topic': odom_topic,
+                                'odom_args': '',
+                                'odom_sensor_sync': 'true',
+                                # 'subscribe_odom_info': visual_odometry,
+                                # set to True if using visual odometry or ICP odometry from RTABMAP
 
-                    'imu_topic': imu_topic,
-                    'wait_imu_to_init': wait_imu_to_init,
+                                'imu_topic': imu_topic,
+                                'wait_imu_to_init': wait_imu_to_init,
 
-                    'namespace': namespace,
-                    'stereo_namespace': namespace,
-                    'left_image_topic': left_image_topic,
-                    'right_image_topic': right_image_topic,
-                    'left_camera_info_topic': left_camera_info_topic,
-                    'right_camera_info_topic': right_camera_info_topic,
+                                'namespace': namespace,
+                                'stereo_namespace': namespace,
+                                'left_image_topic': left_image_topic,
+                                'right_image_topic': right_image_topic,
+                                'left_camera_info_topic': left_camera_info_topic,
+                                'right_camera_info_topic': right_camera_info_topic,
 
-                    'rgb_topic': rgb_topic,
-                    'depth_topic': depth_topic,
-                    'camera_info_topic': camera_info_topic,
+                                'rgb_topic': rgb_topic,
+                                'depth_topic': depth_topic,
+                                'camera_info_topic': camera_info_topic,
 
-                    'scan_topic': scan_topic,
-                    # 'scan_cloud_topic': 'point_cloud',
+                                'scan_topic': scan_topic,
+                                # 'scan_cloud_topic': 'point_cloud',
 
-                    # # Setup synchronization, especially when trying to fuse stereo with LaserScans and external odom
-                    'rgbd_sync': 'true',
-                    'approx_rgbd_sync': 'false',
+                                # # Setup synchronization, especially when trying to fuse stereo with LaserScans and external odom
+                                'rgbd_sync': 'true',
+                                'approx_rgbd_sync': 'false',
 
-                    'qos': qos,
-                    'qos_image': qos_image,
-                    'qos_camera_info': qos_camera_info,
-                    'qos_imu': qos_imu,
-                    'qos_scan': qos_scan,
-                    'qos_odom': qos_odom,
+                                'qos': qos,
+                                'qos_image': qos_image,
+                                'qos_camera_info': qos_camera_info,
+                                'qos_imu': qos_imu,
+                                'qos_scan': qos_scan,
+                                'qos_odom': qos_odom,
 
-                    'approx_sync': approx_sync,
-                    # 'approx_sync_max_interval': approx_sync_max_interval,
+                                'approx_sync': approx_sync,
+                                # 'approx_sync_max_interval': approx_sync_max_interval,
 
-                    'rtabmap_viz': rtabmap_viz_view,
-                    'rviz': rviz_view,
-                    'rviz_cfg': rviz_cfg_path_param,
-                    'use_sim_time': use_sim_time,
-                }.items()
+                                'rtabmap_viz': rtabmap_viz_view,
+                                'rviz': rviz_view,
+                                'rviz_cfg': rviz_cfg_path_param,
+                                'use_sim_time': use_sim_time,
+                            }.items()
+                    )
+                ]
         ),
     ])
 

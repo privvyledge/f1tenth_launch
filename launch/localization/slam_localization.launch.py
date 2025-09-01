@@ -102,6 +102,7 @@ def generate_launch_description():
                     ('/tf_static', 'tf_static'),
                     ('/scan', 'scan'),
                     ('/scan_filtered', 'scan_filtered'),
+                    ('/lidar/scan_filtered', 'lidar/scan_filtered'),
                     ('/map', 'map'),
                     ('/map_metadata', 'map_metadata')
                             ]

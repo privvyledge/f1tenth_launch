@@ -23,6 +23,7 @@ def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     namespace = LaunchConfiguration('namespace', default='')
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
     camera_name = LaunchConfiguration('camera_name', default='camera')
     two_d_mode = LaunchConfiguration('two_d_mode', default=False)
     base_frame = LaunchConfiguration('base_frame', default='base_link')  # camera_link, base_link
@@ -41,6 +42,7 @@ def launch_setup(context, *args, **kwargs):
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='visual_slam_launch_container')
+    container_name_full = (namespace, '/', component_container_name)
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -49,6 +51,9 @@ def launch_setup(context, *args, **kwargs):
     namespace_la = DeclareLaunchArgument(
             'namespace', default_value=namespace,
             description='Namespace for the nodes')
+    use_namespace_la = DeclareLaunchArgument(
+            'use_namespace', default_value=use_namespace,
+            description='Use namespace for the nodes')
     camera_name_launch_arg = DeclareLaunchArgument('camera_name', default_value=camera_name,
                                                  description='The name of the camera node.')
     two_d_mode_arg = DeclareLaunchArgument('two_d_mode',
@@ -131,6 +136,7 @@ def launch_setup(context, *args, **kwargs):
     launch_args = [
         use_sim_time_la,
         namespace_la,
+        use_namespace_la,
         two_d_mode_arg,
         base_frame_arg,
         publish_map_to_odom_tf_arg,
@@ -151,7 +157,9 @@ def launch_setup(context, *args, **kwargs):
 
     # Get string values from launch configuration
     namespace_string = namespace.perform(context)
+    use_namespace_string = use_namespace.perform(context)
     camera_name_string = camera_name.perform(context)
+    component_container_name_string = component_container_name.perform(context)
 
     if camera_name_string != '':
         camera_name_string += '/'
@@ -160,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
     realsense_camera_node = Node(
             condition=IfCondition(launch_realsense_driver),
             name=camera_name,
-            namespace=namespace,
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='realsense2_camera',
             executable='realsense2_camera_node',
             parameters=[{
@@ -182,13 +190,17 @@ def launch_setup(context, *args, **kwargs):
                 'unite_imu_method': 2,
                 'publish_tf': True,
                 # 'tf_publish_rate': 30.0
-            }]
+            }],
+            remappings=[
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+            ]
     )
 
     # realsense_camera_node_composed = ComposableNode(
     #         condition=IfCondition(launch_realsense_driver),
     #         # name=camera_name,
-    #         namespace=namespace,
+    #         namespace=namespace if use_namespace_string.lower() == 'true' else '',
     #         package='realsense2_camera',
     #         plugin='realsense2_camera::RealSenseNodeFactory',
     #         extra_arguments=[{'use_intra_process_comms': LaunchConfiguration("intra_process_comms")}],
@@ -197,6 +209,7 @@ def launch_setup(context, *args, **kwargs):
     # if a transformError occurs, it's probably due to a low realsense tf_publish_rate
     visual_slam_node = ComposableNode(
             name='visual_slam_node',
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='isaac_ros_visual_slam',
             plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
             # extra_arguments=[{"use_intra_process_comms": True}],  # todo: test
@@ -249,7 +262,9 @@ def launch_setup(context, *args, **kwargs):
                         ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),
                         ('visual_slam/image_1', right_image_topic),
                         ('visual_slam/camera_info_1', camera_name_string + 'infra2/camera_info'),
-                        ('visual_slam/imu', imu_topic)]
+                        ('visual_slam/imu', imu_topic),
+                        ('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')]
     )
 
     # get map path context from launch configuration
@@ -329,18 +344,18 @@ def launch_setup(context, *args, **kwargs):
     )
 
     visual_slam_launch_container = ComposableNodeContainer(
-            name=component_container_name,
-            namespace=namespace,
+            name=component_container_name_string.split('/')[-1],
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='rclcpp_components',
             executable='component_container_mt',  # use component_container_mt for multithreading support
             condition=UnlessCondition(attach_to_shared_component_container),
-            # composable_node_descriptions=[visual_slam_node],  # if using this, disable load_composable_nodes
+            composable_node_descriptions=[visual_slam_node],  # if using this, disable load_composable_nodes
             output='screen'
     )
 
     load_composable_nodes = LoadComposableNodes(
-            # condition=IfCondition(attach_to_shared_component_container),
-            target_container=component_container_name,
+            condition=IfCondition(attach_to_shared_component_container),
+            target_container=container_name_full,
             composable_node_descriptions=[visual_slam_node]
     )
 
