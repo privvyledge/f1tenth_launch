@@ -26,6 +26,9 @@ def launch_setup(context, *args, **kwargs):
 
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    namespace = LaunchConfiguration('namespace', default='')
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
@@ -33,7 +36,7 @@ def launch_setup(context, *args, **kwargs):
     intra_process_comms = LaunchConfiguration("intra_process_comms", default=True)
     realsense_config_file = LaunchConfiguration('realsense_config_file', default=realsense_config_file_path)
     # '/camera/camera/depth/image_rect_raw' or '/camera/camera/aligned_depth_to_color/image_raw'
-    depth_topic = LaunchConfiguration('depth_topic', default='/camera/camera/depth/image_rect_raw')
+    depth_topic = LaunchConfiguration('depth_topic', default='depth/image_rect_raw')
     input_qos = LaunchConfiguration('input_qos', default='SENSOR_DATA')
     output_qos = LaunchConfiguration('output_qos', default='SENSOR_DATA')
 
@@ -41,6 +44,15 @@ def launch_setup(context, *args, **kwargs):
     use_sim_time_la = DeclareLaunchArgument(
             'use_sim_time', default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
+    use_namespace_la = DeclareLaunchArgument(
+            'use_namespace',
+            default_value=use_namespace,
+            description='Whether to apply a namespace to the entire the LIDAR launch.')
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+    camera_name_launch_arg = DeclareLaunchArgument('camera_name', default_value=camera_name,
+                                                description='The name of the camera node.')
     launch_realsense_driver_launch_arg = DeclareLaunchArgument('launch_realsense_driver',
                                                                default_value=launch_realsense_driver,
                                                                description="Whether or not to "
@@ -75,6 +87,9 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments to a list
     launch_args = [
         use_sim_time_la,
+        use_namespace_la,
+        namespace_la,
+        camera_name_launch_arg,
         launch_realsense_driver_launch_arg,
         attach_to_shared_component_container_arg,
         component_container_name_arg,
@@ -84,6 +99,16 @@ def launch_setup(context, *args, **kwargs):
         input_qos_arg,
         output_qos_arg
     ]
+
+    # Get camera name as string
+    camera_name_str = camera_name.perform(context)
+    depth_topic_str = depth_topic.perform(context)
+
+    if camera_name_str != '':
+        camera_name_str += '/'
+
+    if not depth_topic_str.startswith('/'):
+        depth_topic_str = camera_name_str + depth_topic_str
 
     # Run nodes
     '''Create a container if not joining one for the realsense splitter'''
@@ -96,7 +121,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     realsense_splitter_component = ComposableNode(
-            namespace="camera",
+            # namespace=namespace,
             name='realsense_splitter_node',
             package='realsense_splitter',
             plugin='nvblox::RealsenseSplitterNode',
@@ -106,14 +131,16 @@ def launch_setup(context, *args, **kwargs):
                 'output_qos': output_qos,
             }],
             remappings=[
-                ('input/infra_1', 'camera/infra1/image_rect_raw'),
-                ('input/infra_1_metadata', 'camera/infra1/metadata'),
-                ('input/infra_2', 'camera/infra2/image_rect_raw'),
-                ('input/infra_2_metadata', 'camera/infra2/metadata'),
-                ('input/depth', 'camera/depth/image_rect_raw'),
-                ('input/depth_metadata', 'camera/depth/metadata'),
-                ('input/pointcloud', 'camera/depth/color/points'),
-                ('input/pointcloud_metadata', 'camera/depth/metadata'),
+                ('input/infra_1', camera_name_str + 'infra1/image_rect_raw'),
+                ('input/infra_1_metadata', camera_name_str + 'infra1/metadata'),
+                ('input/infra_2', camera_name_str + 'infra2/image_rect_raw'),
+                ('input/infra_2_metadata', camera_name_str + 'infra2/metadata'),
+                ('input/depth', depth_topic_str),
+                ('input/depth_metadata', camera_name_str + 'depth/metadata'),
+                ('input/pointcloud', camera_name_str + 'depth/color/points'),
+                ('input/pointcloud_metadata', camera_name_str + 'depth/metadata'),
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static')
             ]
     )
 
@@ -123,7 +150,7 @@ def launch_setup(context, *args, **kwargs):
             composable_node_descriptions=[
                 # Realsense Driver Node Factory
                 ComposableNode(
-                        namespace="camera",
+                        # namespace=namespace,
                         package='realsense2_camera',
                         plugin='realsense2_camera::RealSenseNodeFactory',
                         parameters=[realsense_config_file],  # todo: pass the input QoS
@@ -140,10 +167,21 @@ def launch_setup(context, *args, **kwargs):
             ]
     )
 
+    realsense_splitter_group = GroupAction(
+            actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_namespace),
+                        namespace=namespace
+                ),
+                # nodes
+                realsense_splitter_container,
+                realsense_driver_component,
+                load_composable_nodes
+            ]
+    )
+
     # Add launch arguments and nodes to the launch description
-    ld = launch_args + [realsense_splitter_container,
-                        realsense_driver_component,
-                        load_composable_nodes]
+    ld = launch_args + [realsense_splitter_group]
     return ld
 
 

@@ -32,7 +32,7 @@ def generate_launch_description():
     imu_frame = LaunchConfiguration('imu_frame')
     imu_frame_la = DeclareLaunchArgument(
             'imu_frame',
-            default_value='',
+            default_value='base_link',
             description='Frame ID for the IMU message of the Madgwick or Complementary filter.')
 
     imu_corrector_frame = LaunchConfiguration('imu_corrector_frame')
@@ -90,7 +90,7 @@ def generate_launch_description():
 
     imu_corrector_output_topic_la = DeclareLaunchArgument(
             'imu_corrector_output_topic',
-            default_value='/imu/bias_removed',
+            default_value='imu/bias_removed',
             description='Output topic for the IMU corrector node')
 
     output_topic_la = DeclareLaunchArgument(
@@ -161,6 +161,8 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=imu_corrector_output_topic),
                 SetRemap(src='imu/data', dst=output_topic),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # IncludeLaunchDescription(
                 #         XMLLaunchDescriptionSource(  # or FrontendLaunchDescriptionSource
@@ -179,11 +181,12 @@ def generate_launch_description():
                         package='imu_corrector',
                         executable='imu_corrector_node',
                         name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
+                        # namespace=namespace,
                         output={'both': 'log'},
                         parameters=[imu_corrector_params_file],
                         remappings=[
-                            ('input', input_topic),  # input topic: /vehicle/sensors/imu/raw
-                            ('output', imu_corrector_output_topic),  # output topic: /vehicle/sensors/imu/data
+                            ('input', input_topic),  # input topic: vehicle/sensors/imu/raw
+                            ('output', imu_corrector_output_topic),  # output topic: vehicle/sensors/imu/data
                         ]
                 ),
 
@@ -192,6 +195,7 @@ def generate_launch_description():
                         package='imu_filter_madgwick',
                         executable='imu_filter_madgwick_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -208,8 +212,8 @@ def generate_launch_description():
                         ],  # todo: use parameter file instead
                         # parameters=[imu_filter_param_file],
                         # remappings=[
-                        #     ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-                        #     ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
+                        #     ('imu/data_raw', input_topic),  # input topic: vehicle/sensors/imu/raw
+                        #     ('imu/data', output_topic),  # output topic: vehicle/sensors/imu/data
                         # ]
                 ),
                 Node(
@@ -217,6 +221,7 @@ def generate_launch_description():
                         package='imu_complementary_filter',
                         executable='complementary_filter_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -233,8 +238,8 @@ def generate_launch_description():
                         ],  # todo: use parameter file instead
                         # parameters=[imu_filter_param_file],
                         # remappings=[
-                        #     ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-                        #     ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
+                        #     ('imu/data_raw', input_topic),  # input topic: vehicle/sensors/imu/raw
+                        #     ('imu/data', output_topic),  # output topic: vehicle/sensors/imu/data
                         # ]
                 )
             ]
@@ -253,11 +258,14 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=input_topic),
                 SetRemap(src='imu/data', dst=output_topic),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 Node(
                         condition=IfCondition([use_madgwick_filter]),
                         package='imu_filter_madgwick',
                         executable='imu_filter_madgwick_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -274,8 +282,8 @@ def generate_launch_description():
                         ],  # todo: use parameter file instead
                         # parameters=[imu_filter_param_file],
                         # remappings=[
-                        #     ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-                        #     ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
+                        #     ('imu/data_raw', input_topic),  # input topic: vehicle/sensors/imu/raw
+                        #     ('imu/data', output_topic),  # output topic: vehicle/sensors/imu/data
                         # ]
                 ),
                 Node(
@@ -283,6 +291,7 @@ def generate_launch_description():
                         package='imu_complementary_filter',
                         executable='complementary_filter_node',
                         name=node_name,
+                        # namespace=namespace,
                         output='screen',
                         parameters=[
                             {'do_bias_estimation': True},
@@ -299,8 +308,8 @@ def generate_launch_description():
                         ],  # todo: use parameter file instead
                         # parameters=[imu_filter_param_file],
                         # remappings=[
-                        #     ('/imu/data_raw', input_topic),  # input topic: /vehicle/sensors/imu/raw
-                        #     ('/imu/data', output_topic),  # output topic: /vehicle/sensors/imu/data
+                        #     ('imu/data_raw', input_topic),  # input topic: vehicle/sensors/imu/raw
+                        #     ('imu/data', output_topic),  # output topic: vehicle/sensors/imu/data
                         # ]
                 )
             ]

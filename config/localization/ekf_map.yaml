@@ -11,7 +11,7 @@
 #    debug_out_file: /path/to/debug/file.txt
     permit_corrected_publication: false
     publish_acceleration: true
-    publish_tf: true
+#    publish_tf: true
 
     reset_on_time_jump: true  # # If the filter sees a jump back in time, the filter is reset (convenient for testing with rosbags!)
 
@@ -24,7 +24,7 @@
     world_frame: map
 
     # Pose topics: AMCL, RTABMap,
-    pose0: /amcl_pose
+    pose0: amcl_pose
     pose0_config: [ true,  true,  false,
                     false, false, true,
                     false, false, false,
@@ -36,7 +36,7 @@
 #    pose0_rejection_threshold: 2.0
     pose0_nodelay: false
 
-    pose1: /localization_pose  # /rtabmap/localization_pose
+    pose1: localization_pose  # /rtabmap/localization_pose
     pose1_config: [ true,  true,  true,
                     true, true, true,
                     false, false, false,
@@ -48,7 +48,7 @@
     #    pose1_rejection_threshold: 2.0
     pose1_nodelay: false
 
-    pose2: /slam_toolbox/pose
+    pose2: slam_toolbox/pose
     pose2_config: [ true,  true,  false,
                     false, false, true,
                     false, false, false,
@@ -70,7 +70,7 @@
 #      twist0_rejection_threshold: 2.0
 #      twist0_nodelay: false
 #
-    odom0: /vehicle/vesc_odom
+    odom0: vehicle/vesc_odom
     odom0_config: [ false, false, false,  # false, false,
                     false, false, false,  # , , true
                     true, true, true,
@@ -81,7 +81,7 @@
     odom0_differential: false
     odom0_relative: true
 
-    odom1: /visual_slam/tracking/odometry  # /odom/rtabmap_icp, /odom/rf2o
+    odom1: visual_slam/tracking/odometry  # /odom/rtabmap_icp, /odom/rf2o
     odom1_config: [true,  true,  true,  # true, true,
                    true, true, true,
                    false, false, false,
@@ -93,7 +93,7 @@
     #odom1_pose_rejection_threshold: 1.0
     #odom1_twist_rejection_threshold: 0.5
 
-    imu0: /vehicle/sensors/imu/raw  # /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
+    imu0: vehicle/sensors/imu/raw  # /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
     imu0_config: [false, false, false,
                   true,  true,  true,  # false x3
                   false, false, false,
@@ -106,7 +106,7 @@
     imu0_remove_gravitational_acceleration: true
     imu0_gravitational_acceleration: 10.035 # 9.806665
 
-    imu1: /camera/camera/imu/filtered
+    imu1: camera/imu/filtered
     imu1_config: [ false, false, false,
                    false,  false,  false,  # false, false, true
                    false, false, false,

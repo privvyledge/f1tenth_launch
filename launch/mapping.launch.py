@@ -8,6 +8,11 @@ Mapping notes:
     * Both GPU (Isaac Nvblox) and RTABMap work perfectly and they both use Color + Depth.
     * Use RTABMap for future localization support
 
+Mapping Sensor recommendations in order of detail:
+    1. RGB + (aligned) Depth + LaserScan + IMU
+    2. Left Infrared (infra1) + Depth + LaserScan + IMU
+    3. Left Infrared (infra1) + Right Infrared (infra2) + LaserScan + IMU
+
 Todo:
     * Write instructions for saving 2D maps
     * Write instructions for saving RTABMaps
@@ -31,6 +36,12 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
 def launch_setup(context, *args, **kwargs):
+    qos_str_to_rtabmap_int = {
+        'SENSOR_DATA': 2,
+        'SYSTEM_DEFAULT': 0,
+        'DEFAULT': 1,
+    }
+
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
@@ -52,17 +63,15 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables
-    # todo: refactor namespaces for multiple F1/10s
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
     use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
-    namespace = LaunchConfiguration('namespace', '')  # todo: remove from here and nested launch files
-    use_namespace = LaunchConfiguration('use_namespace', default=False)  # todo: remove from here and nested launch files
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
     use_gpu = LaunchConfiguration('use_gpu', default=False)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
+    container_name = LaunchConfiguration('container_name', default='f1tenth_container')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
     launch_joystick = LaunchConfiguration('launch_joystick', default=False)
     launch_sensors = LaunchConfiguration('launch_sensors', default=False)
@@ -94,6 +103,7 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
@@ -105,6 +115,7 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
+    realsense_qos = LaunchConfiguration('realsense_qos', default='SENSOR_DATA')
 
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
@@ -128,16 +139,6 @@ def launch_setup(context, *args, **kwargs):
                         'uses the $VEHICLE_NAME environment variable. '
                         'Defaults to the username if $VEHICLE_NAME doesn\'t exist and the namespace argument is empty.')
 
-    declare_namespace_cmd = DeclareLaunchArgument(
-            'namespace',
-            default_value=namespace,
-            description='Top-level namespace')
-
-    declare_use_namespace_cmd = DeclareLaunchArgument(
-            'use_namespace',
-            default_value=use_namespace,
-            description='Whether to apply a namespace to the navigation stack')
-
     declare_map_yaml_cmd = DeclareLaunchArgument(
             'map_file',
             default_value=map_file,
@@ -159,6 +160,10 @@ def launch_setup(context, *args, **kwargs):
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value=use_composition,
             description='Whether to use composed bringup')
+
+    declare_container_name_cmd = DeclareLaunchArgument(
+            'container_name', default_value=container_name,
+            description='Name of the container node used for composition.')
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
             'use_respawn', default_value=use_respawn,
@@ -276,6 +281,10 @@ def launch_setup(context, *args, **kwargs):
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
 
+    camera_name_la = DeclareLaunchArgument(
+            'camera_name', default_value=camera_name,
+            description='Name of the camera. Used to remap topics.')
+
     approx_sync_la = DeclareLaunchArgument(
             'approx_sync', default_value=approx_sync,
             description='Synchronize topics')
@@ -328,6 +337,11 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    realsense_qos_la = DeclareLaunchArgument(
+            'realsense_qos', default_value=realsense_qos,
+            description='The qos profile to use for the realsense camera. '
+                        'Default: SENSOR_DATA. See librealsense2 documentation for more details.')
+
     camera_launch_delay_la = DeclareLaunchArgument(
             'camera_launch_delay', default_value=camera_launch_delay,
             description='Delay in seconds before launching the camera nodes. '
@@ -351,13 +365,12 @@ def launch_setup(context, *args, **kwargs):
         stdout_linebuf_envvar,
         declare_f1tenth_namespace_cmd,
         declare_use_f1tenth_namespace_cmd,
-        declare_namespace_cmd,
-        declare_use_namespace_cmd,
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
         use_gpu_la,
         declare_autostart_cmd,
         declare_use_composition_cmd,
+        declare_container_name_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         launch_joystick_arg,
@@ -380,9 +393,11 @@ def launch_setup(context, *args, **kwargs):
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
+        camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la,
         publish_map_to_odom_tf_la
     ]
@@ -393,6 +408,8 @@ def launch_setup(context, *args, **kwargs):
     #  https://robotics.stackexchange.com/a/103368 |
     #  https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/ |
     #  https://robotics.stackexchange.com/a/104402
+    camera_name_string = camera_name.perform(context)
+    realsense_qos_string = realsense_qos.perform(context)
     use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
     f1tenth_namespace_string = f1tenth_namespace.perform(context)
 
@@ -400,13 +417,79 @@ def launch_setup(context, *args, **kwargs):
     life_long_mapping_string = life_long_mapping.perform(context)
     realsense_splitter_enabled_string = launch_realsense_splitter_node.perform(context)
 
+    launch_localization_string = launch_localization.perform(context)
+    launch_local_localization_string = launch_local_localization.perform(context)
+    launch_global_localization_string = launch_global_localization.perform(context)
+
+    use_composition_string = use_composition.perform(context)
+    use_gpu_string = use_gpu.perform(context)
+
+    # whether this launch file is responsible for starting up odometry
+    enable_odom_here = True
+    if launch_localization_string.lower() == 'true' and launch_local_localization_string.lower() == 'true':
+        enable_odom_here = False
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
+    realsense_qos_int = qos_str_to_rtabmap_int.get(realsense_qos_string, 2)
+
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER', default_value='')
+            )
+
+            if f1tenth_namespace.perform(context) == '':
+                raise NameError(
+                        'The launch argument "use_f1tenth_namespace" was set to "true" '
+                        'but the launch argument "f1tenth_namespace" is empty. '
+                        'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
+                        'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
+                )
+
+    component_container_node = GroupAction(
+            condition=IfCondition(use_composition),
+            actions=[
+                # PushRosNamespace(
+                #         condition=IfCondition(use_f1tenth_namespace),
+                #         namespace=f1tenth_namespace),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
+                SetParameter(name='use_sim_time', value=use_sim_time),
+                SetParameter(name='thread_num', value=os.cpu_count()),
+                # number of threads to use with component_container_mt
+                Node(
+                        condition=IfCondition(use_composition),
+                        name=container_name,
+                        package='rclcpp_components',
+                        # https://docs.ros.org/en/humble/Concepts/Intermediate/About-Composition.html#componentcontainer
+                        # https://docs.ros.org/en/humble/Tutorials/Intermediate/Composition.html#component-container-types
+                        # executables: 'component_container_mt', 'component_container_isolated', 'component_container'
+                        executable='component_container_isolated',
+                        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+                        arguments=[
+                            '--use_multi_threaded_executor',
+                            # launch each component in a separate thread with component_container_isolated
+                            '--ros-args', '--log-level', 'info'
+                        ],
+                        output='screen'),
+            ]
+    )
+
     teleop_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'teleop.launch.py'])
             ),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "use_gpu": use_gpu,
+                "use_f1tenth_namespace": use_f1tenth_namespace,
+                "f1tenth_namespace": f1tenth_namespace,
+                "use_gpu": 'True' if (use_gpu_string.lower() == 'true' or not enable_odom_here) else 'False',
                 "launch_joystick": launch_joystick,
                 "launch_sensors": launch_sensors,
                 "launch_vehicle": launch_vehicle,
@@ -426,6 +509,7 @@ def launch_setup(context, *args, **kwargs):
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
                 "vesc_poll_rate": vesc_poll_rate,
+                "camera_name": camera_name,
                 "approx_sync": approx_sync,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
@@ -437,7 +521,11 @@ def launch_setup(context, *args, **kwargs):
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
                 "camera_launch_delay": camera_launch_delay,
-                "laserscan_launch_delay": laserscan_launch_delay
+                "laserscan_launch_delay": laserscan_launch_delay,
+                "realsense_qos": realsense_qos,
+                "use_composition": use_composition,
+                "attach_to_shared_component_container": use_composition,  # this launch file starts a container
+                "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
             }.items()
     )
 
@@ -450,6 +538,8 @@ def launch_setup(context, *args, **kwargs):
             ),
             condition=IfCondition(launch_2d_mapping),
             launch_arguments={
+                "namespace": '', # f1tenth_namespace,
+                "use_namespace": 'False', # use_f1tenth_namespace,
                 "offline_mapping": use_sim_time,
                 "use_sim_time": use_sim_time,
                 "offline_mapping_param_file": offline_mapping_2d_param_file,
@@ -470,16 +560,16 @@ def launch_setup(context, *args, **kwargs):
     if life_long_mapping_string.lower() == 'true':
         delete_old_map = ' '
 
-    left_image_topic = '/camera/camera/infra1/image_rect_raw'
-    right_image_topic = '/camera/camera/infra2/image_rect_raw'
-    depth_topic = '/camera/camera/aligned_depth_to_color/image_raw'  # /camera/camera/depth/image_rect_raw
-    depth_info_topic = '/camera/camera/aligned_depth_to_color/camera_info'  # /camera/camera/depth/camera_info
+    left_image_topic = camera_name_string + 'infra1/image_rect_raw'
+    right_image_topic = camera_name_string + 'infra2/image_rect_raw'
+    depth_topic = camera_name_string + 'aligned_depth_to_color/image_raw'  # /camera/camera/depth/image_rect_raw
+    depth_info_topic = camera_name_string + 'aligned_depth_to_color/camera_info'  # /camera/camera/depth/camera_info
     if realsense_splitter_enabled_string.lower() == 'true':
-        left_image_topic = '/camera/realsense_splitter_node/output/infra_1'
-        right_image_topic = '/camera/realsense_splitter_node/output/infra_2'
+        left_image_topic = camera_name_string + 'realsense_splitter_node/output/infra_1'
+        right_image_topic = camera_name_string + 'realsense_splitter_node/output/infra_2'
         # todo: might need to launch RTABMaps depth realignment to color node if using realsense splitter
-        depth_topic = '/camera/realsense_splitter_node/output/depth'
-        depth_info_topic = '/camera/camera/depth/camera_info'
+        depth_topic = camera_name_string + 'realsense_splitter_node/output/depth'
+        depth_info_topic = camera_name_string + 'depth/camera_info'
 
     # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
     mapping_3d_cpu_node = IncludeLaunchDescription(
@@ -489,60 +579,101 @@ def launch_setup(context, *args, **kwargs):
             condition=UnlessCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "use_stereo": 'False',  # False=use_depth + color, True=use_stereo
-                "localization": 'False',
+                "namespace": f1tenth_namespace if use_f1tenth_namespace_string.lower() == 'true' else '',
+                "use_stereo": 'false',  # False=use_depth + color, True=use_stereo
+                "localization": 'false',
                 "queue_size": mapping_3d_queue_size,
                 "publish_map_tf": publish_map_to_odom_tf,
-                "wait_imu_to_init": 'True',
-                "imu_topic": '/camera/camera/imu/filtered',
+                "publish_odom_tf": str(enable_odom_here).lower(),  # set to False if some other node, e.g robot_localization EKF is publishing
+                "visual_odometry": str(enable_odom_here).lower(),
+                "icp_odometry": 'false',
+                "wait_imu_to_init": 'true',
+                "imu_topic": camera_name_string + 'imu/filtered',
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
-                "depth_topic": depth_topic,
-                "odom_topic": '/odometry/local',
-                "approx_sync": 'True',
-                "rtabmap_viz_view": 'False',  # launch_visualization
-                "rviz_view": 'False',  # launch_visualization
+                "left_camera_info_topic": camera_name_string + 'infra1/camera_info',
+                "right_camera_info_topic": camera_name_string + 'infra2/camera_info',
+                "rgb_topic": camera_name_string + 'color/image_raw',  # camera_name_string + 'color/image_raw', left_image_topic
+                "depth_topic": depth_topic,  # depth_topic, camera_name_string + 'depth/image_rect_raw'
+                "odom_topic": 'rtabmap/odom' if enable_odom_here else 'odometry/local',
+                "camera_info_topic": camera_name_string + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
+                "scan_topic": 'lidar/scan_filtered',
+                "approx_sync": 'true',
+                "rtabmap_viz_view": 'false',  # launch_visualization
+                "rviz_view": 'false',  # launch_visualization
                 "database_path": rtabmap_database_file,
+                "qos": "1",
+                "qos_scan": "1",
+                "qos_odom": "1",
+                "qos_image": str(realsense_qos_int),
+                "qos_camera_info": str(realsense_qos_int),
+                "qos_imu": str(realsense_qos_int),
                 "rtabmap_args": f'{delete_old_map}'
                                 '--RGBD/LoopClosureReextractFeatures true '
                                 '--Rtabmap/CreateIntermediateNodes true '
-                                # always update the map not only when the robot moves. todo
+                                # always update the map not only when the robot moves.
                                 # '--map_always_update False'
                                 '--Vis/MinInliers 15 '  # default=20, 15 [tested]
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
-                                '--Vis/MaxDepth 0 '
-                                '--RGBD/LinearUpdate 0.001 '
-                                '--RGBD/AngularUpdate 0.001 '
+                                '--RGBD/OptimizeFromGraphEnd true '  # default=false
+                                '--Vis/MaxDepth 6 '
+                                '--RGBD/LinearUpdate 0.1 '  # 0.001
+                                '--RGBD/AngularUpdate 0.1 '  # 0.001
                                 '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0.0 '
-                                '--Stereo/MaxDisparity 64.0 '  # default=128.0, 64 [tested]
-                                '--Stereo/OpticalFlow false '  # default=false [tested]
+                                '--Stereo/MinDisparity 0.5 '
+                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
+                                '--Stereo/OpticalFlow true '  # default=false [tested]
+                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
                                 # '--Vis/RoiRatios 0,0,0,.2 '
                                 # "--Kp/RoiRatios 0,0,0,.2 "
                                 '--Vis/BundleAdjustment 1 '
-                                '--Vis/CorNNDR 0.6 '
-                                '--Vis/CorGuessWinSize 20 '
+                                #'--Vis/CorNNDR 0.6 '
+                                #'--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
                                 '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                 '--Reg/Force3DoF true '
                                 '--RGBD/NeighborLinkRefining true '  # when using laserscan
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 2 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
-                                '--Icp/VoxelSize 0.05 '  
-                                '--Icp/MaxCorrespondenceDistance 0.1 '
+                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
+                                #'--Icp/VoxelSize 0.05 '  
+                                '--Icp/MaxCorrespondenceDistance 0.15 '
                                 # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 30 '
-                                '--RGBD/CreateOccupancyGrid false '  # tested with false. todo: test
+                                '--Rtabmap/DetectionRate 0 '
+                                '--RGBD/CreateOccupancyGrid false '  # tested with false.
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
-                                '--Grid/Sensor 0 '  # tested with 0. todo: test
+                                '--Grid/Sensor 0 '  # tested with 0.
                                 '--Grid/RangeMax 12.0 '  # 0=inf
                                 # enable ray-tracing to clear out cells and mark as free 
                                 # space in occupancy grid map
-                                # '--Grid/RayTracing False '  # todo: test
+                                '--Grid/RayTracing True '
                                 ##'--Grid/FromDepth False '  # generate 2D map from depth. Warning: do not use as this wrongly transfers its value as a boolean to Grid/Sensor. Use Grid/Sensor instead
-                                # '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
+                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
-                                # A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
+                                ##
+                                '--Kp/DetectorStrategy 1 '
+                                '--Kp/MaxFeatures 1000 '
+                                #'--Optimizer/Robust true '
+                                '--RGBD/OptimizeMaxError 4 '
+                                '--RGBD/ProximityPathMaxNeighbors 10 '
+                                '--Vis/FeatureType 1 '
+                                '--Kp/MaxDepth 6 '
+                                '--Icp/Strategy 1 '
+                                '--Icp/OutlierRatio 0.75 '  # 0.85
+                                '--Mem/STMSize 50 '
+                                '--Icp/CorrespondenceRatio 0.2 '
+                                '--RGBD/LocalRadius 5 '
+                                '--Mem/NotLinkedNodesKept false '
+                                '--Icp/PointToPlaneMinComplexity 0.04 '
+                                '--Icp/MaxRotation 1.6 '
+                                '--Icp/MaxTranslation 1.0 '
+                                '--Grid/RangeMin 0.2 '
+                                '--Grid/NoiseFilteringMinNeighbors 8 '
+                                '--Grid/NoiseFilteringRadius 0.1 '
+                                '--Icp/Iterations 100 '
+                                '--Icp/Force4DoF true '
+                                '--Rtabmap/ImageBufferSize 200 '
+                                #'--Vis/CorGuessMatchToProjection False '
+                                ## A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
                                 # Set to false if you want only a 2D map, the cloud will be projected on xy plane.
                                 # A 2D map can be still generated if checked, but it requires more memory and time to generate it.
                                 # Ignored if laser scan is 2D and Grid/Sensor is 0.
@@ -558,6 +689,9 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(use_gpu),
             launch_arguments={
                 "use_sim_time": use_sim_time,
+                "use_namespace": use_f1tenth_namespace,
+                "camera_name": '', # camera_name,
+                "namespace": f1tenth_namespace,
                 "global_frame": 'odom',  # only set to map if another node is publishing the map frame
                 "launch_realsense_driver": 'False',
                 "launch_realsense_splitter": 'False',
@@ -566,12 +700,12 @@ def launch_setup(context, *args, **kwargs):
                 "depth_info_topic": depth_info_topic,
                 "left_image_topic": left_image_topic,
                 "right_image_topic": right_image_topic,
-                "input_qos": 'SENSOR_DATA',
+                "input_qos": realsense_qos,
                 "remove_dynamic_objects": 'False',
                 "remove_people": 'False',
-                "launch_visual_slam": 'False',
-                "attach_to_shared_component_container": 'False',
-                "component_container_name": 'nvblox_container',
+                "launch_visual_slam": str(enable_odom_here),
+                "attach_to_shared_component_container": use_composition,
+                "component_container_name": container_name if use_composition_string.lower() == 'true' else 'nvblox_container',
             }.items()
     )
 
@@ -580,22 +714,14 @@ def launch_setup(context, *args, **kwargs):
             actions=[
                 # set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # nodes
                 mapping_3d_cpu_node,
                 mapping_3d_gpu_node
             ]
     )
-
-    # determine what namespace to use
-    if use_f1tenth_namespace_string.lower() == 'true':
-        if not f1tenth_namespace_string.lower().strip():
-            # if launch argument is empty, use the VEHICLE_NAME environment variable.
-            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
-            f1tenth_namespace = EnvironmentVariable(
-                    'VEHICLE_NAME',
-                    default_value=EnvironmentVariable('USER')
-            )
 
     nodes_to_launch = GroupAction(
             actions=[
@@ -604,15 +730,18 @@ def launch_setup(context, *args, **kwargs):
                         namespace=f1tenth_namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 # nodes
-                teleop_launch,
+                component_container_node,
                 mapping_2d_node,
-                mapping_3d_group
             ]
     )  # append F1/10 namespace to all nodes
 
     ld = launch_args + [
-                nodes_to_launch
+                nodes_to_launch,
+                teleop_launch,
+                mapping_3d_group
             ]
     return ld
 

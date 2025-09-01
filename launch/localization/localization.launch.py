@@ -14,8 +14,9 @@ This node sets up local and global localization.
 
 """
 import os
+import pathlib
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition, UnlessCondition
@@ -27,7 +28,7 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 from ament_index_python import get_package_share_directory
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     # Get path to files and directories
     nav2_pkg_prefix = get_package_share_directory('nav2_bringup')
     f1tenth_launch_pkg_prefix = get_package_share_directory('f1tenth_launch')
@@ -54,7 +55,7 @@ def generate_launch_description():
     autostart = LaunchConfiguration('autostart', default=True)
     use_respawn = LaunchConfiguration('use_respawn', default=False)
     params_file = LaunchConfiguration('params_file')
-    map_file = LaunchConfiguration('map_file')
+    map_file = LaunchConfiguration('map_file', default=map_file_path)
     launch_slam_toolbox_localizer = LaunchConfiguration('launch_slam_toolbox_localizer', default=False)
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
@@ -71,17 +72,22 @@ def generate_launch_description():
     visual_slam_map_path = LaunchConfiguration('visual_slam_map_path', default='/mnt/data/maps/nvidia/vslam_map')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
-    publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='False')
 
     use_gpu = LaunchConfiguration('use_gpu', default='True')
-    qos_rtabmap_camera = LaunchConfiguration('qos_rtabmap', default=2)
+    qos_rtabmap = LaunchConfiguration('qos_rtabmap', default=1)
+    qos_rtabmap_camera = LaunchConfiguration('qos_rtabmap_camera', default=2)
     qos_rtabmap_imu = LaunchConfiguration('qos_rtabmap_imu', default=2)
     qos_rtabmap_laserscan = LaunchConfiguration('qos_rtabmap_laserscan', default=1)
     qos = LaunchConfiguration('qos', default='SENSOR_DATA')
     qos_imu = LaunchConfiguration('qos_imu', default='SENSOR_DATA')
+
+    camera_name = LaunchConfiguration('camera_name', default='camera')
+    scan_prefix = LaunchConfiguration('scan_prefix', default='lidar/')
 
     # Declare default launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -101,7 +107,7 @@ def generate_launch_description():
     )
     map_file_la = DeclareLaunchArgument(
             'map_file',
-            default_value=map_file_path,
+            default_value=map_file,
             description='Path to 2D map config file'
     )
     launch_slam_toolbox_localizer_la = DeclareLaunchArgument(
@@ -189,6 +195,16 @@ def generate_launch_description():
             'launch_amcl', default_value=launch_amcl,
             description='Whether to launch AMCL global localizer.')
 
+    odom_tf_publisher_la = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='The node responsible for publishing the odometry tf. '
+                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud, rtabmap.')
+
+    map_tf_publisher_la = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='The node responsible for publishing the map tf. '
+                        'Options: pf, amcl, ekf, vslam, rtabmap, slam (for slam_toolbox).')
+
     base_frame_la = DeclareLaunchArgument(
             'base_frame', default_value=base_frame,
             description='Robot frame, e.g base_link, sensor_kit_link.')
@@ -197,13 +213,14 @@ def generate_launch_description():
             'odom_frame', default_value=odom_frame,
             description='Odometry frame, e.g. odom')
 
-    publish_odom_tf_la = DeclareLaunchArgument(
-            'publish_odom_tf', default_value=publish_odom_tf,
-            description='Default: False')
-
     use_gpu_la = DeclareLaunchArgument(
             'use_gpu', default_value=use_gpu,
             description='Use GPU acceleration. Default: True')
+
+    qos_rtabmap_la = DeclareLaunchArgument(
+            'qos_rtabmap', default_value=qos_rtabmap,
+            description='Specific QoS used for '
+                        'most input data in RTABmap: 0=system default, 1=Reliable, 2=Best Effort.')
 
     qos_rtabmap_camera_la = DeclareLaunchArgument(
             'qos_rtabmap_camera', default_value=qos_rtabmap_camera,
@@ -231,46 +248,59 @@ def generate_launch_description():
             description='Specific QoS used for '
                         'IMU input data: SYSTEM_DEFAULT, DEFAULT, SENSOR_DATA')
 
-    lifecycle_nodes = ['map_server', 'amcl']
+    camera_name_la = DeclareLaunchArgument(
+            'camera_name', default_value=camera_name,
+            description='Camera name. Default: camera')
+
+    scan_prefix_la = DeclareLaunchArgument(
+            'scan_prefix', default_value=scan_prefix,
+            description='String to prefix to laserscan topic. Should match LaserScan namespace. Default: lidar/')
+
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
-    param_substitutions = {
-        'use_sim_time': use_sim_time,
-        'yaml_filename': map_file,
-        # 'set_initial_pose': PythonExpression(['not ', use_gpu]),  # todo: update to compare use_gpu and launch_amcl/global
-    }
+    # Get strings from LaunchConfiguration
+    namespace_str = namespace.perform(context)
+    use_namespace_str = use_namespace.perform(context)
+    camera_name_str = camera_name.perform(context)
+    scan_prefix_str = scan_prefix.perform(context)
+    odom_tf_publisher_str = odom_tf_publisher.perform(context)
+    map_tf_publisher_str = map_tf_publisher.perform(context)
+    launch_amcl_str = launch_amcl.perform(context)
+    map_file_str = map_file.perform(context)
+    use_composition_str = use_composition.perform(context)
 
-    # It only applys when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
+    # todo: also add pf node here
+    lifecycle_nodes = ['map_server']
+    # if pathlib.Path(map_file_str).exists():
+    #     lifecycle_nodes.append('map_server')  # could create an if-block to check if lifecycle_nodes is empty
 
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=params_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
+    if launch_amcl_str.lower() == 'true' or map_tf_publisher_str.lower() == 'amcl':
+        lifecycle_nodes.append('amcl')
+
+    if camera_name_str != '':
+        camera_name_str += '/'
 
     # Load Nodes
     load_nodes = GroupAction(
             condition=IfCondition(PythonExpression(['not ', use_composition])),
             actions=[
+                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                # Set common parameters
+                SetParameter(name='use_sim_time', value=use_sim_time),
                 Node(
                         package='nav2_map_server',
                         executable='map_server',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),  # launch_amcl
                         name='map_server',
+                        #namespace=namespace,
                         output='screen',
                         respawn=use_respawn,
                         respawn_delay=2.0,
-                        parameters=[configured_params],
+                        parameters=[
+                            params_file,
+                            {'yaml_filename': map_file},
+                        ],
                         arguments=['--ros-args', '--log-level', log_level],
                         remappings=remappings),
                 Node(
@@ -278,23 +308,57 @@ def generate_launch_description():
                         executable='amcl',
                         condition=IfCondition(launch_amcl),
                         name='amcl',
-                        output={'both': 'log'},
+                        #namespace=namespace,
+                        output='screen',
                         respawn=use_respawn,
                         respawn_delay=2.0,
-                        parameters=[configured_params],
+                        parameters=[
+                            params_file,
+                            {
+                                'tf_broadcast': True if map_tf_publisher_str.lower() == 'amcl' else False,
+                                # 'set_initial_pose': PythonExpression(['not ', use_gpu]),# todo: update to compare use_gpu and launch_amcl/global
+                            }
+                        ],
                         arguments=['--ros-args', '--log-level', log_level],
                         remappings=remappings),
                 Node(
                         package='nav2_lifecycle_manager',
                         executable='lifecycle_manager',
-                        condition=IfCondition(launch_amcl),
+                        # condition=IfCondition(launch_amcl),
                         name='lifecycle_manager_localization',
+                        #namespace=namespace,
                         output='screen',
                         arguments=['--ros-args', '--log-level', log_level],
                         parameters=[{'use_sim_time': use_sim_time},
                                     {'autostart': autostart},
                                     {'node_names': lifecycle_nodes}])
             ]
+    )
+
+    load_composed_amcl_node = LoadComposableNodes(
+            # condition=IfCondition(
+            #         PythonExpression(
+            #                 ["'", use_composition, "' == 'true' and '", launch_amcl, "' == 'true'"]
+            #         )
+            # ),
+            condition=IfCondition(PythonExpression([use_composition, ' and ', launch_amcl])),  # equivalent to the above
+            target_container=container_name_full,
+            composable_node_descriptions=[
+                ComposableNode(
+                        package='nav2_amcl',
+                        plugin='nav2_amcl::AmclNode',
+                        name='amcl',
+                        namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+                        parameters=[
+                            params_file,
+                            {
+                                'use_sim_time': use_sim_time,
+                                'tf_broadcast': True if map_tf_publisher_str.lower() == 'amcl' else False,
+                                # 'set_initial_pose': PythonExpression(['not ', use_gpu]),# todo: update to compare use_gpu and launch_amcl/global
+                            }
+                        ],
+                        remappings=remappings),
+            ],
     )
 
     load_composable_nodes = LoadComposableNodes(
@@ -304,22 +368,20 @@ def generate_launch_description():
                 ComposableNode(
                         package='nav2_map_server',
                         plugin='nav2_map_server::MapServer',
-                        condition=IfCondition(launch_amcl),
                         name='map_server',
-                        parameters=[configured_params],
-                        remappings=remappings),
-                ComposableNode(
-                        package='nav2_amcl',
-                        plugin='nav2_amcl::AmclNode',
-                        condition=IfCondition(launch_amcl),
-                        name='amcl',
-                        parameters=[configured_params],
+                        namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+                        parameters=[
+                            params_file,
+                            {
+                                'use_sim_time': use_sim_time,
+                                'yaml_filename': map_file},
+                        ],
                         remappings=remappings),
                 ComposableNode(
                         package='nav2_lifecycle_manager',
                         plugin='nav2_lifecycle_manager::LifecycleManager',
-                        condition=IfCondition(launch_amcl),
                         name='lifecycle_manager_localization',
+                        namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
                         parameters=[{'use_sim_time': use_sim_time,
                                      'autostart': autostart,
                                      'node_names': lifecycle_nodes}]),
@@ -335,6 +397,13 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'params_file': os.path.join(
                         f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_slam.yaml'),
+                'use_namespace': use_namespace,
+                'namespace': namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+                'base_frame': base_frame,
+                'odom_frame': odom_frame,
+                'map_frame': 'map',
+                'map_file_name': map_file.perform(context).rstrip('.yaml'),
+                'map_tf_publish_period': '0.05' if map_tf_publisher_str.lower() == 'slam' else '0.0',
             }.items()
     )
 
@@ -345,9 +414,13 @@ def generate_launch_description():
             condition=IfCondition(launch_sensor_fusion),
             launch_arguments={
                 'use_sim_time': use_sim_time,
+                'use_namespace': use_namespace,
+                'namespace': namespace,
                 'use_ekf_odom': launch_ekf_odom,
                 'use_ekf_map': launch_ekf_map,
                 'odom_frequency': odom_frequency,
+                'publish_odom_tf': 'True' if odom_tf_publisher_str.lower() == 'ekf' else 'False',
+                'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'ekf' else 'False',
                 'map_frequency': map_frequency,
             }.items()
     )
@@ -360,39 +433,52 @@ def generate_launch_description():
             condition=IfCondition(launch_rtabmap_localizer),
             launch_arguments={
                 'use_sim_time': use_sim_time,
-                'qos': '1',
+                'namespace': namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+                'qos': qos_rtabmap,
                 'qos_image': qos_rtabmap_camera,
                 'qos_camera_info': qos_rtabmap_camera,
                 'qos_imu': qos_rtabmap_imu,
                 'qos_scan': qos_rtabmap_laserscan,
-                'qos_odom': '1',
+                'qos_odom': qos_rtabmap,
                 'use_stereo': 'False',
                 'localization': 'True',
                 'queue_size': '5',  # 10
                 'approx_sync': 'True',
-                'publish_map_tf': 'False',
+                'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "publish_odom_tf": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "visual_odometry": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
+                "icp_odometry": 'True' if odom_tf_publisher_str.lower() == 'rtabmap' else 'False',
                 'wait_imu_to_init': 'True',
-                'imu_topic': '/camera/camera/imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
-                "depth_topic": '/camera/camera/aligned_depth_to_color/image_raw',
-                "odom_topic": '/odometry/local',
+                'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/imu/filtered', '/vehicle/sensors/imu/data'
+                "left_image_topic": camera_name_str + 'infra1/image_rect_raw',
+                "right_image_topic": camera_name_str + 'infra2/image_rect_raw',
+                "left_camera_info_topic": camera_name_str + 'infra1/camera_info',
+                "right_camera_info_topic": camera_name_str + 'infra2/camera_info',
+                "rgb_topic": camera_name_str + 'color/image_raw',  # camera_name_string + 'color/image_raw', left_image_topic
+                "depth_topic": camera_name_str + 'aligned_depth_to_color/image_raw',
+                "odom_topic": 'odometry/local',
+                "camera_info_topic": camera_name_str + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
+                "scan_topic": scan_prefix_str + 'scan_filtered',
                 'rtabmap_viz_view': 'False',
                 'rviz_view': 'False',
                 'database_path': rtabmap_database_file,
                 'rtabmap_args': '--Mem/IncrementalMemory false '  # false=localization, true=mapping
                                 '--Mem/InitWMWithAllNodes true '  # true=localization, false=mapping
                                 '--RGBD/LoopClosureReextractFeatures false '  # false=localization, true=mapping
+                                '--RGBD/SavedLocalizationIgnored true '
                                 '--Vis/MinInliers 15 '  # default=20
                                 '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
                                 '--Vis/MaxDepth 0 '
-                                '--RGBD/LinearUpdate 0.001 '
-                                '--RGBD/AngularUpdate 0.001 '
+                                '--RGBD/LinearUpdate 0.1 '  # 0.001
+                                '--RGBD/AngularUpdate 0.1 '  # 0.001
                                 '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0 '
-                                '--Stereo/MaxDisparity 64 '  # default=128.0, 64 [tested]
+                                '--Stereo/MinDisparity 0.5 '  # 0
+                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
                                 '--Stereo/OpticalFlow true '  # default=false
+                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
                                 '--Vis/BundleAdjustment 1 '
-                                '--Vis/CorNNDR 0.6 '
-                                '--Vis/CorGuessWinSize 20 '
+                                # '--Vis/CorNNDR 0.6 '
+                                # '--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
                                 '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
                                 '--Reg/Force3DoF true '
@@ -400,16 +486,39 @@ def generate_launch_description():
                                 '--RGBD/ProximityBySpace true '  # when using laserscan
                                 '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp.
                                 '--Icp/VoxelSize 0.05 '
-                                '--Icp/MaxCorrespondenceDistance 0.1 '
+                                '--Icp/MaxCorrespondenceDistance 0.15 '  # 0.1
                                 '--Grid/FromDepth False '
-                # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 30 '
-                # '--RGBD/CreateOccupancyGrid false '
-                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
+                                # set DetectionRate to 0 to use image rate. Default=1
+                                '--Rtabmap/DetectionRate 0 '
+                                # '--RGBD/CreateOccupancyGrid false '
+                                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
                                 '--Grid/RangeMax 12.0 '  # 0=inf
+                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
-                                '--Optimizer/GravitySigma 0',
+                                '--Optimizer/GravitySigma 0 '
+                                # new
+                                '--Kp/DetectorStrategy 8 '  # 1
+                                '--Kp/MaxFeatures 500 '  # 1000
+                                '--RGBD/OptimizeMaxError 4 '
+                                '--RGBD/ProximityPathMaxNeighbors 10 '
+                                '--Vis/FeatureType 8 '  # 1
+                                '--Kp/MaxDepth 6 '
+                                '--Icp/Strategy 1 '
+                                '--Icp/OutlierRatio 0.75 '  # 0.85
+                                '--Mem/STMSize 50 '
+                                '--Icp/CorrespondenceRatio 0.2 '
+                                '--RGBD/LocalRadius 5 '
+                                # '--Mem/NotLinkedNodesKept true ' # false
+                                '--Icp/PointToPlaneMinComplexity 0.04 '
+                                '--Icp/MaxRotation 1.6 '
+                                '--Icp/MaxTranslation 1.0 '
+                                '--Grid/RangeMin 0.2 '
+                                '--Grid/NoiseFilteringMinNeighbors 8 '
+                                '--Grid/NoiseFilteringRadius 0.1 '
+                                '--Icp/Iterations 50 '  # 100
+                                '--Icp/Force4DoF true '
+                                '--Rtabmap/ImageBufferSize 5',
             }.items()
     )
 
@@ -433,21 +542,23 @@ def generate_launch_description():
             executable='rgbd_odometry',
             condition=IfCondition(launch_rgbd_odometry),
             name='rtabmap_rgbd_odom',
-            namespace='rtabmap_rgbd_odom',
+            # namespace=namespace_str,
             parameters=[
                 parameters,
                 {
-                    'approx_sync': True
+                    'approx_sync': True,
+                    'publish_tf': True if odom_tf_publisher_str.lower() == 'rgbd' else False,
                 }
             ],
             output='screen',
             remappings=[
-                ('rgb/image', '/camera/camera/color/image_raw'),
-                ('rgb/camera_info', '/camera/camera/color/camera_info'),
-                ('depth/image', '/camera/camera/aligned_depth_to_color/image_raw'),
-                # ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation
-                ('odom', '/odom/rtabmap/rgbd'),
-                ('odom_last_frame', '/rtabmap/rgbd/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                ('rgb/image', camera_name_str + 'color/image_raw'),
+                ('rgb/camera_info', camera_name_str + 'color/camera_info'),
+                ('depth/image', camera_name_str + 'aligned_depth_to_color/image_raw'),
+                # ('imu', 'vehicle/sensors/imu/data'),  # imu must have orientation
+                ('odom', 'odom/rtabmap/rgbd'),
+                ('odom_last_frame', 'rtabmap/rgbd/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                *remappings
             ]
     )
 
@@ -457,22 +568,24 @@ def generate_launch_description():
             executable='stereo_odometry',
             condition=IfCondition(launch_stereo_odometry),
             name='rtabmap_stereo_odom',
-            namespace='rtabmap_stereo_odom',
+            # namespace=namespace_str,
             parameters=[
                 parameters,
                 {
-                    'approx_sync': False
+                    'approx_sync': False,
+                    'publish_tf': True if odom_tf_publisher_str.lower() in ['vslam', 'stereo'] else False,
                 }
             ],
             output='screen',
             remappings=[
-                ('left/image_rect', '/camera/camera/infra1/image_rect_raw'),
-                ('left/camera_info', '/camera/camera/infra1/camera_info'),
-                ('right/image_rect', '/camera/camera/infra2/image_rect_raw'),
-                ('right/camera_info', '/camera/camera/infra2/camera_info'),
-                # ('imu', '/vehicle/sensors/imu/data'),  # imu must have orientation
-                ('odom', '/odom/rtabmap/stereo'),
-                ('odom_last_frame', '/rtabmap/stereo/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                ('left/image_rect', camera_name_str + 'infra1/image_rect_raw'),
+                ('left/camera_info', camera_name_str + 'infra1/camera_info'),
+                ('right/image_rect', camera_name_str + 'infra2/image_rect_raw'),
+                ('right/camera_info', camera_name_str + 'infra2/camera_info'),
+                # ('imu', 'vehicle/sensors/imu/data'),  # imu must have orientation
+                ('odom', 'odom/rtabmap/stereo'),
+                ('odom_last_frame', 'rtabmap/stereo/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                *remappings
             ]
     )
 
@@ -482,16 +595,18 @@ def generate_launch_description():
             executable="kiss_icp_node",
             condition=IfCondition(launch_pointcloud_odometry),
             name="kiss_icp_node",
+            namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
             output="screen",
             remappings=[
-                ("pointcloud_topic", "/camera/camera/depth/color/points"),  # /camera/downsampled_cloud_from_depth. todo: also make the pointcloud topic dynamic
+                ("pointcloud_topic", camera_name_str + "depth/color/points"),  # /camera/downsampled_cloud_from_depth. todo: also make the pointcloud topic dynamic
+                *remappings
             ],
             parameters=[  # todo: see Open3D's realsense settings for ideas
                 {
                     # ROS node configuration
                     "base_frame": "base_link",
                     "odom_frame": odom_frame,
-                    "publish_odom_tf": publish_odom_tf,
+                    "publish_odom_tf": True if odom_tf_publisher_str.lower() == 'pointcloud' else False,
                     # KISS-ICP configuration
                     "max_range": 10.0,  # todo: tune using realsense viewer
                     "min_range": 0.105,  # 0.105 or 0.28, todo: tune
@@ -551,7 +666,7 @@ def generate_launch_description():
             executable='icp_odometry',
             condition=IfCondition(launch_laserscan_odometry),
             name='rtabmap_icp_odom',
-            namespace='rtabmap_icp_odom',
+            namespace=namespace_str,
             respawn=use_respawn,
             respawn_delay=2.0,
             parameters=[
@@ -570,20 +685,21 @@ def generate_launch_description():
                     'scan_range_min': 0.1,
                     'scan_range_max': 12.0,
                     'deskewing': False,
-                    'guess_frame_id': odom_frame,  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
-                    # 'guess_min_translation': 0.05,  # m
-                    # 'guess_min_rotation': 0.005,  # rad
-                    'publish_tf': publish_odom_tf,
-                    'publish_null_when_lost': True,
+                    'guess_frame_id': odom_frame if odom_tf_publisher_str.lower() != 'icp' else '',  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
+                    # 'guess_min_translation': 0.05, # m
+                    # 'guess_min_rotation': 0.005, # rad
+                    'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
+                    'publish_null_when_lost': False,
                     # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
             output='log',
             remappings=[
-                ('scan', '/lidar/scan_filtered'),
-                ('imu', '/vehicle/sensors/imu/raw'),  # imu must have orientation. /camera/camera/imu/filtered
-                ('odom', '/odom/rtabmap/icp'),
-                ('odom_last_frame', '/rtabmap/icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                ('scan', scan_prefix_str + 'scan_filtered'),
+                ('imu', 'vehicle/sensors/imu/raw'),  # imu must have orientation. /camera/camera/imu/filtered
+                ('odom', 'odom/rtabmap/icp'),
+                ('odom_last_frame', 'rtabmap/icp/points'),  # 'odom_last_frame ', 'odom_filtered_input_scan'
+                *remappings
             ]
     )
 
@@ -592,16 +708,18 @@ def generate_launch_description():
             executable='rf2o_laser_odometry_node',
             condition=IfCondition(launch_laserscan_odometry),
             # name='rf2o_laser_odometry',
+            namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
             output='screen',
             parameters=[{
-                'laser_scan_topic': '/lidar/scan_filtered',
-                'odom_topic': '/odom/rf2o',
-                'publish_tf': False,
+                'laser_scan_topic': scan_prefix_str + 'scan_filtered',
+                'odom_topic': 'odom/rf2o',
+                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                 'base_frame_id': 'base_link',
                 'odom_frame_id': 'odom',
                 'init_pose_from_topic': '',
                 'use_sim_time': use_sim_time,
                 'freq': 10.0}],
+            remappings=remappings,
     )
 
     laser_scan_matcher_node = Node(
@@ -609,10 +727,11 @@ def generate_launch_description():
             executable='laser_scan_matcher',
             condition=IfCondition(launch_laserscan_odometry),
             name='laser_scan_matcher_node',
+            namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
             output='screen',
             parameters=[{
-                'publish_odom': '/odom/laser_scan_matcher',
-                'publish_tf': False,
+                'publish_odom': 'odom/laser_scan_matcher',
+                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
                 'laser_frame': 'lidar',
                 'base_frame': 'base_link',
                 'odom_frame': 'odom_laser_scan_matcher',
@@ -620,13 +739,15 @@ def generate_launch_description():
                 'init_pose_from_topic': '',
                 'use_sim_time': use_sim_time,
                 'freq': 20.0}],
-            remappings=[('scan', '/lidar/scan'),
-                        ('odom', '/odom/laser_scan_matcher')]
+            remappings=[('scan', 'scan'),
+                        ('odom', 'odom/laser_scan_matcher'),
+                        *remappings]
     )
 
     # RTabMap Group
     rtabmap_group = GroupAction(
             actions=[
+                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParameter(name='queue_size', value='10'),
@@ -638,16 +759,18 @@ def generate_launch_description():
                 # SetParameter(name='guess_frame_id', value=odom_frame),
                 SetParameter(name='guess_min_translation', value='0.05'),  # m
                 SetParameter(name='guess_min_rotation', value='0.005'),  # rad
-                SetParameter(name='publish_tf', value=publish_odom_tf),
+                # SetParameter(name='publish_tf', value=publish_odom_tf),
                 SetParameter(name='wait_for_transform', value='0.3'),
                 SetParameter(name='wait_imu_to_init', value='False'),
-                SetParameter(name='publish_null_when_lost', value='True'),
+                SetParameter(name='publish_null_when_lost', value='False'),
                 # SetParameter(name='rtabmap_config_path', value=rtabmap_database_file_path),
 
                 # Set remapping rules
-                SetRemap(src='scan', dst='/lidar/scan_filtered'),
-                # imu must have orientation. /vehicle/sensors/imu/data
-                SetRemap(src='imu', dst='/camera/camera/imu/filtered'),
+                SetRemap(src='scan', dst=scan_prefix_str + 'scan_filtered'),
+                # imu must have orientation. vehicle/sensors/imu/data
+                SetRemap(src='imu', dst=camera_name_str + 'imu/filtered'),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # add nodes
                 rtabmap_rgbd_odometry,
@@ -667,31 +790,45 @@ def generate_launch_description():
     visual_slam_launch_include = TimerAction(
             period=1.5,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                PathJoinSubstitution(
-                                        [nvidia_isaac_launch_dir, 'isaac_ros_visual_slam_realsense.launch.py'])
-                        ),
-                        condition=IfCondition(launch_stereo_odometry),
-                        launch_arguments={
-                            'use_sim_time': use_sim_time,
-                            'two_d_mode': 'True',
-                            'base_frame': base_frame,
-                            'publish_map_to_odom_tf': PythonExpression(['not ', launch_ekf_map]),
-                            'publish_odom_to_baselink_tf': publish_odom_tf,
-                            'save_map': 'False',
-                            'load_map': 'True',
-                            'map_path': visual_slam_map_path,
-                            'launch_realsense_driver': 'False',
-                            'left_image_topic': '/camera/camera/infra1/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_1',
-                            'right_image_topic': '/camera/camera/infra2/image_rect_raw',  # '/camera/realsense_splitter_node/output/infra_2',
-                            'imu_topic': '/camera/camera/imu/filtered',  # '/camera/camera/imu/filtered'
-                            'image_qos': qos,  # DEFAULT.
-                            'imu_qos': qos_imu,
-                            'enable_visualization_topics': 'False',
-                            'attach_to_shared_component_container': 'False',  # use_composition
-                            'component_container_name': 'visual_slam_launch_container',  # container_name_full. todo: add to container
-                        }.items()
+                GroupAction(
+                        actions=[
+                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            SetRemap(src=['/tf'], dst=['tf']),
+                            SetRemap(src=['/tf_static'], dst=['tf_static']),
+                            IncludeLaunchDescription(
+                                    PythonLaunchDescriptionSource(
+                                            PathJoinSubstitution(
+                                                    [nvidia_isaac_launch_dir,
+                                                     'isaac_ros_visual_slam_realsense.launch.py'])
+                                    ),
+                                    condition=IfCondition(launch_stereo_odometry),
+                                    launch_arguments={
+                                        'use_sim_time': use_sim_time,
+                                        'namespace': namespace,
+                                        'use_namespace': 'False',  # use_namespace,
+                                        'camera_name': camera_name,
+                                        'two_d_mode': 'True',
+                                        'base_frame': base_frame,
+                                        'publish_map_to_odom_tf': 'True' if map_tf_publisher_str.lower() == 'vslam' else 'False',
+                                        'publish_odom_to_baselink_tf': 'True' if odom_tf_publisher_str.lower() in [
+                                            'vslam', 'stereo'] else 'False',
+                                        'save_map': 'False',
+                                        'load_map': 'False',
+                                        'map_path': visual_slam_map_path,
+                                        'launch_realsense_driver': 'False',
+                                        'left_image_topic': camera_name_str + 'infra1/image_rect_raw',
+                                        # '/camera/realsense_splitter_node/output/infra_1',
+                                        'right_image_topic': camera_name_str + 'infra2/image_rect_raw',
+                                        # '/camera/realsense_splitter_node/output/infra_2',
+                                        'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/camera/imu/filtered'
+                                        'image_qos': qos,  # DEFAULT.
+                                        'imu_qos': qos_imu,
+                                        'enable_visualization_topics': 'True',
+                                        'attach_to_shared_component_container': use_composition,
+                                        'component_container_name': container_name if use_composition_str.lower() == 'true' else 'visual_slam_container',
+                                    }.items()
+                            )
+                        ]
                 )
             ]
     )
@@ -705,33 +842,46 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                 }
             ],
-            remappings=[('scan', '/lidar/scan_filtered'),
-                        ('flatscan', 'flatscan_localization')]
+            remappings=[('scan', scan_prefix_str + 'scan_filtered'),
+                        ('flatscan', 'flatscan_localization'),
+                        *remappings]
     )
 
-    occupancy_grid_localizer_node = ComposableNode(
-            package='isaac_ros_occupancy_grid_localizer',
-            plugin='nvidia::isaac_ros::occupancy_grid_localizer::OccupancyGridLocalizerNode',
-            name='occupancy_grid_localizer',
-            condition=IfCondition(launch_amcl),
-            parameters=[  # todo: get parameters
-                {
-                    'use_sim_time': use_sim_time,
-                    'loc_result_frame': 'map',
-                    'map_yaml_path': map_file,
-                }
+    occupancy_grid_localizer_node = LoadComposableNodes(
+            # condition=IfCondition(
+            #         PythonExpression(
+            #                 ["'", use_composition, "' == 'true' and '", launch_amcl, "' == 'true'"]
+            #         )
+            # ),
+            condition=IfCondition(PythonExpression([use_composition, ' and ', launch_amcl])),  # equivalent to the above
+            target_container=container_name_full,
+            composable_node_descriptions=[
+                ComposableNode(
+                        package='isaac_ros_occupancy_grid_localizer',
+                        plugin='nvidia::isaac_ros::occupancy_grid_localizer::OccupancyGridLocalizerNode',
+                        name='occupancy_grid_localizer',
+                        parameters=[
+                            {
+                                'use_sim_time': use_sim_time,
+                                'loc_result_frame': 'map',
+                                'map_yaml_path': map_file,
+                            }
+                        ],
+                        remappings=[
+                            ('localization_result', 'initialpose'),
+                            *remappings
+                        ]
+                ),
             ],
-            remappings=[
-                ('localization_result', '/initialpose')
-            ]
     )
 
-    # todo: use Node instead of ComposableNodeContainer
     occupancy_grid_localizer_container = GroupAction(
             actions=[
                 PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 Node(
-                        name='occupancy_grid_localizer_container',  # 'occupancy_grid_localizer_container', container_name_full
+                        name=container_name,  # 'occupancy_grid_localizer_container', container_name_full
                         namespace='',  # namespace
                         package='rclcpp_components',
                         executable='component_container_mt',
@@ -748,23 +898,29 @@ def generate_launch_description():
     load_gpu_laser_composable_node = LoadComposableNodes(
             target_container=container_name_full,
             composable_node_descriptions=[
-                occupancy_grid_localizer_node,
                 laserscan_to_flatscan_node
             ]
     )
 
     occupancy_grid_localizer_group = GroupAction(
             actions=[
+                # PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                 occupancy_grid_localizer_container,
-                load_gpu_laser_composable_node
+                load_gpu_laser_composable_node,
+                occupancy_grid_localizer_node,
+                # SetRemap(src=['/tf'], dst=['tf']),
+                # SetRemap(src=['/tf_static'], dst=['tf_static']),
             ]
     )
 
     gpu_group = GroupAction(
             condition=IfCondition(use_gpu),
             actions=[
+                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                 # Set common parameters
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # add nodes
                 visual_slam_launch_include,
@@ -773,7 +929,7 @@ def generate_launch_description():
     )
 
     # Create Launch Description and add nodes to the launch description
-    ld = LaunchDescription([
+    ld = [
         stdout_linebuf_envvar,
         declare_namespace_cmd,
         declare_use_sim_time_cmd,
@@ -783,6 +939,8 @@ def generate_launch_description():
         visual_slam_map_path_la,
         launch_laserscan_odometry_la,
         launch_amcl_la,
+        odom_tf_publisher_la,
+        map_tf_publisher_la,
         localization_param,
         map_file_la,
         launch_slam_toolbox_localizer_la,
@@ -798,6 +956,7 @@ def generate_launch_description():
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         load_nodes,
+        load_composed_amcl_node,
         load_composable_nodes,
         slam_toolbox_localizer_node,
         ekf_nodes,
@@ -805,15 +964,26 @@ def generate_launch_description():
         rtabmap_database_file_la,
         base_frame_la,
         odom_frame_la,
-        publish_odom_tf_la,
         use_gpu_la,
         rtabmap_group,
         rtabmap_icp_odometry,  # separate from rtabmap group due to different parameters
         kiss_icp_node,
         gpu_group,
-        qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
+        qos_rtabmap_la, qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
+        camera_name_la,
+        scan_prefix_la,
         # rf2o_odometry_node,
         # laser_scan_matcher_node
-    ])
+    ]
 
     return ld
+
+
+def generate_launch_description():
+    return LaunchDescription(
+            [
+                SetEnvironmentVariable(name='RCUTILS_COLORIZED_OUTPUT', value='1'),
+                OpaqueFunction(function=launch_setup)
+            ]
+    )
+

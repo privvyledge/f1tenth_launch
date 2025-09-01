@@ -3,6 +3,7 @@
 """
 
 import os
+
 from launch import LaunchDescription, LaunchContext
 from launch_ros.actions import Node, ComposableNodeContainer, LoadComposableNodes, SetRemap, PushRosNamespace, \
     SetParametersFromFile, SetParameter
@@ -21,6 +22,9 @@ from ament_index_python.packages import get_package_share_directory
 def launch_setup(context, *args, **kwargs):
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
+    namespace = LaunchConfiguration('namespace', default='')
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     two_d_mode = LaunchConfiguration('two_d_mode', default=False)
     base_frame = LaunchConfiguration('base_frame', default='base_link')  # camera_link, base_link
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
@@ -34,15 +38,24 @@ def launch_setup(context, *args, **kwargs):
     imu_topic = LaunchConfiguration('imu_topic')
     image_qos = LaunchConfiguration('image_qos', default='SENSOR_DATA')
     imu_qos = LaunchConfiguration('imu_qos', default='SENSOR_DATA')
-    enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=False)
+    enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=True)
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='visual_slam_launch_container')
+    container_name_full = (namespace, '/', component_container_name)
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
             'use_sim_time', default_value=use_sim_time,
             description='Use simulation (Gazebo) clock if true')
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+    use_namespace_la = DeclareLaunchArgument(
+            'use_namespace', default_value=use_namespace,
+            description='Use namespace for the nodes')
+    camera_name_launch_arg = DeclareLaunchArgument('camera_name', default_value=camera_name,
+                                                 description='The name of the camera node.')
     two_d_mode_arg = DeclareLaunchArgument('two_d_mode',
                                            default_value=two_d_mode,
                                            description="Whether to apply 2D constraints, e.g. for cars and WMR.")
@@ -86,15 +99,15 @@ def launch_setup(context, *args, **kwargs):
                                                                            "launch the Realsense Camera.")
 
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
+            'left_image_topic', default_value='infra1/image_rect_raw',
             description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
 
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
+            'right_image_topic', default_value='infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
 
     imu_topic_la = DeclareLaunchArgument(
-            'imu_topic', default_value='/camera/camera/imu',
+            'imu_topic', default_value='imu',
             description='/camera/camera/imu or /camera/camera/imu/filtered')
 
     image_qos_arg = DeclareLaunchArgument('image_qos', default_value=image_qos,
@@ -122,6 +135,8 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments to a list
     launch_args = [
         use_sim_time_la,
+        namespace_la,
+        use_namespace_la,
         two_d_mode_arg,
         base_frame_arg,
         publish_map_to_odom_tf_arg,
@@ -140,11 +155,20 @@ def launch_setup(context, *args, **kwargs):
         component_container_name_arg
     ]
 
+    # Get string values from launch configuration
+    namespace_string = namespace.perform(context)
+    use_namespace_string = use_namespace.perform(context)
+    camera_name_string = camera_name.perform(context)
+    component_container_name_string = component_container_name.perform(context)
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
     # Run nodes
     realsense_camera_node = Node(
             condition=IfCondition(launch_realsense_driver),
-            name='camera',
-            namespace='camera',
+            name=camera_name,
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='realsense2_camera',
             executable='realsense2_camera_node',
             parameters=[{
@@ -166,13 +190,17 @@ def launch_setup(context, *args, **kwargs):
                 'unite_imu_method': 2,
                 'publish_tf': True,
                 # 'tf_publish_rate': 30.0
-            }]
+            }],
+            remappings=[
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+            ]
     )
 
     # realsense_camera_node_composed = ComposableNode(
     #         condition=IfCondition(launch_realsense_driver),
-    #         # name='camera',
-    #         namespace="camera",
+    #         # name=camera_name,
+    #         namespace=namespace if use_namespace_string.lower() == 'true' else '',
     #         package='realsense2_camera',
     #         plugin='realsense2_camera::RealSenseNodeFactory',
     #         extra_arguments=[{'use_intra_process_comms': LaunchConfiguration("intra_process_comms")}],
@@ -181,6 +209,7 @@ def launch_setup(context, *args, **kwargs):
     # if a transformError occurs, it's probably due to a low realsense tf_publish_rate
     visual_slam_node = ComposableNode(
             name='visual_slam_node',
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='isaac_ros_visual_slam',
             plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
             # extra_arguments=[{"use_intra_process_comms": True}],  # todo: test
@@ -225,12 +254,17 @@ def launch_setup(context, *args, **kwargs):
                 ],
                 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
+                'save_map_folder_path': map_path,
+                'load_map_folder_path': map_path,
+                'localize_on_startup': True,
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
-                        ('visual_slam/camera_info_0', 'camera/camera/infra1/camera_info'),
+                        ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),
                         ('visual_slam/image_1', right_image_topic),
-                        ('visual_slam/camera_info_1', 'camera/camera/infra2/camera_info'),
-                        ('visual_slam/imu', imu_topic)]
+                        ('visual_slam/camera_info_1', camera_name_string + 'infra2/camera_info'),
+                        ('visual_slam/imu', imu_topic),
+                        ('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')]
     )
 
     # get map path context from launch configuration
@@ -248,25 +282,60 @@ def launch_setup(context, *args, **kwargs):
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            ' action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap '
-                            '"{map_url: ' + map_path_string + '}"'
+                            f' service call {namespace_string}/visual_slam/save_map isaac_ros_visual_slam_interfaces/srv/FilePath '
+                            '"{file_path: ' + map_path_string + '}"'
                         ]],
                         shell=True,
                         condition=IfCondition(save_map)
                 )
             ]
-    )
+    )  # ros2 service call /visual_slam/save_map isaac_ros_visual_slam_interfaces/srv/FilePath "{file_path: /path/to/save/the/map}"
 
     # to load a saved map (ros2 action send_goal /visual_slam/load_map_and_localize isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize "{map_url: /shared_dir/maps/nvidia/vslam_map, localize_near_point: {x: x_val, y: y_val, z: z_val}}")
+    # ros2 service call /visual_slam/localize_in_map isaac_ros_visual_slam_interfaces/srv/LocalizeInMap "
+    #   map_folder_path: '/path/to/save/the/map'
+    #   pose_hint:
+    #     position:
+    #       x: x-position
+    #       y: y-position
+    #       z: z-position
+    #     orientation:
+    #       x: 0.0
+    #       y: 0.0
+    #       z: 0.0
+    #       w: 1.0"
+    # Construct the YAML payload as a single string
+    yaml_request = (
+        f'{{map_folder_path: "{map_path_string}", '
+        'pose_hint: {'
+        'position: {x: 0.0, y: 0.0, z: 0.0}, '
+        'orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}'
+        '}}'
+    )
+    # load_map_trigger = TimerAction(
+    #         period=1.5,
+    #         actions=[
+    #             ExecuteProcess(
+    #                     cmd=[[
+    #                         FindExecutable(name='ros2'),
+    #                         f' action send_goal {namespace_string}/visual_slam/load_map_and_localize '
+    #                         'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
+    #                         '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
+    #                     ]],
+    #                     shell=True,
+    #                     condition=IfCondition(load_map)
+    #             )
+    #         ]
+    # )  #
     load_map_trigger = TimerAction(
             period=1.5,
             actions=[
                 ExecuteProcess(
                         cmd=[[
                             FindExecutable(name='ros2'),
-                            ' action send_goal /visual_slam/load_map_and_localize '
-                            'isaac_ros_visual_slam_interfaces/action/LoadMapAndLocalize '
-                            '"{map_url: ' + map_path_string + ', localize_near_point: {x: 0.0, y: 0.0, z: 0.0}}"'
+                            f' service call {namespace_string}/visual_slam/localize_in_map '
+                            'isaac_ros_visual_slam_interfaces/srv/LocalizeInMap '
+                            f'"{yaml_request}"'
                         ]],
                         shell=True,
                         condition=IfCondition(load_map)
@@ -275,18 +344,18 @@ def launch_setup(context, *args, **kwargs):
     )
 
     visual_slam_launch_container = ComposableNodeContainer(
-            name='visual_slam_launch_container',
-            namespace='',
+            name=component_container_name_string.split('/')[-1],
+            namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='rclcpp_components',
             executable='component_container_mt',  # use component_container_mt for multithreading support
             condition=UnlessCondition(attach_to_shared_component_container),
-            # composable_node_descriptions=[visual_slam_node],
+            composable_node_descriptions=[visual_slam_node],  # if using this, disable load_composable_nodes
             output='screen'
     )
 
     load_composable_nodes = LoadComposableNodes(
-            # condition=IfCondition(attach_to_shared_component_container),
-            target_container=component_container_name,
+            condition=IfCondition(attach_to_shared_component_container),
+            target_container=container_name_full,
             composable_node_descriptions=[visual_slam_node]
     )
 

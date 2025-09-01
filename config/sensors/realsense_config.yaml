@@ -1,4 +1,3 @@
-# todo: pass resolution, fps and depth_module.emitter_enabled in the launch file
 /**:
   ros__parameters:
     #device_type: 'd435i'
@@ -13,6 +12,7 @@
     log_level: info # DEBUG|INFO|WARN|ERROR|FATAL
     wait_for_device_timeout: -1.0 # Timeout for waiting for device to connect (Seconds)
     reconnect_timeout: 6.0  # Timeout(seconds) between consecutive reconnection attempts
+    json_file_path: "HighAccuracyPreset.json"  # https://dev.intelrealsense.com/docs/d400-series-visual-presets#preset-table | https://github.com/IntelRealSense/librealsense/wiki/D400-Series-Visual-Presets#preset-table
 
     enable_sync: true
     enable_color: true
@@ -32,7 +32,7 @@
     rgb_camera:
       profile: "640x360x30"   # warning: depracated. Use color_profile instead
       color_profile: "640x360x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
-      color_format: "RGB8"
+      color_format: "BGR8"
       enable_auto_exposure: true
 
     depth_module:
@@ -41,7 +41,6 @@
       depth_format: "Z16"
       enable_auto_exposure: true
       infra_profile: "640x360x30"
-      infra_format: "RGB8"
       infra1_format: "Y8"
       infra2_format: "Y8"
       emitter_enabled: 0  # set to 0 if using infra.  Overridden by launch files
@@ -49,7 +48,7 @@
 
     pointcloud:
       ordered_pc: true
-      stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud
+      stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud, 3=infrared
       stream_index_filter: 0
       allow_no_texture_points: false # true
 
@@ -76,14 +75,16 @@
 #    hole_filling_filter:
 #      enable: false
 
-    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
-    color_qos: "SENSOR_DATA"
-    color_info_qos: "SENSOR_DATA"
-    infra_qos: "SENSOR_DATA"
-    infra1_qos: "SENSOR_DATA"
-    infra2_qos: "SENSOR_DATA"
-    depth_qos: "SENSOR_DATA"
-    depth_info_qos: "SENSOR_DATA"
-    pointcloud.pointcloud_qos: "SENSOR_DATA"
-    gyro_qos: "SENSOR_DATA"
-    accel_qos: "SENSOR_DATA"
+#    # setup sensor QoS. SYSTEM_DEFAULT [default QoS] | DEFAULT | SENSOR_DATA | PARAMETER_EVENTS | SERVICES_DEFAULT | PARAMETERS
+#    color_qos: "SENSOR_DATA"
+#    color_info_qos: "SENSOR_DATA"
+#    infra_qos: "SENSOR_DATA"
+#    infra1_qos: "SENSOR_DATA"
+#    infra2_qos: "SENSOR_DATA"
+#    depth_qos: "SENSOR_DATA"
+#    depth_info_qos: "SENSOR_DATA"
+#    pointcloud.pointcloud_qos: "SENSOR_DATA"
+#    gyro_qos: "SENSOR_DATA"
+#    accel_qos: "SENSOR_DATA"
+#    gyro_info_qos: "SENSOR_DATA"
+#    accel_info_qos: "SENSOR_DATA"

@@ -12,7 +12,7 @@ from launch.actions import (DeclareLaunchArgument, GroupAction,
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PythonExpression
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import PushRosNamespace
 from launch_ros.descriptions import ParameterFile
@@ -28,6 +28,7 @@ def generate_launch_description():
     use_composition = LaunchConfiguration('use_composition')
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
+    publish_tf = LaunchConfiguration('publish_tf')
     use_ekf = LaunchConfiguration('use_ekf')  # ekf_node, ukf_node
     frequency = LaunchConfiguration('frequency')
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
@@ -49,23 +50,6 @@ def generate_launch_description():
     # Create our own temporary YAML files that include substitutions
     param_substitutions = {
         'use_sim_time': use_sim_time}
-
-    # It only applies when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements. todo: remove and just add the namespace a node argument instead
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
-
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=params_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
 
     # declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -103,6 +87,10 @@ def generate_launch_description():
             'log_level', default_value='info',
             description='log level')
 
+    declare_publish_tf = DeclareLaunchArgument(
+            'publish_tf', default_value='True',
+            description='Whether to publish the TF')
+
     declare_kf_type = DeclareLaunchArgument(
             'use_ekf', default_value='True',
             description='whether to use ekf. If false uses ukf instead')
@@ -120,13 +108,15 @@ def generate_launch_description():
         PushRosNamespace(
                 condition=IfCondition(use_namespace),
                 namespace=namespace),
+        # Set common parameters
+        SetParameter(name='use_sim_time', value=use_sim_time),
 
         # Node(
         #         condition=IfCondition(use_composition),
         #         name='nav2_container',
         #         package='rclcpp_components',
         #         executable='component_container_isolated',
-        #         parameters=[configured_params, {'autostart': autostart}],
+        #         parameters=[params_file, {'autostart': autostart}],
         #         arguments=['--ros-args', '--log-level', log_level],
         #         remappings=remappings,
         #         output='screen'),
@@ -137,11 +127,18 @@ def generate_launch_description():
                 executable='ekf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': frequency}],
+                parameters=[
+                    params_file,
+                    {
+                        'frequency': frequency,
+                        'publish_tf': publish_tf,
+                    }
+                ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    *remappings
                 ]
         ),
 
@@ -151,11 +148,18 @@ def generate_launch_description():
                 executable='ukf_node',
                 name=node_name,
                 output='screen',
-                parameters=[configured_params, {'frequency': frequency}],
+                parameters=[
+                    params_file,
+                    {
+                        'frequency': frequency,
+                        'publish_tf': publish_tf
+                    }
+                ],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    *remappings
                 ]
         ),
     ])
@@ -174,6 +178,7 @@ def generate_launch_description():
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
+    ld.add_action(declare_publish_tf)
     ld.add_action(declare_kf_type)
     ld.add_action(declare_frequency_la)
     ld.add_action(declare_node_name)

@@ -1,6 +1,7 @@
 """
 Launches: vehicle driver, joystick driver, mux, and sensors
-Todo: setup loglevel
+Todo:
+    * Launch the container here or in bringup.launch.py or mapping.launch.py. See (https://github.com/ros-navigation/navigation2/blob/humble_main/nav2_bringup/launch/bringup_launch.py#L154)
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -15,6 +16,12 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def launch_setup(context, *args, **kwargs):
+    qos_str_to_rtabmap_int = {
+        'SENSOR_DATA': 2,
+        'SYSTEM_DEFAULT': 0,
+        'DEFAULT': 1,
+    }
+
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
 
@@ -25,9 +32,12 @@ def launch_setup(context, *args, **kwargs):
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
 
     # Declare launch configuration variables
+    use_composition = LaunchConfiguration('use_composition', default='True')  # True
+    container_name = LaunchConfiguration('container_name', default='f1tenth_container')
+    attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container', default='False')
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
-    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)  # True
     use_sim_time = LaunchConfiguration('use_sim_time', default="False")
     use_gpu = LaunchConfiguration('use_gpu', default=True)
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
@@ -37,6 +47,8 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='vslam')  # ekf
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
 
@@ -51,9 +63,10 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
-    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
+    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')  # use this instead of RealSense till I release my node.
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
 
     reset_realsense = LaunchConfiguration('reset_realsense', default='False')
@@ -62,11 +75,21 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
+    realsense_qos = LaunchConfiguration('realsense_qos', default='SENSOR_DATA')
 
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
 
     # Declare launch arguments
+    declare_use_composition_cmd = DeclareLaunchArgument(
+            'use_composition', default_value=use_composition,
+            description='Whether to use composed bringup')
+    declare_container_name_cmd = DeclareLaunchArgument(
+            'container_name', default_value=container_name,
+            description='Name of the container node used for composition.')
+    declare_attach_to_shared_component_container_cmd = DeclareLaunchArgument(
+            'attach_to_shared_component_container', default_value=attach_to_shared_component_container,
+            description='Whether to attach to a shared component container')
     declare_f1tenth_namespace_cmd = DeclareLaunchArgument(
             'f1tenth_namespace',
             default_value=f1tenth_namespace,
@@ -106,6 +129,17 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    odom_tf_publisher_la = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='The node responsible for publishing the odometry tf. '
+                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud, rtabmap.')
+
+    map_tf_publisher_la = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='The node responsible for publishing the map tf. '
+                        'Options: pf, amcl, ekf, vslam, rtabmap, slam (for slam_toolbox).')
+
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
@@ -167,8 +201,12 @@ def launch_setup(context, *args, **kwargs):
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
 
+    camera_name_la = DeclareLaunchArgument(
+            'camera_name', default_value=camera_name,
+            description='Name of the camera. Used to remap topics.')
+
     approx_sync_la = DeclareLaunchArgument(
-            'approx_sync', default_value='True',
+            'approx_sync', default_value=approx_sync,
             description='Synchronize topics')
 
     stereo_to_pointcloud_la = DeclareLaunchArgument('stereo_to_pointcloud',
@@ -218,6 +256,11 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    realsense_qos_la = DeclareLaunchArgument(
+            'realsense_qos', default_value=realsense_qos,
+            description='The qos profile to use for the realsense camera. '
+                        'Default: SENSOR_DATA. See librealsense2 documentation for more details.')
+
     camera_launch_delay_la = DeclareLaunchArgument(
             'camera_launch_delay', default_value=camera_launch_delay,
             description='Delay in seconds before launching the camera nodes. '
@@ -231,6 +274,9 @@ def launch_setup(context, *args, **kwargs):
                         'especially startup current draw caused by booting multiple USB devices simultaneously.')
 
     launch_args = [
+        declare_use_composition_cmd,
+        declare_container_name_cmd,
+        declare_attach_to_shared_component_container_cmd,
         declare_f1tenth_namespace_cmd,
         declare_use_f1tenth_namespace_cmd,
         use_gpu_la,
@@ -241,6 +287,8 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        odom_tf_publisher_la,
+        map_tf_publisher_la,
         launch_visualization_arg,
         declare_use_sim_time_cmd,
         rviz_config_arg,
@@ -248,15 +296,78 @@ def launch_setup(context, *args, **kwargs):
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
+        camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la
     ]
 
     # Launch nodes
+    camera_name_string = camera_name.perform(context)
+    realsense_qos_string = realsense_qos.perform(context)
     use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
     f1tenth_namespace_string = f1tenth_namespace.perform(context)
+    use_composition_string = use_composition.perform(context)
+    attach_to_shared_component_container_string = attach_to_shared_component_container.perform(context)
+    container_name_string = container_name.perform(context)
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
+    realsense_qos_int = qos_str_to_rtabmap_int.get(realsense_qos_string, 2)
+
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER', default_value='')
+            )
+
+            if f1tenth_namespace.perform(context) == '':
+                raise NameError(
+                        'The launch argument "use_f1tenth_namespace" was set to "true" '
+                        'but the launch argument "f1tenth_namespace" is empty. '
+                        'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
+                        'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
+                )
+
+    component_container_node = LogInfo(msg=f'Not launching container in teleop.launch.py.')
+    if use_composition_string.lower() == 'true' and attach_to_shared_component_container_string.lower() == 'false':
+        component_container_node = GroupAction(
+                # condition=IfCondition(
+                #         PythonExpression(
+                #                 ["'", use_composition, "' == 'true' and '", attach_to_shared_component_container, "' == 'false'"]
+                #         )),
+                actions=[
+                    # PushRosNamespace(
+                    #         condition=IfCondition(use_f1tenth_namespace),
+                    #         namespace=f1tenth_namespace),
+                    SetRemap(src=['/tf'], dst=['tf']),
+                    SetRemap(src=['/tf_static'], dst=['tf_static']),
+                    SetParameter(name='use_sim_time', value=use_sim_time),
+                    SetParameter(name='thread_num', value=os.cpu_count()),  # number of threads to use with component_container_mt
+                    Node(
+                            condition=IfCondition(use_composition),
+                            name=container_name,
+                            package='rclcpp_components',
+                            # https://docs.ros.org/en/humble/Concepts/Intermediate/About-Composition.html#componentcontainer
+                            # https://docs.ros.org/en/humble/Tutorials/Intermediate/Composition.html#component-container-types
+                            # executables: 'component_container_mt', 'component_container_isolated', 'component_container'
+                            executable='component_container_isolated',
+                            remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+                            arguments=[
+                                '--use_multi_threaded_executor',
+                                # launch each component in a separate thread with component_container_isolated
+                                '--ros-args', '--log-level', 'info'
+                            ],
+                            output='screen'),
+                ]
+        )
 
     joystick_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -285,6 +396,9 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(launch_sensors),
             launch_arguments={
                 "approx_sync": approx_sync,
+                "use_namespace": use_f1tenth_namespace,
+                "namespace": f1tenth_namespace,
+                "camera_name": camera_name,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
                 "detect_ground_and_obstacles": detect_ground_and_obstacles,
@@ -295,7 +409,12 @@ def launch_setup(context, *args, **kwargs):
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
                 "camera_launch_delay": camera_launch_delay,
-                "laserscan_launch_delay": laserscan_launch_delay
+                "laserscan_launch_delay": laserscan_launch_delay,
+                "qos": realsense_qos,
+                "use_composition": use_composition,
+                "attach_to_shared_component_container": attach_to_shared_component_container,  # this launch file starts a container
+                "component_container_name": container_name if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'sensing_container',
+                "intra_process_comms": 'True',
             }.items()
     )
 
@@ -331,35 +450,38 @@ def launch_setup(context, *args, **kwargs):
                         ),
                         condition=IfCondition(launch_localization),
                         launch_arguments={
+                            "use_composition": use_composition,
+                            "container_name": container_name if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'localization_container',
+                            "namespace": f1tenth_namespace,
+                            "use_namespace": use_f1tenth_namespace,
+                            "camera_name": camera_name,
                             "launch_sensor_fusion": 'True',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
+                            "odom_tf_publisher": odom_tf_publisher,  # ekf, vslam|stereo, icp, rgbd, pointcloud
+                            "map_tf_publisher": map_tf_publisher,  # amcl, ekf, vslam, rtabmap
                             "launch_slam_toolbox_localizer": 'False',
                             "launch_rtabmap_localizer": 'False',
                             'launch_pointcloud_odometry': 'False',
                             'launch_rgbd_odometry': 'False',
                             'launch_stereo_odometry': 'True',
-                            'launch_laserscan_odometry': 'True',
+                            'launch_laserscan_odometry': 'False',
                             'launch_amcl': launch_global_localization,
                             # "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,
+                            "qos_rtabmap": "1",
+                            "qos_rtabmap_laserscan": "1",
+                            "qos_rtabmap_camera": str(realsense_qos_int),
+                            "qos_rtabmap_imu": str(realsense_qos_int),
+                            "qos": realsense_qos,
+                            "qos_imu": realsense_qos,
                         }.items()
                 )
             ]
     )
 
     visualization_launch = None
-
-    # determine what namespace to use
-    if use_f1tenth_namespace_string.lower() == 'true':
-        if not f1tenth_namespace_string.lower().strip():
-            # if launch argument is empty, use the VEHICLE_NAME environment variable.
-            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
-            f1tenth_namespace = EnvironmentVariable(
-                    'VEHICLE_NAME',
-                    default_value=EnvironmentVariable('USER')
-            )
 
     nodes_to_launch = GroupAction(
             actions=[
@@ -368,18 +490,24 @@ def launch_setup(context, *args, **kwargs):
                         namespace=f1tenth_namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 # nodes
+                component_container_node,
                 joystick_launch,
                 ackermann_mux_launch,
-                sensors_launch,
                 vehicle_launch,
                 tf_launch,
-                localization_launch
             ]
     )  # append F1/10 namespace to all nodes
 
     # return the launch description
-    ld = launch_args + [nodes_to_launch]
+    ld = launch_args + [
+        nodes_to_launch,
+        # nodes launched separate from the GroupAction due to namespace issues caused by nesting
+        sensors_launch,
+        localization_launch,
+    ]
     return ld
 
 

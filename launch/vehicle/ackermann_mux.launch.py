@@ -15,8 +15,8 @@ def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
 
     mux_config_file = os.path.join(
-            get_package_share_directory('f1tenth_stack'),
-            'config',
+            get_package_share_directory('f1tenth_launch'),
+            'config', 'vehicle',
             'mux.yaml'
     )
 
@@ -35,7 +35,9 @@ def generate_launch_description():
             name='ackermann_mux',
             parameters=[mux_config],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
-                        ('ackermann_cmd', '/vehicle/ackermann_cmd')]
+                        ('ackermann_cmd', 'vehicle/ackermann_cmd'),
+                        ('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')]
     )
 
     # add nodes to the launch description

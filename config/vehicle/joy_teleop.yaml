@@ -1,4 +1,4 @@
-joy:
+/**: # joy:
   ros__parameters:
     # device_name: /dev/input/joypad-f710
     device_id: 0
@@ -6,8 +6,8 @@ joy:
     autorepeat_rate: 20.0
     coalesce_interval: 0.01
 
-joy_teleop:
-  ros__parameters:
+#joy_teleop:
+#  ros__parameters:
     default:
       type: topic
       interface_type: ackermann_msgs/msg/AckermannDriveStamped

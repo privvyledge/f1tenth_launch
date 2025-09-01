@@ -104,6 +104,7 @@ def generate_launch_description():
 
     offline_slam_launch = Node(
             condition=IfCondition([offline_mapping]),
+            namespace=namespace,
             parameters=[
                 offline_mapping_param_file,
                 {'use_sim_time': use_sim_time}
@@ -111,11 +112,22 @@ def generate_launch_description():
             package='slam_toolbox',
             executable='sync_slam_toolbox_node',
             name='slam_toolbox',
-            output='screen'
+            output='screen',
+            # Remaps topics used by the 'slam_toolbox' package from absolute (with slash) to relative (no slash).
+            # This is necessary to use namespaces with 'slam_toolbox'.
+            remappings = [
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+                ('/scan', 'scan'),
+                ('/scan_filtered', 'scan_filtered'),
+                ('/map', 'map'),
+                ('/map_metadata', 'map_metadata')
+            ]
     )
 
     online_slam_launch = Node(
             condition=IfCondition(PythonExpression(['not ', offline_mapping])),
+            namespace=namespace,
             parameters=[
                 online_mapping_param_file,
                 {'use_sim_time': use_sim_time}
@@ -123,13 +135,24 @@ def generate_launch_description():
             package='slam_toolbox',
             executable='async_slam_toolbox_node',
             name='slam_toolbox',
-            output='screen'
+            output='screen',
+            # Remaps topics used by the 'slam_toolbox' package from absolute (with slash) to relative (no slash).
+            # This is necessary to use namespaces with 'slam_toolbox'.
+            remappings = [
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static'),
+                ('/scan', 'scan'),
+                ('/scan_filtered', 'scan_filtered'),
+                ('/map', 'map'),
+                ('/map_metadata', 'map_metadata')
+            ]
     )
 
     rviz2 = Node(
             package='rviz2',
             executable='rviz2',
-            name='rviz2',
+            # name='rviz2_slam_toolbox',
+            namespace=namespace,
             condition=IfCondition(with_rviz),
             arguments=['-d', rviz_cfg_path_param]
     )
@@ -141,6 +164,7 @@ def generate_launch_description():
     start_map_saver_server_cmd = Node(
             package='nav2_map_server',
             executable='map_saver_server',
+            namespace=namespace,
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
             parameters=[
@@ -149,12 +173,15 @@ def generate_launch_description():
                 {'save_map_timeout': save_map_timeout},
                 {'free_thresh_default': free_thresh_default},
                 {'occupied_thresh_default': occupied_thresh_default},
-                {'map_subscribe_transient_local': map_subscribe_transient_local}])
+                {'map_subscribe_transient_local': map_subscribe_transient_local}],
+            remappings=[('/tf', 'tf'),
+                        ('/tf_static', 'tf_static')])
 
     start_lifecycle_manager_cmd = Node(
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
-            name='lifecycle_manager',
+            name='lifecycle_manager_2d_mapping',
+            namespace=namespace,
             output='screen',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
             parameters=[{'use_sim_time': use_sim_time},

@@ -22,6 +22,11 @@ def generate_launch_description():
             'vesc.yaml'
     )
 
+    remappings = [
+        ('/tf', 'tf'),
+        ('/tf_static', 'tf_static')
+    ]
+
     # Create the launch configuration variables
     vesc_config = LaunchConfiguration('vesc_config')
     launch_imu_filter = LaunchConfiguration('launch_imu_filter')
@@ -88,7 +93,8 @@ def generate_launch_description():
                         executable='ackermann_to_vesc_node',
                         name='ackermann_to_vesc_node',
                         namespace='vehicle',
-                        parameters=[vesc_config]
+                        parameters=[vesc_config],
+                        remappings=remappings
                 ),
 
                 Node(
@@ -99,7 +105,8 @@ def generate_launch_description():
                         namespace='vehicle',
                         parameters=[vesc_config],
                         remappings=[('commands/motor/speed', 'commands/motor/unsmoothed_speed'),
-                                    ('commands/servo/position', 'commands/servo/unsmoothed_position')]
+                                    ('commands/servo/position', 'commands/servo/unsmoothed_position'),
+                                    *remappings]
                 )
             ]
     )
@@ -108,7 +115,7 @@ def generate_launch_description():
             package='vesc_ackermann',
             executable='vesc_to_odom_node',
             name='vesc_to_odom_node',
-            namespace='vehicle',  # autoware
+            namespace='vehicle',
             parameters=[
                 vesc_config,
                 {
@@ -117,14 +124,15 @@ def generate_launch_description():
                 }
             ],
             remappings=[  # ('/odom', '/vesc/odom'),
-                ('odom', 'vesc_odom'),  # autoware
+                ('odom', 'vesc_odom'),
+                *remappings
             ]
     )
     vesc_driver_node = Node(
             package='vesc_driver',
             executable='vesc_driver_node',
             name='vesc_driver_node',
-            namespace='vehicle',  # autoware
+            namespace='vehicle',
             respawn=True,
             respawn_delay=10.0,
             parameters=[
@@ -132,7 +140,8 @@ def generate_launch_description():
                 {
                     'poll_rate': vesc_poll_rate
                 }
-            ]
+            ],
+            remappings=remappings
     )
     throttle_interpolator_node = Node(
             condition=IfCondition(launch_throttle_interpolator_node),
@@ -141,7 +150,8 @@ def generate_launch_description():
             name='throttle_interpolator',
             namespace='vehicle',
             output={'both': 'log'},
-            parameters=[vesc_config]
+            parameters=[vesc_config],
+            remappings=remappings
     )
 
     # todo: move to bringup/teleop or but in nav2_navigation.launch.py
@@ -151,13 +161,14 @@ def generate_launch_description():
             name='twist_to_ackermann_converter',
             parameters=[
                 {'wheelbase': 0.256},
-                {'twist_topic': '/cmd_vel'},  # /cmd_vel or /cmd_vel_smooth
-                {'ackermann_cmd_topic': '/drive'},
+                {'twist_topic': 'cmd_vel'},  # /cmd_vel or /cmd_vel_smooth
+                {'ackermann_cmd_topic': 'drive'},
                 {'frame_id': 'base_link'},
                 {'cmd_angle_instead_rotvel': False},
             ],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
-                        ('ackermann_cmd', '/vehicle/ackermann_cmd')]
+                        ('ackermann_cmd', 'vehicle/ackermann_cmd'),
+                        *remappings]
     )
 
     imu_filter_node = IncludeLaunchDescription(
@@ -166,14 +177,14 @@ def generate_launch_description():
             )),
             condition=IfCondition([launch_imu_filter]),
             launch_arguments={
-                'input_topic': '/vehicle/sensors/imu/raw',
-                'output_topic': '/vehicle/sensors/imu/data',
+                'input_topic': 'vehicle/sensors/imu/raw',
+                'output_topic': 'vehicle/sensors/imu/data',
                 'remove_gravity_vector': 'False',
                 'imu_gyro_stddev': '0.07',
                 'imu_accel_stddev': '0.07',
                 'imu_orientation_stddev': '0.032',
                 'node_name': 'vesc_imu_filter',
-                'imu_corrector_output_topic': '/vehicle/sensors/imu/bias_removed',
+                'imu_corrector_output_topic': 'vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'True',
                 'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
                 'imu_corrector_frame': 'imu_link',  # imu_link, sensor_kit_link, base_link

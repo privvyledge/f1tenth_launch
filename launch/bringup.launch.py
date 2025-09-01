@@ -1,10 +1,9 @@
 """
 Todo:
-    * Setup mapping launch
-    * Setup composable nodes
-    * Setup nav2_navigation individual subsystem launching
-    * setup loglevel
-    * add odometry topic remapping
+    * make this the main entry point
+        * update and test namespaces and composition
+        * cleanup
+        * include mapping and optionally teleop launch
 """
 import os
 from launch import LaunchDescription, LaunchContext
@@ -23,6 +22,12 @@ from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
 def launch_setup(context, *args, **kwargs):
+    qos_str_to_rtabmap_int = {
+        'SENSOR_DATA': 2,
+        'SYSTEM_DEFAULT': 0,
+        'DEFAULT': 1,
+    }
+
     # Get package directories
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
@@ -91,6 +96,7 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
     depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
@@ -102,6 +108,7 @@ def launch_setup(context, *args, **kwargs):
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')
     launch_realsense_splitter_node = LaunchConfiguration('launch_realsense_splitter_node', default=False)
+    realsense_qos = LaunchConfiguration('realsense_qos', default='SENSOR_DATA')
 
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
@@ -111,32 +118,30 @@ def launch_setup(context, *args, **kwargs):
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
     # https://github.com/ros/geometry2/issues/32
     # https://github.com/ros/robot_state_publisher/pull/30
-    # TODO(orduno) Substitute with `PushNodeRemapping`
-    #              https://github.com/ros2/launch_ros/issues/56
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
-    # Create our own temporary YAML files that include substitutions
-    param_substitutions = {
-        'use_sim_time': use_sim_time,
-        'yaml_filename': map_file}
-
-    # It only applies when `use_namespace` is True.
-    # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
-    # in config file 'nav2_multirobot_params.yaml' as a default & example.
-    # User defined config file should contain '<robot_namespace>' keyword for the replacements.
-    params_file = ReplaceString(
-            source_file=params_file,
-            replacements={'<robot_namespace>': ('/', namespace)},
-            condition=IfCondition(use_namespace))
-
-    configured_params = ParameterFile(
-            RewrittenYaml(
-                    source_file=params_file,
-                    root_key=namespace,
-                    param_rewrites=param_substitutions,
-                    convert_types=True),
-            allow_substs=True)
+    # # Create our own temporary YAML files that include substitutions
+    # param_substitutions = {
+    #     'use_sim_time': use_sim_time,
+    #     'yaml_filename': map_file}
+    #
+    # # It only applies when `use_namespace` is True.
+    # # '<robot_namespace>' keyword shall be replaced by 'namespace' launch argument
+    # # in config file 'nav2_multirobot_params.yaml' as a default & example.
+    # # User defined config file should contain '<robot_namespace>' keyword for the replacements.
+    # params_file = ReplaceString(
+    #         source_file=params_file,
+    #         replacements={'<robot_namespace>': ('/', namespace)},
+    #         condition=IfCondition(use_namespace))
+    #
+    # configured_params = ParameterFile(
+    #         RewrittenYaml(
+    #                 source_file=params_file,
+    #                 root_key=namespace,
+    #                 param_rewrites=param_substitutions,
+    #                 convert_types=True),
+    #         allow_substs=True)
 
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -275,7 +280,7 @@ def launch_setup(context, *args, **kwargs):
     steering_button_la = DeclareLaunchArgument(
             'steering_button',
             default_value=steering_button,
-            description='Button used to control the steering angle. 2 for PS4, 3 for Logitech F710')
+            description='Button used to control the steering angle. 2 for DualShock/DualSense, 3 for Logitech F710')
 
     max_speed_la = DeclareLaunchArgument(
             'max_speed',
@@ -315,6 +320,10 @@ def launch_setup(context, *args, **kwargs):
             default_value=launch_throttle_interpolator_node,
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
+
+    camera_name_la = DeclareLaunchArgument(
+            'camera_name', default_value=camera_name,
+            description='Name of the camera. Used to remap topics.')
 
     approx_sync_la = DeclareLaunchArgument(
             'approx_sync', default_value=approx_sync,
@@ -368,6 +377,11 @@ def launch_setup(context, *args, **kwargs):
             'launch_realsense_splitter_node', default_value=launch_realsense_splitter_node,
             description='Whether to launch the realsense splitter node.')
 
+    realsense_qos_la = DeclareLaunchArgument(
+            'realsense_qos', default_value=realsense_qos,
+            description='The qos profile to use for the realsense camera. '
+                        'Default: SENSOR_DATA. See librealsense2 documentation for more details.')
+
     camera_launch_delay_la = DeclareLaunchArgument(
             'camera_launch_delay', default_value=camera_launch_delay,
             description='Delay in seconds before launching the camera nodes. '
@@ -417,15 +431,42 @@ def launch_setup(context, *args, **kwargs):
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
+        camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
+        realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la
     ]
 
     ''' Launch Nodes '''
+    camera_name_string = camera_name.perform(context)
+    realsense_qos_string = realsense_qos.perform(context)
     use_f1tenth_namespace_string = use_f1tenth_namespace.perform(context)
     f1tenth_namespace_string = f1tenth_namespace.perform(context)
+
+    if camera_name_string != '':
+        camera_name_string += '/'
+
+    realsense_qos_int = qos_str_to_rtabmap_int.get(realsense_qos_string, 2)
+
+    # determine what namespace to use
+    if use_f1tenth_namespace_string.lower() == 'true':
+        if not f1tenth_namespace_string.lower().strip():
+            # if launch argument is empty, use the VEHICLE_NAME environment variable.
+            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
+            f1tenth_namespace = EnvironmentVariable(
+                    'VEHICLE_NAME',
+                    default_value=EnvironmentVariable('USER', default_value='')
+            )
+
+            if f1tenth_namespace.perform(context) == '':
+                raise NameError(
+                        'The launch argument "use_f1tenth_namespace" was set to "true" '
+                        'but the launch argument "f1tenth_namespace" is empty. '
+                        'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
+                        'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
+                )
 
     component_container_node = Node(
             condition=IfCondition(use_composition),
@@ -434,7 +475,14 @@ def launch_setup(context, *args, **kwargs):
             # todo: compare 'component_container_isolated' with
             #  'component_container_mt' and 'component_container_isolated'
             executable='component_container_isolated',
-            parameters=[configured_params, {'autostart': autostart}],
+            parameters=[
+                params_file,
+                {
+                    'autostart': autostart,
+                    'use_sim_time': use_sim_time,
+                    'yaml_filename': map_file,
+                }
+            ],
             arguments=['--ros-args', '--log-level', log_level],
             remappings=remappings,
             output='screen')
@@ -466,6 +514,9 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(launch_sensors),
             launch_arguments={
                 "use_sim_time": use_sim_time,
+                "use_namespace": use_f1tenth_namespace,
+                "namespace": f1tenth_namespace,
+                "camera_name": camera_name,
                 "approx_sync": approx_sync,
                 "stereo_to_pointcloud": stereo_to_pointcloud,
                 "depthimage_to_pointcloud": depthimage_to_pointcloud,
@@ -477,7 +528,8 @@ def launch_setup(context, *args, **kwargs):
                 "realsense_emitter_on_off": realsense_emitter_on_off,
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
                 "camera_launch_delay": camera_launch_delay,
-                "laserscan_launch_delay": laserscan_launch_delay
+                "laserscan_launch_delay": laserscan_launch_delay,
+                "qos": realsense_qos
             }.items()
     )
 
@@ -510,26 +562,44 @@ def launch_setup(context, *args, **kwargs):
     localization_launch = TimerAction(
             period=10.0,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                PathJoinSubstitution([localization_include_dir, 'localization.launch.py'])
-                        ),
-                        condition=IfCondition(launch_localization),
-                        launch_arguments={
-                            "launch_sensor_fusion": 'True',
-                            "launch_ekf_odom": launch_local_localization,
-                            "launch_ekf_map": launch_global_localization,
-                            "launch_slam_toolbox_localizer": 'False',
-                            "launch_rtabmap_localizer": 'False',
-                            'launch_pointcloud_odometry': 'False',
-                            'launch_rgbd_odometry': 'False',
-                            'launch_stereo_odometry': 'True',
-                            'launch_laserscan_odometry': 'True',
-                            'launch_amcl': launch_global_localization,
-                            "map_file": map_file,
-                            "use_sim_time": use_sim_time,
-                            "use_gpu": use_gpu,
-                        }.items()
+                GroupAction(
+                        [
+                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            SetRemap(src=['/tf'], dst=['tf']),
+                            SetRemap(src=['/tf_static'], dst=['tf_static']),
+                            IncludeLaunchDescription(
+                                    PythonLaunchDescriptionSource(
+                                            PathJoinSubstitution([localization_include_dir, 'localization.launch.py'])
+                                    ),
+                                    condition=IfCondition(launch_localization),
+                                    launch_arguments={
+                                        "namespace": f1tenth_namespace,
+                                        "use_namespace": use_f1tenth_namespace,
+                                        "camera_name": camera_name,
+                                        "launch_sensor_fusion": 'True',
+                                        "launch_ekf_odom": launch_local_localization,
+                                        "launch_ekf_map": launch_global_localization,
+                                        "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
+                                        "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
+                                        "launch_slam_toolbox_localizer": 'False',
+                                        "launch_rtabmap_localizer": 'False',
+                                        'launch_pointcloud_odometry': 'False',
+                                        'launch_rgbd_odometry': 'False',
+                                        'launch_stereo_odometry': 'True',
+                                        'launch_laserscan_odometry': 'True',
+                                        'launch_amcl': launch_global_localization,
+                                        "map_file": map_file,
+                                        "use_sim_time": use_sim_time,
+                                        "use_gpu": use_gpu,
+                                        "qos_rtabmap": "1",
+                                        "qos_rtabmap_laserscan": "1",
+                                        "qos_rtabmap_camera": str(realsense_qos_int),
+                                        "qos_rtabmap_imu": str(realsense_qos_int),
+                                        "qos": realsense_qos,
+                                        "qos_imu": realsense_qos,
+                                    }.items()
+                            )
+                        ]
                 )
             ]
     )
@@ -547,51 +617,68 @@ def launch_setup(context, *args, **kwargs):
     mapping_launch = TimerAction(
             period=15.0,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                os.path.join(f1tenth_launch_bringup_dir, 'mapping.launch.py')),
-                        condition=IfCondition(slam),
-                        launch_arguments={'namespace': namespace,
-                                          'use_namespace': use_namespace,
-                                          'use_sim_time': use_sim_time,
-                                          'use_gpu': use_gpu,
-                                          'autostart': autostart,
-                                          'use_composition': use_composition,
-                                          'use_respawn': use_respawn,
-                                          "launch_joystick": 'False',
-                                          "launch_sensors": 'False',
-                                          "launch_vehicle": 'False',
-                                          "launch_tfs": 'False',
-                                          "launch_localization": 'False',
-                                          "launch_local_localization": 'False',
-                                          "launch_global_localization": 'False',
-                                          "launch_visualization": 'True',
-                                          # "rviz_config_file": rviz_config_file,
-                                          "launch_2d_mapping": launch_2d_mapping,
-                                          "launch_3d_mapping": launch_3d_mapping,
-                                          "life_long_mapping": life_long_mapping,
-                                          "offline_mapping_2d_param_file": offline_mapping_2d_param_file,
-                                          "online_mapping_2d_param_file": online_mapping_2d_param_file,
-                                          "map_2d_file": map_2d_file,
-                                          "rtabmap_database_file": rtabmap_database_file,
-                                          }.items())
+                GroupAction(
+                        actions=[
+                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            SetRemap(src=['/tf'], dst=['tf']),
+                            SetRemap(src=['/tf_static'], dst=['tf_static']),
+                            IncludeLaunchDescription(
+                                    PythonLaunchDescriptionSource(
+                                            os.path.join(f1tenth_launch_bringup_dir, 'mapping.launch.py')),
+                                    condition=IfCondition(slam),
+                                    launch_arguments={'namespace': namespace,
+                                                      'use_namespace': use_namespace,
+                                                      'use_sim_time': use_sim_time,
+                                                      'use_gpu': use_gpu,
+                                                      'autostart': autostart,
+                                                      'use_composition': use_composition,
+                                                      'use_respawn': use_respawn,
+                                                      "launch_joystick": 'False',
+                                                      "launch_sensors": 'False',
+                                                      "launch_vehicle": 'False',
+                                                      "launch_tfs": 'False',
+                                                      "launch_localization": 'False',
+                                                      "launch_local_localization": 'False',
+                                                      # "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
+                                                      # "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
+                                                      "launch_global_localization": 'False',
+                                                      "launch_visualization": 'True',
+                                                      # "rviz_config_file": rviz_config_file,
+                                                      "launch_2d_mapping": launch_2d_mapping,
+                                                      "launch_3d_mapping": launch_3d_mapping,
+                                                      "life_long_mapping": life_long_mapping,
+                                                      "offline_mapping_2d_param_file": offline_mapping_2d_param_file,
+                                                      "online_mapping_2d_param_file": online_mapping_2d_param_file,
+                                                      "map_2d_file": map_2d_file,
+                                                      "rtabmap_database_file": rtabmap_database_file,
+                                                      }.items())
+                        ]
+                )
             ]
     )
 
     nav2_navigation_launch = TimerAction(
             period=15.0,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                PathJoinSubstitution([f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
-                        condition=IfCondition(launch_navigation),
-                        launch_arguments={'namespace': namespace,
-                                          'use_sim_time': use_sim_time,
-                                          'autostart': autostart,
-                                          'params_file': params_file,
-                                          'use_composition': use_composition,
-                                          'use_respawn': use_respawn,
-                                          'container_name': 'f1tenth_container'}.items())
+                GroupAction(
+                        actions=[
+                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            SetRemap(src=['/tf'], dst=['tf']),
+                            SetRemap(src=['/tf_static'], dst=['tf_static']),
+                            IncludeLaunchDescription(
+                                    PythonLaunchDescriptionSource(
+                                            PathJoinSubstitution(
+                                                    [f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
+                                    condition=IfCondition(launch_navigation),
+                                    launch_arguments={'namespace': namespace,
+                                                      'use_sim_time': use_sim_time,
+                                                      'autostart': autostart,
+                                                      'params_file': params_file,
+                                                      'use_composition': use_composition,
+                                                      'use_respawn': use_respawn,
+                                                      'container_name': 'f1tenth_container'}.items())
+                        ]
+                )
             ]
     )
 
@@ -621,6 +708,8 @@ def launch_setup(context, *args, **kwargs):
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # nodes
                 mapping_launch,
@@ -630,15 +719,6 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Add launch arguments and nodes to the launch description
-    # determine what namespace to use
-    if use_f1tenth_namespace_string.lower() == 'true':
-        if not f1tenth_namespace_string.lower().strip():
-            # if launch argument is empty, use the VEHICLE_NAME environment variable.
-            # Defaults to the username if $VEHICLE_NAME doesn't exist and the namespace argument is empty.
-            f1tenth_namespace = EnvironmentVariable(
-                    'VEHICLE_NAME',
-                    default_value=EnvironmentVariable('USER')
-            )
     nodes_to_launch = GroupAction(
             actions=[
                 PushRosNamespace(
@@ -646,6 +726,8 @@ def launch_setup(context, *args, **kwargs):
                         namespace=f1tenth_namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
+                SetRemap(src=['/tf'], dst=['tf']),
+                SetRemap(src=['/tf_static'], dst=['tf_static']),
                 # nodes
                 component_container_node,
                 visualization_launch,

@@ -12,10 +12,11 @@ Todo:
 #   $ ros2 launch f1tenth_launch 3d_mapping.launch.py
 
 import os
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.actions import Node, ComposableNodeContainer, SetRemap
 from launch_ros.descriptions import ComposableNode
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
@@ -33,12 +34,16 @@ def generate_launch_description():
             f1tenth_launch_pkg_prefix, 'rviz', 'rtabmap.rviz')
 
     use_sim_time = LaunchConfiguration('use_sim_time')
+    namespace = LaunchConfiguration('namespace')
     use_stereo = LaunchConfiguration('use_stereo')
     localization = LaunchConfiguration('localization')
     queue_size = LaunchConfiguration('queue_size')
     approx_sync = LaunchConfiguration('approx_sync')
     approx_sync_max_interval = LaunchConfiguration('approx_sync_max_interval', default=0.05)  # [sec]. 0.0 means infinite
     publish_map_tf = LaunchConfiguration('publish_map_tf')
+    publish_odom_tf = LaunchConfiguration('publish_odom_tf')
+    visual_odometry = LaunchConfiguration('visual_odometry')
+    icp_odometry = LaunchConfiguration('icp_odometry')
     lidar_frame_id = LaunchConfiguration('lidar_frame_id')
     wait_imu_to_init = LaunchConfiguration('wait_imu_to_init')
     pointcloud_topic = LaunchConfiguration('pointcloud_topic')
@@ -52,9 +57,14 @@ def generate_launch_description():
 
     left_image_topic = LaunchConfiguration('left_image_topic')
     right_image_topic = LaunchConfiguration('right_image_topic')
+    left_camera_info_topic = LaunchConfiguration('left_camera_info_topic')
+    right_camera_info_topic = LaunchConfiguration('right_camera_info_topic')
+    rgb_topic = LaunchConfiguration('rgb_topic')
+    camera_info_topic = LaunchConfiguration('camera_info_topic')
     # /camera/camera/depth/image_rect_raw, /camera/depth_registered/image_rect, /camera/realigned_depth_to_color/image_raw
     depth_topic = LaunchConfiguration('depth_topic')
     odom_topic = LaunchConfiguration('odom_topic')
+    scan_topic = LaunchConfiguration('scan_topic')
 
     qos = LaunchConfiguration('qos')
     qos_image = LaunchConfiguration('qos_image')
@@ -66,6 +76,10 @@ def generate_launch_description():
     return LaunchDescription([
 
         # Launch arguments
+        DeclareLaunchArgument(
+                'namespace', default_value='/camera/camera',
+                description='Namespace for all nodes.'),
+
         DeclareLaunchArgument(
                 'use_stereo', default_value='False',
                 description='Whether to use Stereo or RGB+D'),
@@ -79,12 +93,24 @@ def generate_launch_description():
                 description=''),
 
         DeclareLaunchArgument(
-                'queue_size', default_value='10000',  # 10000 (50) for offline (online) mapping, 10 for localization
-                description=''),
+                'queue_size', default_value='10000',
+                description='10000 (50) for offline (online) mapping, 10 for localization'),
 
         DeclareLaunchArgument(
-                'publish_map_tf', default_value='True',  # True for mapping, False for localization
-                description=''),
+                'publish_map_tf', default_value='True',
+                description='True for mapping, False for localization'),
+
+        DeclareLaunchArgument(
+                'publish_odom_tf', default_value='False',
+                description='whether to publish odom tf or let some other node do it'),
+
+        DeclareLaunchArgument(
+                'visual_odometry', default_value='True',
+                description='whether to start RTABMap visual odometry node'),
+
+        DeclareLaunchArgument(
+                'icp_odometry', default_value='False',
+                description='whether to start RTABMap ICP odometry node'),
 
         DeclareLaunchArgument(
                 'lidar_frame_id', default_value='lidar',
@@ -95,19 +121,37 @@ def generate_launch_description():
                 description=''),
 
         DeclareLaunchArgument(
-                'imu_topic', default_value='/camera/camera/imu/filtered',
+                'imu_topic', default_value='camera/imu/filtered',
                 description='Used with VIO approaches and for SLAM graph optimization (gravity constraints). '),
 
         DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
+            'left_image_topic', default_value='camera/infra1/image_rect_raw',
             description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1'),
 
         DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
+            'right_image_topic', default_value='camera/infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2'),
 
         DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/camera/aligned_depth_to_color/image_raw',
+                'left_camera_info_topic', default_value='camera/infra1/camera_info',
+                description='/camera/camera/infra1/camera_info or /camera/realsense_splitter_node/output/infra_1/camera_info'),
+        DeclareLaunchArgument(
+                'right_camera_info_topic', default_value='camera/infra2/camera_info',
+                description='/camera/camera/infra2/camera_info or /camera/realsense_splitter_node/output/infra_2/camera_info'
+        ),
+
+        DeclareLaunchArgument(
+                'rgb_topic', default_value='camera/color/image_raw',
+                description=''
+        ),
+
+        DeclareLaunchArgument(
+                'camera_info_topic', default_value='camera/color/camera_info',
+                description=''
+        ),
+
+        DeclareLaunchArgument(
+                'depth_topic', default_value='camera/aligned_depth_to_color/image_raw',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/camera/aligned_depth_to_color/image_raw", '
                             '"/camera/camera/depth/image_rect_raw", '
@@ -116,8 +160,12 @@ def generate_launch_description():
                             '"/camera/realigned_depth_to_color/image_raw"'),
 
         DeclareLaunchArgument(
-            'odom_topic', default_value='/odometry/local',
+            'odom_topic', default_value='odometry/local',
             description='Odometry topic. E.g "/odometry/local", "/visual_slam/tracking/odometry"'),
+
+        DeclareLaunchArgument(
+                'scan_topic', default_value='scan',
+                description='Laser scan topic. E.g "/scan", "/camera/scan", "/scan_filtered'),
 
         DeclareLaunchArgument(
                 'approx_sync', default_value='True',
@@ -223,71 +271,87 @@ def generate_launch_description():
 
         # Nodes to launch.
         # https://github.com/introlab/rtabmap_ros/blob/humble-devel/rtabmap_launch/launch/rtabmap.launch.py
-        IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(PathJoinSubstitution(
-                        [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']
-                )),
-                # condition=LaunchConfigurationEquals('mapping', 'realsense'),
-                # condition=IfCondition([imu_only]),
-                launch_arguments={
-                    # 'cfg': '',
-                    'args': rtabmap_args,
-                    'rtabmap_args': rtabmap_args,
-                    'database_path': database_path,
+        # todo: switch to f1tenth_launch/launch/mapping/rtabmap.launch.py
+        GroupAction(
+                actions=[
+                    SetRemap(src=['/tf', '/tf_static'], dst=['tf', 'tf_static']),
+                    IncludeLaunchDescription(
+                            PythonLaunchDescriptionSource(PathJoinSubstitution(
+                                    [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']
+                            )),
+                            # condition=LaunchConfigurationEquals('mapping', 'realsense'),
+                            # condition=IfCondition([imu_only]),
+                            launch_arguments={
+                                # 'cfg': '',
+                                'args': rtabmap_args,
+                                'rtabmap_args': rtabmap_args,
+                                'database_path': database_path,
 
-                    'queue_size': queue_size,  # default: 10
-                    'topic_queue_size': queue_size,
-                    'wait_for_transform': '0.2',
+                                'queue_size': queue_size,  # default: 10
+                                'topic_queue_size': queue_size,
+                                'wait_for_transform': '0.2',
 
-                    'frame_id': 'base_link',
-                    # 'odom_frame_id': 'odom',  # if empty or commented out, uses odom topic instead
-                    'vo_frame_id': 'odom',
-                    'map_frame_id': 'map',
-                    'publish_tf_map': publish_map_tf,
-                    'publish_tf_odom': 'false',
+                                'frame_id': 'base_link',
+                                # 'odom_frame_id': 'odom', # if empty or commented out, uses odom topic instead
+                                'vo_frame_id': 'odom',
+                                # could set to vo if another node is publishing the odom tf, then set guess_frame_id to that odom
+                                'map_frame_id': 'map',
+                                'publish_tf_map': publish_map_tf,
+                                'publish_tf_odom': publish_odom_tf,
+                                # 'odom_guess_frame_id': 'odom',
 
-                    'stereo': use_stereo,
-                    'depth': PythonExpression(['not ', use_stereo]),
-                    'localization': localization,
-                    'visual_odometry': 'false',  # odometry from images, eg stereo or RGB-D
-                    'icp_odometry': 'false',  # odometry from laserscans or PointClouds
-                    'subscribe_scan': 'true',
-                    'subscribe_scan_cloud': 'false',
+                                'stereo': use_stereo,
+                                # 'depth': PythonExpression(['not ', use_stereo]),
+                                'localization': localization,
+                                'visual_odometry': visual_odometry,  # odometry from images, eg stereo or RGB-D
+                                'icp_odometry': icp_odometry,  # odometry from laserscans or PointClouds
+                                'subscribe_scan': 'true',
+                                'subscribe_scan_cloud': 'false',
 
-                    'odom_topic': odom_topic,
-                    'odom_args': '',
+                                'odom_topic': odom_topic,
+                                'odom_args': '',
+                                'odom_sensor_sync': 'true',
+                                # 'subscribe_odom_info': visual_odometry,
+                                # set to True if using visual odometry or ICP odometry from RTABMAP
 
-                    'imu_topic': imu_topic,
-                    'wait_imu_to_init': wait_imu_to_init,
+                                'imu_topic': imu_topic,
+                                'wait_imu_to_init': wait_imu_to_init,
 
-                    'stereo_namespace': '/camera/camera',
-                    'left_image_topic': left_image_topic,
-                    'right_image_topic': right_image_topic,
-                    'left_camera_info_topic': '/camera/camera/infra1/camera_info',
-                    'right_camera_info_topic': '/camera/camera/infra2/camera_info',
+                                'namespace': namespace,
+                                'stereo_namespace': namespace,
+                                'left_image_topic': left_image_topic,
+                                'right_image_topic': right_image_topic,
+                                'left_camera_info_topic': left_camera_info_topic,
+                                'right_camera_info_topic': right_camera_info_topic,
 
-                    'rgb_topic': '/camera/camera/color/image_raw',
-                    'depth_topic': depth_topic,
-                    'camera_info_topic': '/camera/camera/color/camera_info',
+                                'rgb_topic': rgb_topic,
+                                'depth_topic': depth_topic,
+                                'camera_info_topic': camera_info_topic,
 
-                    'scan_topic': '/lidar/scan_filtered',
-                    # 'scan_cloud_topic': '/lidar/point_cloud',
+                                'scan_topic': scan_topic,
+                                # 'scan_cloud_topic': 'point_cloud',
 
-                    'qos': qos,
-                    'qos_image': qos_image,
-                    'qos_camera_info': qos_camera_info,
-                    'qos_imu': qos_imu,
-                    'qos_scan': qos_scan,
-                    'qos_odom': qos_odom,
+                                # # Setup synchronization, especially when trying to fuse stereo with LaserScans and external odom
+                                'rgbd_sync': 'true',
+                                'approx_rgbd_sync': 'false',
 
-                    'approx_sync': approx_sync,
-                    # 'approx_sync_max_interval': approx_sync_max_interval,
+                                'qos': qos,
+                                'qos_image': qos_image,
+                                'qos_camera_info': qos_camera_info,
+                                'qos_imu': qos_imu,
+                                'qos_scan': qos_scan,
+                                'qos_odom': qos_odom,
 
-                    'rtabmap_viz': rtabmap_viz_view,
-                    'rviz': rviz_view,
-                    'rviz_cfg': rviz_cfg_path_param,
-                    'use_sim_time': use_sim_time,
-                }.items()
+                                'approx_sync': approx_sync,
+                                # 'approx_sync_max_interval': approx_sync_max_interval,
+
+                                'rtabmap_viz': rtabmap_viz_view,
+                                'rviz': rviz_view,
+                                'rviz_cfg': rviz_cfg_path_param,
+                                'use_sim_time': use_sim_time,
+                            }.items()
+                    )
+                ]
         ),
     ])
 

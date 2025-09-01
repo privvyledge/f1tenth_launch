@@ -1,19 +1,15 @@
-from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch_ros.actions import LifecycleNode
-from launch.substitutions import Command
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.actions import LogInfo
-from launch.conditions import IfCondition, LaunchConfigurationEquals
-from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
-from ament_index_python.packages import get_package_share_directory
+"""
+Todo:
+    * Use a container for YDLidar
+"""
 import os
-from launch_ros.descriptions import ParameterFile
-from nav2_common.launch import RewrittenYaml, ReplaceString
+from launch import LaunchDescription
+from launch_ros.actions import Node, SetRemap, PushRosNamespace, LifecycleNode
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
@@ -22,6 +18,8 @@ def generate_launch_description():
     # Create the launch configuration variables
     lidar_config = LaunchConfiguration('lidar_config')
     launch_filter = LaunchConfiguration('launch_filter')
+    use_namespace = LaunchConfiguration('use_namespace', default=True)
+    namespace = LaunchConfiguration('namespace', default='lidar')
 
     # Launch arguments
     lidar_config_file = os.path.join(
@@ -38,27 +36,56 @@ def generate_launch_description():
             default_value='True',
             description='Whether to launch the LIDAR filter')
 
+    declare_use_namespace_cmd = DeclareLaunchArgument(
+            'use_namespace',
+            default_value=use_namespace,
+            description='Whether to apply a namespace to the entire the LIDAR launch.')
+
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+
     # Create Launch Description
-    ld = LaunchDescription([lidar_la, declare_launch_filter_cmd])
+    ld = LaunchDescription([lidar_la, declare_launch_filter_cmd, declare_use_namespace_cmd, namespace_la])
 
     # Setup nodes
-    lidar_node = LifecycleNode(package='ydlidar_ros2_driver',
-                               executable='ydlidar_ros2_driver_node',
-                               name='ydlidar_ros2_driver_node',
-                               output='screen',
-                               emulate_tty=True,
-                               parameters=[lidar_config],
-                               namespace='lidar')
+    lidar_node = LifecycleNode(
+            package='ydlidar_ros2_driver',
+            executable='ydlidar_ros2_driver_node',
+            name='ydlidar_ros2_driver_node',
+            output='screen',
+            emulate_tty=True,
+            parameters=[lidar_config],
+            remappings=[
+                ('/tf', 'tf'),
+                ('/tf_static', 'tf_static')
+            ],
+            namespace='',  # namespace,
+    )
 
     laserscan_filter = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [f1tenth_launch_dir, 'launch/filters', 'laser_filter.launch.py']
             )),
             condition=IfCondition([launch_filter]),
+            launch_arguments={
+                'namespace': '',  # namespace,
+            }.items(),
     )
 
-    ld.add_action(lidar_node)
-    ld.add_action(laserscan_filter)
+    lidar_nodes = GroupAction(
+            actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_namespace),
+                        namespace=namespace
+                ),
+                # nodes
+                lidar_node,
+                laserscan_filter,
+            ]
+    )
+
+    ld.add_action(lidar_nodes)
 
     return ld
 

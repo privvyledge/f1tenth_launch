@@ -42,6 +42,9 @@ def launch_setup(context, *args, **kwargs):
 
     # Setup launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
+    use_namespace = LaunchConfiguration('use_namespace', default=False)
+    namespace = LaunchConfiguration('namespace', default='')
+    camera_name = LaunchConfiguration('camera_name', default='camera')
     global_frame = LaunchConfiguration('global_frame', default='odom')
     launch_realsense_driver = LaunchConfiguration('launch_realsense_driver', default=False)
     launch_realsense_splitter = LaunchConfiguration('launch_realsense_splitter', default=False)
@@ -56,12 +59,21 @@ def launch_setup(context, *args, **kwargs):
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='nvblox_container')
+    container_name_full = (namespace, '/', component_container_name)
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
             'use_sim_time', default_value=use_sim_time,
             description='Use simulation (Gazebo or ROSBAG) clock if true. '
                         'Also used to set mapping mode to online (False) or offline (True) ')
+    use_namespace_la = DeclareLaunchArgument(
+            'use_namespace', default_value=use_namespace,
+            description='Use namespace if true. ')
+    namespace_la = DeclareLaunchArgument(
+            'namespace', default_value=namespace,
+            description='Namespace for the nodes')
+    camera_name_arg = DeclareLaunchArgument('camera_name', default_value=camera_name,
+                                                description='The name of the camera node.')
     global_frame_arg = DeclareLaunchArgument('global_frame',
                                              default_value=global_frame,
                                              description="The name of the TF frame in which the map is built. "
@@ -75,7 +87,7 @@ def launch_setup(context, *args, **kwargs):
                                                                       "realsense splitter component.")
 
     depth_topic_arg = DeclareLaunchArgument(
-                'depth_topic', default_value='/camera/camera/aligned_depth_to_color/image_raw',
+                'depth_topic', default_value='aligned_depth_to_color/image_raw',
                 description='Raw unaligned depth topic to subscribe to. E.g '
                             '"/camera/camera/aligned_depth_to_color/image_raw", '
                             '"/camera/camera/depth/image_rect_raw", '
@@ -84,17 +96,17 @@ def launch_setup(context, *args, **kwargs):
                             '"/camera/realigned_depth_to_color/image_raw"')
 
     depth_info_topic_arg = DeclareLaunchArgument(
-            'depth_info_topic', default_value='/camera/camera/aligned_depth_to_color/camera_info',
+            'depth_info_topic', default_value='aligned_depth_to_color/camera_info',
             description='Raw unaligned depth topic to subscribe to. E.g '
                         '"/camera/camera/aligned_depth_to_color/camera_info", '
                         '"/camera/camera/depth/camera_info"')
 
     left_image_topic_la = DeclareLaunchArgument(
-            'left_image_topic', default_value='/camera/camera/infra1/image_rect_raw',
+            'left_image_topic', default_value='infra1/image_rect_raw',
             description='/camera/camera/infra1/image_rect_raw or /camera/realsense_splitter_node/output/infra_1')
 
     right_image_topic_la = DeclareLaunchArgument(
-            'right_image_topic', default_value='/camera/camera/infra2/image_rect_raw',
+            'right_image_topic', default_value='infra2/image_rect_raw',
             description='/camera/camera/infra2/image_rect_raw or /camera/realsense_splitter_node/output/infra_2')
 
     input_qos_arg = DeclareLaunchArgument('input_qos', default_value=input_qos,
@@ -124,6 +136,9 @@ def launch_setup(context, *args, **kwargs):
     # Add launch arguments to a list
     launch_args = [
         use_sim_time_la,
+        use_namespace_la,
+        namespace_la,
+        camera_name_arg,
         global_frame_arg,
         launch_realsense_driver_arg,
         launch_realsense_splitter_arg,
@@ -139,10 +154,20 @@ def launch_setup(context, *args, **kwargs):
         component_container_name_arg
     ]
 
+    # Get camera name as string
+    camera_name_str = camera_name.perform(context)
+    namespace_str = namespace.perform(context)
+    use_namespace_str = use_namespace.perform(context)
+    component_container_name_str = component_container_name.perform(context)
+
+    if camera_name_str != '':
+        camera_name_str += '/'
+
     # Run nodes
     '''Create a container if not joining one for the realsense splitter'''
     nvblox_container = Node(
-            name=component_container_name,
+            name=component_container_name_str.split('/')[-1],
+            namespace=namespace if use_namespace_str.lower() == 'true' else '',
             package='rclcpp_components',
             executable='component_container_mt',
             output='screen',
@@ -151,7 +176,7 @@ def launch_setup(context, *args, **kwargs):
 
     # todo: use a launch context to check dynamic object and people flags
     load_composable_nodes = LoadComposableNodes(
-            target_container=component_container_name,
+            target_container=container_name_full,
             composable_node_descriptions=[
                 # nvblox static node
                 ComposableNode(
@@ -178,7 +203,9 @@ def launch_setup(context, *args, **kwargs):
                 'use_sim_time': use_sim_time,
                 'launch_realsense_driver': launch_realsense_driver,
                 'attach_to_shared_component_container': 'True',
-                'component_container_name': component_container_name,
+                'namespace': namespace,
+                'camera_name': camera_name,
+                'component_container_name': container_name_full,
                 'input_qos': input_qos,
             }.items()
     )
@@ -186,32 +213,47 @@ def launch_setup(context, *args, **kwargs):
     visual_slam_launch_include = TimerAction(
             period=1.0,
             actions=[
-                IncludeLaunchDescription(
-                        PythonLaunchDescriptionSource(
-                                PathJoinSubstitution(
-                                        [nvidia_isaac_launch_dir, 'isaac_ros_visual_slam_realsense.launch.py'])
-                        ),
-                        condition=IfCondition(launch_visual_slam),
-                        launch_arguments={
-                            'use_sim_time': use_sim_time,
-                            'two_d_mode': 'True',
-                            'base_frame': 'base_link',
-                            'publish_map_to_odom_tf': 'False',
-                            'publish_odom_to_baselink_tf': 'True',
-                            'launch_realsense_driver': 'False',
-                            'left_image_topic': left_image_topic,
-                            'right_image_topic': right_image_topic,
-                            'image_qos': input_qos,  # 'DEFAULT'
-                            'imu_qos': input_qos,  # 'DEFAULT'
-                            'attach_to_shared_component_container': 'True',
-                            'component_container_name': component_container_name,
-                        }.items()
+                GroupAction(
+                        actions=[
+                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            SetRemap(src=['/tf'], dst=['tf']),
+                            SetRemap(src=['/tf_static'], dst=['tf_static']),
+                            IncludeLaunchDescription(
+                                    PythonLaunchDescriptionSource(
+                                            PathJoinSubstitution(
+                                                    [nvidia_isaac_launch_dir,
+                                                     'isaac_ros_visual_slam_realsense.launch.py'])
+                                    ),
+                                    condition=IfCondition(launch_visual_slam),
+                                    launch_arguments={
+                                        'use_sim_time': use_sim_time,
+                                        'namespace': namespace,
+                                        'use_namespace': use_namespace,
+                                        'camera_name': camera_name,
+                                        'two_d_mode': 'True',
+                                        'base_frame': 'base_link',
+                                        'publish_map_to_odom_tf': 'False',
+                                        'publish_odom_to_baselink_tf': 'True',
+                                        'launch_realsense_driver': 'False',
+                                        'left_image_topic': left_image_topic,
+                                        'right_image_topic': right_image_topic,
+                                        'image_qos': input_qos,  # 'DEFAULT'
+                                        'imu_qos': input_qos,  # 'DEFAULT'
+                                        'attach_to_shared_component_container': 'True',
+                                        'component_container_name': container_name_full,
+                                    }.items()
+                            )
+                        ]
                 )
             ]
     )
 
     nvblox_group_action = GroupAction(
             actions=[
+                PushRosNamespace(
+                        condition=IfCondition(use_namespace),
+                        namespace=namespace
+                ),
                 # Set parameters with specializations
                 SetParameter(name='use_sim_time', value=use_sim_time),
                 SetParametersFromFile(base_config),
@@ -225,14 +267,15 @@ def launch_setup(context, *args, **kwargs):
                 SetParameter(name='slice_visualization_attachment_frame_id', value='base_link'),
 
                 # Remappings for realsense data
+                SetRemap(src=['/tf', '/tf_static'], dst=['tf', 'tf_static']),
                 SetRemap(src=['camera_0/depth/image'],
-                         dst=[depth_topic]),
+                         dst=[camera_name_str + depth_topic.perform(context)]),
                 SetRemap(src=['camera_0/depth/camera_info'],
-                         dst=[depth_info_topic]),
+                         dst=[camera_name_str + depth_info_topic.perform(context)]),
                 SetRemap(src=['camera_0/color/image'],
-                         dst=['/camera/camera/color/image_raw']),
+                         dst=[camera_name_str + 'color/image_raw']),
                 SetRemap(src=['camera_0/color/camera_info'],
-                         dst=['/camera/camera/color/camera_info']),
+                         dst=[camera_name_str + 'color/camera_info']),
 
                 # Include the node container
                 load_composable_nodes

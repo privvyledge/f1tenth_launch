@@ -18,7 +18,7 @@ import pathlib
 import launch.actions
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import PushRosNamespace
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter, SetRemap
 
 
 def generate_launch_description():
@@ -35,6 +35,8 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_ekf_odom = LaunchConfiguration('use_ekf_odom')  # ekf_node, ukf_node
     use_ekf_map = LaunchConfiguration('use_ekf_map')  # ekf_node, ukf_node
+    publish_odom_tf = LaunchConfiguration('publish_odom_tf')
+    publish_map_tf = LaunchConfiguration('publish_map_tf')
     odom_frequency = LaunchConfiguration('odom_frequency')
     map_frequency = LaunchConfiguration('map_frequency')
     odom_node_name = LaunchConfiguration('odom_node_name')  # ekf_filter_node, ukf_filter_node
@@ -77,6 +79,14 @@ def generate_launch_description():
             'use_ekf_map', default_value='True',
             description='whether to use ekf. If false uses ukf instead')
 
+    declare_publish_odom_tf = DeclareLaunchArgument(
+            'publish_odom_tf', default_value='True',
+            description='whether to publish odometry tf')
+
+    declare_publish_map_tf = DeclareLaunchArgument(
+            'publish_map_tf', default_value='True',
+            description='whether to publish map tf')
+
     declare_odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency', default_value='100.0',
             description='Sensor fusion frequency')
@@ -100,6 +110,10 @@ def generate_launch_description():
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
         PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+        # Set common parameters
+        SetParameter(name='use_sim_time', value=use_sim_time),
+        SetRemap(src=['/tf'], dst=['tf']),
+        SetRemap(src=['/tf_static'], dst=['tf_static']),
 
         # Local/odom
         IncludeLaunchDescription(
@@ -113,8 +127,9 @@ def generate_launch_description():
                     'use_ekf': use_ekf_odom,
                     'frequency': odom_frequency,
                     'node_name': odom_node_name,
-                    'use_namespace': use_namespace,
-                    'namespace': namespace,
+                    'use_namespace': 'False',
+                    'namespace': '',
+                    'publish_tf': publish_odom_tf,
                 }.items()
         ),
 
@@ -130,8 +145,9 @@ def generate_launch_description():
                     'use_ekf': use_ekf_map,
                     'frequency': map_frequency,
                     'node_name': map_node_name,
-                    'use_namespace': use_namespace,
-                    'namespace': namespace,
+                    'use_namespace': 'False',
+                    'namespace': '',
+                    'publish_tf': publish_map_tf,
                 }.items()
         )
     ])
@@ -150,6 +166,8 @@ def generate_launch_description():
     ld.add_action(declare_map_params_file_cmd)
     ld.add_action(declare_kf_odom_type)
     ld.add_action(declare_kf_map_type)
+    ld.add_action(declare_publish_odom_tf)
+    ld.add_action(declare_publish_map_tf)
     ld.add_action(declare_odom_frequency_la)
     ld.add_action(declare_map_frequency_la)
     ld.add_action(declare_odom_node_name)
