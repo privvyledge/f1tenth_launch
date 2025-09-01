@@ -2,9 +2,8 @@
 Todo:
     * make this the main entry point
         * update and test namespaces and composition
-    * Setup mapping launch
-    * Setup nav2_navigation individual subsystem launching
-    * setup loglevel
+        * cleanup
+        * include mapping and optionally teleop launch
 """
 import os
 from launch import LaunchDescription, LaunchContext
