@@ -16,7 +16,7 @@ This node sets up local and global localization.
 import os
 import pathlib
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction, LogInfo
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition, UnlessCondition
@@ -26,6 +26,7 @@ from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode, ParameterFile
 from nav2_common.launch import RewrittenYaml, ReplaceString
 from ament_index_python import get_package_share_directory
+from ament_index_python.packages import PackageNotFoundError as ROS2PackageNotFoundError
 
 
 def launch_setup(context, *args, **kwargs):
@@ -44,6 +45,11 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file_path = os.path.join(f1tenth_launch_pkg_prefix, 'data', 'maps', 'rtabmap', 'rtabmap.db')
     # ekf_param_file = os.path.join(
     #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')
+    try:
+        particle_filter_config_file = os.path.join(
+                get_package_share_directory('particle_filter'), 'config', 'localize.yaml')
+    except ROS2PackageNotFoundError as e:
+        particle_filter_config_file = ''
 
     # declare launch configurations
     namespace = LaunchConfiguration('namespace', default='')
@@ -60,6 +66,8 @@ def launch_setup(context, *args, **kwargs):
     launch_sensor_fusion = LaunchConfiguration('launch_sensor_fusion', default=True)
     launch_ekf_odom = LaunchConfiguration('launch_ekf_odom', default=True)
     launch_ekf_map = LaunchConfiguration('launch_ekf_map', default=False)
+    launch_particle_filter = LaunchConfiguration('launch_particle_filter', default=False)
+    particle_filter_config = LaunchConfiguration('particle_filter_config', default=particle_filter_config_file)
     odom_frequency = LaunchConfiguration('odom_frequency', default=30.0)  # 50.0
     map_frequency = LaunchConfiguration('map_frequency', default=10.0)
     launch_rtabmap_localizer = LaunchConfiguration('launch_rtabmap_localizer', default=False)
@@ -129,6 +137,16 @@ def launch_setup(context, *args, **kwargs):
             'launch_ekf_map',
             default_value=launch_ekf_map,
             description='Whether to launch the global/map EKF/UKF node.'
+    )
+    launch_particle_filter_la = DeclareLaunchArgument(
+            'launch_particle_filter',
+            default_value=launch_particle_filter,
+            description='Whether to launch the particle filter node.'
+    )
+    particle_filter_config_la = DeclareLaunchArgument(
+            'particle_filter_config',
+            default_value=particle_filter_config,
+            description='Path to particle filter config file'
     )
     odom_frequency_la = DeclareLaunchArgument(
             'odom_frequency',
@@ -269,6 +287,7 @@ def launch_setup(context, *args, **kwargs):
     launch_amcl_str = launch_amcl.perform(context)
     map_file_str = map_file.perform(context)
     use_composition_str = use_composition.perform(context)
+    use_gpu_str = use_gpu.perform(context)
 
     # todo: also add pf node here
     lifecycle_nodes = ['map_server']
@@ -928,6 +947,53 @@ def launch_setup(context, *args, **kwargs):
             ]
     )
 
+    try:
+        particle_filter_package_share_dir = get_package_share_directory('particle_filter')
+        particle_filter_node = Node(
+                condition=IfCondition(launch_particle_filter),
+                package='particle_filter',
+                executable='particle_filter',
+                name='particle_filter',
+                output='screen',
+                namespace=namespace_str,
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[
+                    particle_filter_config,
+                    {
+                        'use_sim_time': use_sim_time,
+                        # rmgpu, pcddt, cddt, rm, glt, bl
+                        'range_method': 'rmgpu' if use_gpu_str.lower() == 'true' else 'pcddt',
+                        'rangelib_variant': 2 if use_gpu_str.lower() == 'true' else 4,
+                        # 'queue_size': 10,
+                        'global_frame_id': 'map',
+                        'base_frame_id': base_frame,
+                        'odom_frame_id': odom_frame,
+                        # 'scan_topic': scan_prefix_str + 'scan_filtered',
+                        # 'odometry_topic': 'odometry/local',
+                        'publish_odom': 1,  # whether to publish an odometry message
+                        'publish_map_to_odom_tf': True,
+                        'project_to_baselink': True,
+                        'static_laser_to_base_link': True,
+                        'tf_broadcast': True if map_tf_publisher_str.lower() == 'pf' else False,
+                        'transform_tolerance': 0.5,
+                        'set_initial_pose': True,
+                        'initial_pose.x': 0.0,
+                        'initial_pose.y': 0.0,
+                        'initial_pose.z': 0.0,
+                        'initial_pose.yaw': 0.0,
+                    }
+                ],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=[
+                    ('scan', scan_prefix_str + 'scan_filtered'),
+                    ('odom', 'odometry/local'),
+                    *remappings
+                ]
+        )
+    except ROS2PackageNotFoundError as e:
+        particle_filter_node = LogInfo(msg=f'Failed to launch particle filter node: {e}. Skipping...')
+
     # Create Launch Description and add nodes to the launch description
     ld = [
         stdout_linebuf_envvar,
@@ -972,6 +1038,9 @@ def launch_setup(context, *args, **kwargs):
         qos_rtabmap_la, qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
         camera_name_la,
         scan_prefix_la,
+        launch_particle_filter_la,
+        particle_filter_config_la,
+        particle_filter_node,
         # rf2o_odometry_node,
         # laser_scan_matcher_node
     ]

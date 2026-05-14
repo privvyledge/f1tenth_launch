@@ -606,7 +606,7 @@ def launch_setup(context, *args, **kwargs):
                 # PointcloudXYZRGBNode
                 SetRemap(src='rgb/camera_info', dst=camera_name_str + 'color/camera_info'),
                 SetRemap(src='rgb/image_rect_color', dst=rgb_image_topic),
-                SetRemap(src='depth_registered/image_rect', dst=camera_name_str + 'aligned_depth_to_color/image_raw'),
+                SetRemap(src='depth_registered/image_rect', dst=camera_name_str + 'aligned_depth_to_color/image_raw'),  # depth and rgb frame_ids must be the same
                 SetRemap(src='right/camera_info', dst=camera_name_str + 'infra2/camera_info'),
 
                 # DepthRegistrationNode

@@ -37,7 +37,7 @@ def launch_setup(context, *args, **kwargs):
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container', default='False')
     f1tenth_namespace = LaunchConfiguration('f1tenth_namespace',
                                             default='')  # used to distinguish between multiple F1/10s
-    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)  # True
+    use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=True)  # True
     use_sim_time = LaunchConfiguration('use_sim_time', default="False")
     use_gpu = LaunchConfiguration('use_gpu', default=True)
     launch_joystick = LaunchConfiguration('launch_joystick', default=True)
@@ -58,7 +58,7 @@ def launch_setup(context, *args, **kwargs):
     max_steering = LaunchConfiguration('max_steering', default=0.34)
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
-    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=200.0)
+    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)  # 200.0Hz
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
@@ -312,6 +312,8 @@ def launch_setup(context, *args, **kwargs):
     use_composition_string = use_composition.perform(context)
     attach_to_shared_component_container_string = attach_to_shared_component_container.perform(context)
     container_name_string = container_name.perform(context)
+    odom_tf_publisher_string = odom_tf_publisher.perform(context)
+    map_tf_publisher_string = map_tf_publisher.perform(context)
 
     if camera_name_string != '':
         camera_name_string += '/'
@@ -412,8 +414,8 @@ def launch_setup(context, *args, **kwargs):
                 "laserscan_launch_delay": laserscan_launch_delay,
                 "qos": realsense_qos,
                 "use_composition": use_composition,
-                "attach_to_shared_component_container": attach_to_shared_component_container,  # this launch file starts a container
-                "component_container_name": container_name if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'sensing_container',
+                "attach_to_shared_component_container": 'True' if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'False',  # this launch file starts a container
+                "component_container_name": container_name if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'sensing_container',
                 "intra_process_comms": 'True',
             }.items()
     )
@@ -455,7 +457,7 @@ def launch_setup(context, *args, **kwargs):
                             "namespace": f1tenth_namespace,
                             "use_namespace": use_f1tenth_namespace,
                             "camera_name": camera_name,
-                            "launch_sensor_fusion": 'True',
+                            "launch_sensor_fusion": 'True' if ('ekf' in map(str.lower, [odom_tf_publisher_string, map_tf_publisher_string])) else 'False',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
                             "odom_tf_publisher": odom_tf_publisher,  # ekf, vslam|stereo, icp, rgbd, pointcloud
@@ -467,6 +469,7 @@ def launch_setup(context, *args, **kwargs):
                             'launch_stereo_odometry': 'True',
                             'launch_laserscan_odometry': 'False',
                             'launch_amcl': launch_global_localization,
+                            'launch_particle_filter': 'False',  # launch_global_localization
                             # "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,

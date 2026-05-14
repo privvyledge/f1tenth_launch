@@ -1,6 +1,8 @@
 """
-Todo: setup imu corrector node name
-Todo: add bias estimation using AMCL and Odom. Any Odom and PoseWithCovarianceStamped message will suffice, e.g. NDT, VSLAM (https://github.com/autowarefoundation/autoware.universe/blob/main/sensing/imu_corrector/launch/gyro_bias_estimator.launch.xml | https://github.com/autowarefoundation/autoware.universe/tree/main/sensing/imu_corrector)
+Todo:
+    * replace Autoware's IMU tools with ROS2 imu_pipeline (https://github.com/ros-perception/imu_pipeline/tree/jazzy)
+    * setup imu corrector node name
+    * add bias estimation using AMCL and Odom. Any Odom and PoseWithCovarianceStamped message will suffice, e.g. NDT, VSLAM (https://github.com/autowarefoundation/autoware.universe/blob/main/sensing/imu_corrector/launch/gyro_bias_estimator.launch.xml | https://github.com/autowarefoundation/autoware.universe/tree/main/sensing/imu_corrector)
 """
 
 import os
