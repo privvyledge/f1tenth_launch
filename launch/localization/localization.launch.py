@@ -79,6 +79,7 @@ def launch_setup(context, *args, **kwargs):
     launch_stereo_odometry = LaunchConfiguration('launch_stereo_odometry', default='True')
     visual_slam_map_path = LaunchConfiguration('visual_slam_map_path', default='/mnt/data/maps/nvidia/vslam_map')
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
+    launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')  # RTABMap ICP; expensive, disabled by default in favour of rf2o
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
@@ -207,7 +208,11 @@ def launch_setup(context, *args, **kwargs):
 
     launch_laserscan_odometry_la = DeclareLaunchArgument(
             'launch_laserscan_odometry', default_value=launch_laserscan_odometry,
-            description='Whether to launch laserscan odometry.')
+            description='Whether to launch laserscan odometry (rf2o). Controls rf2o_odometry_node.')
+
+    launch_icp_odometry_la = DeclareLaunchArgument(
+            'launch_icp_odometry', default_value=launch_icp_odometry,
+            description='Whether to launch RTABMap ICP odometry (expensive). Disabled by default; rf2o is the preferred LiDAR odometry source.')
 
     launch_amcl_la = DeclareLaunchArgument(
             'launch_amcl', default_value=launch_amcl,
@@ -683,7 +688,7 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_icp_odometry = Node(
             package='rtabmap_odom',
             executable='icp_odometry',
-            condition=IfCondition(launch_laserscan_odometry),
+            condition=IfCondition(launch_icp_odometry),  # separate flag; disabled by default, rf2o is the active LiDAR odom source
             name='rtabmap_icp_odom',
             namespace=namespace_str,
             respawn=use_respawn,
@@ -732,7 +737,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{
                 'laser_scan_topic': scan_prefix_str + 'scan_filtered',
                 'odom_topic': 'odom/rf2o',
-                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
+                'publish_tf': True if odom_tf_publisher_str.lower() == 'rf2o' else False,
                 'base_frame_id': 'base_link',
                 'odom_frame_id': 'odom',
                 'init_pose_from_topic': '',
@@ -741,27 +746,27 @@ def launch_setup(context, *args, **kwargs):
             remappings=remappings,
     )
 
-    laser_scan_matcher_node = Node(
-            package='ros2_laser_scan_matcher',
-            executable='laser_scan_matcher',
-            condition=IfCondition(launch_laserscan_odometry),
-            name='laser_scan_matcher_node',
-            namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
-            output='screen',
-            parameters=[{
-                'publish_odom': 'odom/laser_scan_matcher',
-                'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
-                'laser_frame': 'lidar',
-                'base_frame': 'base_link',
-                'odom_frame': 'odom_laser_scan_matcher',
-                'map_frame': 'map',
-                'init_pose_from_topic': '',
-                'use_sim_time': use_sim_time,
-                'freq': 20.0}],
-            remappings=[('scan', 'scan'),
-                        ('odom', 'odom/laser_scan_matcher'),
-                        *remappings]
-    )
+    # laser_scan_matcher_node = Node(
+    #         package='ros2_laser_scan_matcher',
+    #         executable='laser_scan_matcher',
+    #         condition=IfCondition(launch_laserscan_odometry),
+    #         name='laser_scan_matcher_node',
+    #         namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+    #         output='screen',
+    #         parameters=[{
+    #             'publish_odom': 'odom/laser_scan_matcher',
+    #             'publish_tf': True if odom_tf_publisher_str.lower() == 'icp' else False,
+    #             'laser_frame': 'lidar',
+    #             'base_frame': 'base_link',
+    #             'odom_frame': 'odom_laser_scan_matcher',
+    #             'map_frame': 'map',
+    #             'init_pose_from_topic': '',
+    #             'use_sim_time': use_sim_time,
+    #             'freq': 20.0}],
+    #         remappings=[('scan', 'scan'),
+    #                     ('odom', 'odom/laser_scan_matcher'),
+    #                     *remappings]
+    # )
 
     # RTabMap Group
     rtabmap_group = GroupAction(
@@ -1004,6 +1009,7 @@ def launch_setup(context, *args, **kwargs):
         launch_stereo_odometry_la,
         visual_slam_map_path_la,
         launch_laserscan_odometry_la,
+        launch_icp_odometry_la,
         launch_amcl_la,
         odom_tf_publisher_la,
         map_tf_publisher_la,
@@ -1032,7 +1038,8 @@ def launch_setup(context, *args, **kwargs):
         odom_frame_la,
         use_gpu_la,
         rtabmap_group,
-        rtabmap_icp_odometry,  # separate from rtabmap group due to different parameters
+        rtabmap_icp_odometry,  # separate from rtabmap group; controlled by launch_icp_odometry (default False)
+        rf2o_odometry_node,    # cheap range-flow LiDAR odometry; feeds EKF odom2 via odom/rf2o
         kiss_icp_node,
         gpu_group,
         qos_rtabmap_la, qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
@@ -1041,7 +1048,6 @@ def launch_setup(context, *args, **kwargs):
         launch_particle_filter_la,
         particle_filter_config_la,
         particle_filter_node,
-        # rf2o_odometry_node,
         # laser_scan_matcher_node
     ]
 

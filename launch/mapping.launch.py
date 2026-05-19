@@ -67,8 +67,8 @@ def launch_setup(context, *args, **kwargs):
                                             default='')  # used to distinguish between multiple F1/10s
     use_f1tenth_namespace = LaunchConfiguration('use_f1tenth_namespace', default=False)
     map_file = LaunchConfiguration('map_file', default=map_file_path)
-    use_sim_time = LaunchConfiguration('use_sim_time', default=True)
-    use_gpu = LaunchConfiguration('use_gpu', default=False)
+    use_sim_time = LaunchConfiguration('use_sim_time', default=False)  # set True for offline/rosbag playback
+    use_gpu = LaunchConfiguration('use_gpu', default=False)  # False=RTABMap (CPU), True=Nvblox (GPU); bringup.launch.py defaults to True
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     container_name = LaunchConfiguration('container_name', default='f1tenth_container')
@@ -80,6 +80,8 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default='False')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
@@ -195,6 +197,14 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+    odom_tf_publisher_arg = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='Node responsible for publishing the odom->base_link TF. '
+                        'Options: ekf, vslam|stereo, rf2o, icp, rgbd, pointcloud, rtabmap.')
+    map_tf_publisher_arg = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='Node responsible for publishing the map->odom TF. '
+                        'Options: amcl, pf, ekf, vslam, rtabmap, slam.')
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
@@ -380,6 +390,8 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        odom_tf_publisher_arg,
+        map_tf_publisher_arg,
         launch_visualization_arg,
         rviz_config_arg,
         launch_2d_mapping_arg,
@@ -445,7 +457,7 @@ def launch_setup(context, *args, **kwargs):
             )
 
             if f1tenth_namespace.perform(context) == '':
-                raise NameError(
+                raise RuntimeError(
                         'The launch argument "use_f1tenth_namespace" was set to "true" '
                         'but the launch argument "f1tenth_namespace" is empty. '
                         'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
@@ -497,6 +509,8 @@ def launch_setup(context, *args, **kwargs):
                 "launch_localization": launch_localization,
                 "launch_local_localization": launch_local_localization,
                 "launch_global_localization": launch_global_localization,
+                "odom_tf_publisher": odom_tf_publisher,
+                "map_tf_publisher": map_tf_publisher,
                 "launch_visualization": 'False',
                 "rviz_config_file": rviz_config_file,
                 "deadman_buttons": deadman_buttons,

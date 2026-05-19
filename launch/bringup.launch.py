@@ -57,7 +57,7 @@ def launch_setup(context, *args, **kwargs):
     slam = LaunchConfiguration('slam', default=False)
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
-    use_gpu = LaunchConfiguration('use_gpu', default=True)
+    use_gpu = LaunchConfiguration('use_gpu', default=True)  # True=Nvblox (GPU), False=RTABMap (CPU); mapping.launch.py defaults to False
     params_file = LaunchConfiguration('params_file',
                                       default=nav2_params_file_path)
     autostart = LaunchConfiguration('autostart', default='True')
@@ -73,6 +73,8 @@ def launch_setup(context, *args, **kwargs):
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
@@ -91,7 +93,7 @@ def launch_setup(context, *args, **kwargs):
     max_steering = LaunchConfiguration('max_steering', default=0.34)
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
-    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=200.0)
+    vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
@@ -232,6 +234,14 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+    odom_tf_publisher_arg = DeclareLaunchArgument(
+            'odom_tf_publisher', default_value=odom_tf_publisher,
+            description='Node responsible for publishing the odom->base_link TF. '
+                        'Options: ekf, vslam|stereo, rf2o, icp, rgbd, pointcloud, rtabmap.')
+    map_tf_publisher_arg = DeclareLaunchArgument(
+            'map_tf_publisher', default_value=map_tf_publisher,
+            description='Node responsible for publishing the map->odom TF. '
+                        'Options: amcl, pf, ekf, vslam, rtabmap, slam.')
     launch_navigation_arg = DeclareLaunchArgument('launch_navigation',
                                                   default_value=launch_navigation,
                                                   description="Launch the navigation.")
@@ -417,6 +427,8 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        odom_tf_publisher_arg,
+        map_tf_publisher_arg,
         launch_navigation_arg,
         launch_visualization_arg,
         rviz_config_arg,
@@ -461,7 +473,7 @@ def launch_setup(context, *args, **kwargs):
             )
 
             if f1tenth_namespace.perform(context) == '':
-                raise NameError(
+                raise RuntimeError(
                         'The launch argument "use_f1tenth_namespace" was set to "true" '
                         'but the launch argument "f1tenth_namespace" is empty. '
                         'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
@@ -579,8 +591,8 @@ def launch_setup(context, *args, **kwargs):
                                         "launch_sensor_fusion": 'True',
                                         "launch_ekf_odom": launch_local_localization,
                                         "launch_ekf_map": launch_global_localization,
-                                        "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
-                                        "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
+                                        "odom_tf_publisher": odom_tf_publisher,
+                                        "map_tf_publisher": map_tf_publisher,
                                         "launch_slam_toolbox_localizer": 'False',
                                         "launch_rtabmap_localizer": 'False',
                                         'launch_pointcloud_odometry': 'False',
@@ -639,8 +651,8 @@ def launch_setup(context, *args, **kwargs):
                                                       "launch_tfs": 'False',
                                                       "launch_localization": 'False',
                                                       "launch_local_localization": 'False',
-                                                      # "odom_tf_publisher": "ekf",  # ekf, vslam|stereo, icp, rgbd, pointcloud
-                                                      # "map_tf_publisher": "amcl",  # amcl, ekf, vslam.
+                                                      # "odom_tf_publisher": odom_tf_publisher,
+                                                      # "map_tf_publisher": map_tf_publisher,
                                                       "launch_global_localization": 'False',
                                                       "launch_visualization": 'True',
                                                       # "rviz_config_file": rviz_config_file,

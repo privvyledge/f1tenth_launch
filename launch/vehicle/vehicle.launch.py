@@ -35,7 +35,7 @@ def generate_launch_description():
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
 
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
-    max_steering_rate = LaunchConfiguration('max_servo_rate', default=3.2)
+    max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
 
     vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)
 

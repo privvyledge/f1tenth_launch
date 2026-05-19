@@ -133,7 +133,7 @@ def launch_setup(context, *args, **kwargs):
     odom_tf_publisher_la = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
             description='The node responsible for publishing the odometry tf. '
-                        'Options: ekf, vslam|stereo, icp, rgbd, pointcloud, rtabmap.')
+                        'Options: ekf, vslam|stereo, rf2o, icp, rgbd, pointcloud, rtabmap.')
 
     map_tf_publisher_la = DeclareLaunchArgument(
             'map_tf_publisher', default_value=map_tf_publisher,
@@ -388,7 +388,11 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'ackermann_mux.launch.py'])
             ),
-            condition=IfCondition(launch_joystick)
+            condition=IfCondition(launch_joystick),
+            launch_arguments={
+                'use_f1tenth_namespace': use_f1tenth_namespace,
+                'f1tenth_namespace': f1tenth_namespace,
+            }.items()
     )
 
     sensors_launch = IncludeLaunchDescription(

@@ -13,6 +13,11 @@ import os
 
 def generate_launch_description():
     f1tenth_launch_dir = get_package_share_directory('f1tenth_launch')
+    joy_config_file = os.path.join(
+            f1tenth_launch_dir,
+            'config/vehicle',
+            'joy_config.yaml'
+    )
     joy_teleop_config_file = os.path.join(
             f1tenth_launch_dir,
             'config/vehicle',
@@ -20,6 +25,7 @@ def generate_launch_description():
     )
 
     joy_config = LaunchConfiguration('joy_config')
+    joy_teleop_config = LaunchConfiguration('joy_teleop_config')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
@@ -27,8 +33,13 @@ def generate_launch_description():
 
     joy_la = DeclareLaunchArgument(
             'joy_config',
+            default_value=joy_config_file,
+            description='Path to joy node config (device_id, deadzone, autorepeat_rate)')
+
+    joy_teleop_la = DeclareLaunchArgument(
+            'joy_teleop_config',
             default_value=joy_teleop_config_file,
-            description='Descriptions for joy and joy_teleop configs')
+            description='Path to joy_teleop node config (axis mappings, deadman buttons)')
 
     deadman_buttons_la = DeclareLaunchArgument(
             'deadman_buttons',
@@ -50,7 +61,7 @@ def generate_launch_description():
             default_value=max_steering,
             description='The maximum steering angle in rads.')
 
-    ld = LaunchDescription([joy_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
+    ld = LaunchDescription([joy_la, joy_teleop_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
 
     joy_node = Node(
             package='joy',
@@ -70,7 +81,7 @@ def generate_launch_description():
             executable='joy_teleop',
             name='joy_teleop',
             parameters=[
-                joy_config,
+                joy_teleop_config,
                 {
                     'human_control.deadman_buttons': deadman_buttons,
                     'human_control.axis_mappings.drive-steering_angle.axis': steering_button,

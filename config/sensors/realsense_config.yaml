@@ -47,13 +47,13 @@
       emitter_on_off: False  # Overridden by launch files
 
     pointcloud:
-      ordered_pc: true
+      ordered_pc: false  # true; costmaps/clustering don't require ordered clouds, removes per-packet CPU sort
       stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud, 3=infrared
       stream_index_filter: 0
       allow_no_texture_points: false # true
 
-    gyro_fps: 200 # 200, 400
-    accel_fps: 200 # 100, 200
+    gyro_fps: 100 # 200, 400; 100 Hz is sufficient for EKF at 30 Hz
+    accel_fps: 100 # 200; halves IMU demux rate
     unite_imu_method: 2  # 0: no unified imu message, 1: copy, 2: linear interpolation
     angular_velocity_cov: 0.01
     linear_accel_cov: 0.01
@@ -62,10 +62,10 @@
 #    tf_publish_rate: 200.0
     clip_distance: 6.0  # meters
 
-#    # Enable post-processing filters
-#    decimation_filter:
-#      enable: false
-#      filter_magnitude: 2
+    # Enable post-processing filters
+    decimation_filter:
+      enable: true  # halves depth resolution before publishing; downstream uses same depth at half the pixels
+      filter_magnitude: 2
 #    spatial_filter:
 #      enable: false
 #    temporal_filter:
