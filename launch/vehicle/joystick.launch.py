@@ -26,6 +26,7 @@ def generate_launch_description():
 
     joy_config = LaunchConfiguration('joy_config')
     joy_teleop_config = LaunchConfiguration('joy_teleop_config')
+    require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
@@ -41,10 +42,16 @@ def generate_launch_description():
             default_value=joy_teleop_config_file,
             description='Path to joy_teleop node config (axis mappings, deadman buttons)')
 
+    require_deadman_la = DeclareLaunchArgument(
+            'require_deadman',
+            default_value='True',
+            description='Require a deadman button (L1/LB) to be held to arm actuators. '
+                        'Set False to disable the safety interlock.')
+
     deadman_buttons_la = DeclareLaunchArgument(
             'deadman_buttons',
             default_value=deadman_buttons,
-            description='Buttons used to arm the vehicle actuators.')
+            description='Buttons used to arm the vehicle actuators. Ignored when require_deadman:=False.')
 
     steering_button_la = DeclareLaunchArgument(
             'steering_button',
@@ -61,7 +68,11 @@ def generate_launch_description():
             default_value=max_steering,
             description='The maximum steering angle in rads.')
 
-    ld = LaunchDescription([joy_la, joy_teleop_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
+    # When require_deadman=False, pass an empty list so joy_teleop fires without any held button.
+    effective_deadman_buttons = PythonExpression(
+            ["'[]' if '", require_deadman, "' == 'False' else '", deadman_buttons, "'"])
+
+    ld = LaunchDescription([joy_la, joy_teleop_la, require_deadman_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
 
     joy_node = Node(
             package='joy',
@@ -83,7 +94,7 @@ def generate_launch_description():
             parameters=[
                 joy_teleop_config,
                 {
-                    'human_control.deadman_buttons': deadman_buttons,
+                    'human_control.deadman_buttons': effective_deadman_buttons,
                     'human_control.axis_mappings.drive-steering_angle.axis': steering_button,
                     'human_control.axis_mappings.drive-speed.scale': max_speed,  # max speed in m/s
                     'human_control.axis_mappings.drive-steering_angle.scale': max_steering,  # max steering in rads

@@ -364,7 +364,7 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          inf_is_valid: true  # ydlidar invalid_range_is_inf: true; inf = free-space ray, not phantom obstacle
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
 #          observation_persistence: 0.5
         depth_scan:
@@ -378,7 +378,7 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          inf_is_valid: false  # RealSense depth-to-scan; verify if depth pipeline produces inf before changing
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
           observation_persistence: 0.5
 #      voxel_layer:  # voxel layer is for 3D data/sensors, e.g pointclouds
@@ -471,7 +471,7 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          inf_is_valid: true  # ydlidar invalid_range_is_inf: true; inf = free-space ray, not phantom obstacle
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
 #          observation_persistence: 0.5
         depth_scan:
@@ -485,7 +485,7 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          inf_is_valid: false  # todo: check for all sensors and set to true if inf exists
+          inf_is_valid: false  # RealSense depth-to-scan; verify if depth pipeline produces inf before changing
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
           observation_persistence: 0.5
 #      nonpersisting_obstacle_layer:  # voxel layers are for efficient 3D representation, i.e 3D sensors

@@ -18,5 +18,6 @@ docker run -it --runtime nvidia --privileged --network host \
     -e DISPLAY=$DISPLAY \
     --env="XAUTHORITY=${XAUTH}" \
     -v /dev:/dev \
+    -v /usr/lib/aarch64-linux-gnu/nvidia:/usr/lib/aarch64-linux-gnu/nvidia:ro \
     --mount type=volume,dst=/f1tenth_ws,volume-driver=local,volume-opt=type=none,volume-opt=o=bind,volume-opt=device=$HOME/f1tenth_ws \
     privvyledge/f1tenth:foxy-dev

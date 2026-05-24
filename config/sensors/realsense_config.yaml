@@ -29,18 +29,20 @@
     enable_confidence: false
     enable_pose: false
 
+    # tip: if not using Pointcloud, increase the resolutions
+    # tip: reduce to 640x360x30 if CPU utilization is too high (reducing resolution and/or fps leads to lower utilization)
     rgb_camera:
-      profile: "640x360x30"   # warning: depracated. Use color_profile instead
-      color_profile: "640x360x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
-      color_format: "BGR8"
+      profile: "848x480x60"   # warning: depracated. Use color_profile instead
+      color_profile: "848x480x60"  # 640x360x60, 640x360x30, 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      color_format: "RGB8"  # RGB8, BGR8, etc. Note that to generate colored pointclouds, RGB8 must be used. Other formats will lead to "No stream match for pointcloud chosen texture Process - Color" errors
       enable_auto_exposure: true
 
     depth_module:
-      profile: "640x360x30"  # warning: depracated. Use depth_profile and infra_profile instead
-      depth_profile: "640x360x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      profile: "848x480x60"  # warning: depracated. Use depth_profile and infra_profile instead
+      depth_profile: "848x480x60"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
       depth_format: "Z16"
       enable_auto_exposure: true
-      infra_profile: "640x360x30"
+      infra_profile: "848x480x60"
       infra1_format: "Y8"
       infra2_format: "Y8"
       emitter_enabled: 0  # set to 0 if using infra.  Overridden by launch files
@@ -50,10 +52,10 @@
       ordered_pc: false  # true; costmaps/clustering don't require ordered clouds, removes per-packet CPU sort
       stream_filter: 2  #  2=colorized pointcloud [recommended], 0=plain white pointcloud, 3=infrared
       stream_index_filter: 0
-      allow_no_texture_points: false # true
+      allow_no_texture_points: true # true
 
-    gyro_fps: 100 # 200, 400; 100 Hz is sufficient for EKF at 30 Hz
-    accel_fps: 100 # 200; halves IMU demux rate
+    gyro_fps: 200 # D435i gyro only supports 200 and 400 Hz;
+    accel_fps: 200 # 200; 100 or 200
     unite_imu_method: 2  # 0: no unified imu message, 1: copy, 2: linear interpolation
     angular_velocity_cov: 0.01
     linear_accel_cov: 0.01
@@ -62,10 +64,10 @@
 #    tf_publish_rate: 200.0
     clip_distance: 6.0  # meters
 
-    # Enable post-processing filters
-    decimation_filter:
-      enable: true  # halves depth resolution before publishing; downstream uses same depth at half the pixels
-      filter_magnitude: 2
+#    # Enable post-processing filters
+#    decimation_filter:
+#      enable: true  # halves depth resolution before publishing; downstream uses same depth at half the pixels
+#      filter_magnitude: 2
 #    spatial_filter:
 #      enable: false
 #    temporal_filter:

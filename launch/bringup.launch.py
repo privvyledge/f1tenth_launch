@@ -87,6 +87,7 @@ def launch_setup(context, *args, **kwargs):
     map_2d_file = LaunchConfiguration('default_2d_map_file', default=default_2d_map_file_path)
     rtabmap_database_file = LaunchConfiguration('rtabmap_database_file', default=rtabmap_database_file_path)
 
+    require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
@@ -94,6 +95,21 @@ def launch_setup(context, *args, **kwargs):
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
     vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)
+    vesc_imu_poll_rate = LaunchConfiguration('vesc_imu_poll_rate', default=100.0)
+    use_imu_yaw_rate = LaunchConfiguration('use_imu_yaw_rate', default='False')
+    use_closed_loop_speed = LaunchConfiguration('use_closed_loop_speed', default='False')
+    speed_kp = LaunchConfiguration('speed_kp', default=0.0)
+    speed_ki = LaunchConfiguration('speed_ki', default=0.0)
+    speed_anti_windup = LaunchConfiguration('speed_anti_windup', default=1000.0)
+    use_adaptive_ff = LaunchConfiguration('use_adaptive_ff', default='False')
+    adaptive_ff_alpha = LaunchConfiguration('adaptive_ff_alpha', default=0.95)
+    adaptive_ff_gain_min = LaunchConfiguration('adaptive_ff_gain_min', default=2307.0)
+    adaptive_ff_gain_max = LaunchConfiguration('adaptive_ff_gain_max', default=9228.0)
+    vesc_max_speed = LaunchConfiguration('vesc_max_speed', default=0.0)
+    vesc_max_steering_angle = LaunchConfiguration('vesc_max_steering_angle', default=0.0)
+    use_accel_ff = LaunchConfiguration('use_accel_ff', default='False')
+    accel_to_erpm_gain = LaunchConfiguration('accel_to_erpm_gain', default=0.0)
+    use_cmd_accel_rate_limit = LaunchConfiguration('use_cmd_accel_rate_limit', default='False')
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
@@ -282,10 +298,16 @@ def launch_setup(context, *args, **kwargs):
                                                      default_value=rtabmap_database_file,
                                                      description="Path to the config file for the 3D mapping node.")
 
+    require_deadman_la = DeclareLaunchArgument(
+            'require_deadman',
+            default_value='True',
+            description='Require a deadman button (L1/LB) to be held to arm actuators. '
+                        'Set False to disable the safety interlock.')
+
     deadman_buttons_la = DeclareLaunchArgument(
             'deadman_buttons',
             default_value=deadman_buttons,
-            description='Buttons used to arm the vehicle actuators.')
+            description='Buttons used to arm the vehicle actuators. Ignored when require_deadman:=False.')
 
     steering_button_la = DeclareLaunchArgument(
             'steering_button',
@@ -316,6 +338,57 @@ def launch_setup(context, *args, **kwargs):
             'vesc_poll_rate',
             default_value=vesc_poll_rate,
             description='The frequency at which to send/receive messages from/to the VESC.')
+
+    vesc_imu_poll_rate_la = DeclareLaunchArgument(
+            'vesc_imu_poll_rate',
+            default_value=vesc_imu_poll_rate,
+            description='The frequency at which to poll IMU data from the VESC.')
+
+    use_imu_yaw_rate_la = DeclareLaunchArgument(
+            'use_imu_yaw_rate',
+            default_value='False',
+            description='Use gyro-z from sensors/imu/raw for yaw integration in vesc_to_odom '
+                        'instead of the kinematic model.')
+
+    use_closed_loop_speed_la = DeclareLaunchArgument(
+            'use_closed_loop_speed', default_value='False',
+            description='Use closed-loop PID speed control in ackermann_to_vesc.')
+    speed_kp_la = DeclareLaunchArgument(
+            'speed_kp', default_value=speed_kp,
+            description='Proportional gain for the closed-loop speed controller.')
+    speed_ki_la = DeclareLaunchArgument(
+            'speed_ki', default_value=speed_ki,
+            description='Integral gain for the closed-loop speed controller.')
+    speed_anti_windup_la = DeclareLaunchArgument(
+            'speed_anti_windup', default_value=speed_anti_windup,
+            description='Anti-windup clamp (ERPM) for the speed integrator.')
+    use_adaptive_ff_la = DeclareLaunchArgument(
+            'use_adaptive_ff', default_value='False',
+            description='Enable adaptive feedforward gain in ackermann_to_vesc.')
+    adaptive_ff_alpha_la = DeclareLaunchArgument(
+            'adaptive_ff_alpha', default_value=adaptive_ff_alpha,
+            description='Low-pass filter coefficient for the adaptive feedforward gain.')
+    adaptive_ff_gain_min_la = DeclareLaunchArgument(
+            'adaptive_ff_gain_min', default_value=adaptive_ff_gain_min,
+            description='Minimum adaptive feedforward gain (ERPM/(m/s)).')
+    adaptive_ff_gain_max_la = DeclareLaunchArgument(
+            'adaptive_ff_gain_max', default_value=adaptive_ff_gain_max,
+            description='Maximum adaptive feedforward gain (ERPM/(m/s)).')
+    vesc_max_speed_la = DeclareLaunchArgument(
+            'vesc_max_speed', default_value=vesc_max_speed,
+            description='Speed clamp in ackermann_to_vesc (m/s). 0 disables the limit.')
+    vesc_max_steering_angle_la = DeclareLaunchArgument(
+            'vesc_max_steering_angle', default_value=vesc_max_steering_angle,
+            description='Steering angle clamp in ackermann_to_vesc (rad). 0 disables the limit.')
+    use_accel_ff_la = DeclareLaunchArgument(
+            'use_accel_ff', default_value='False',
+            description='Use acceleration feedforward in ackermann_to_vesc.')
+    accel_to_erpm_gain_la = DeclareLaunchArgument(
+            'accel_to_erpm_gain', default_value=accel_to_erpm_gain,
+            description='Gain mapping acceleration (m/s^2) to ERPM for feedforward.')
+    use_cmd_accel_rate_limit_la = DeclareLaunchArgument(
+            'use_cmd_accel_rate_limit', default_value='False',
+            description='Rate-limit acceleration commands before sending to the VESC.')
 
     declare_launch_ackermann_to_vesc_node = DeclareLaunchArgument(
             'launch_ackermann_to_vesc_node',
@@ -439,8 +512,13 @@ def launch_setup(context, *args, **kwargs):
         online_mapping_2d_param_file_la,
         map_2d_file_la,
         rtabmap_database_file_la,
-        deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la,
+        require_deadman_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la,
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
+        vesc_imu_poll_rate_la, use_imu_yaw_rate_la,
+        use_closed_loop_speed_la, speed_kp_la, speed_ki_la, speed_anti_windup_la,
+        use_adaptive_ff_la, adaptive_ff_alpha_la, adaptive_ff_gain_min_la, adaptive_ff_gain_max_la,
+        vesc_max_speed_la, vesc_max_steering_angle_la,
+        use_accel_ff_la, accel_to_erpm_gain_la, use_cmd_accel_rate_limit_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node,
         camera_name_la,
@@ -505,6 +583,7 @@ def launch_setup(context, *args, **kwargs):
             ),
             condition=IfCondition(launch_joystick),
             launch_arguments={
+                "require_deadman": require_deadman,
                 "deadman_buttons": deadman_buttons,
                 "steering_button": steering_button,
                 "max_speed": max_speed,
@@ -558,6 +637,21 @@ def launch_setup(context, *args, **kwargs):
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
                 "vesc_poll_rate": vesc_poll_rate,
+                "vesc_imu_poll_rate": vesc_imu_poll_rate,
+                "use_imu_yaw_rate": use_imu_yaw_rate,
+                "use_closed_loop_speed": use_closed_loop_speed,
+                "speed_kp": speed_kp,
+                "speed_ki": speed_ki,
+                "speed_anti_windup": speed_anti_windup,
+                "use_adaptive_ff": use_adaptive_ff,
+                "adaptive_ff_alpha": adaptive_ff_alpha,
+                "adaptive_ff_gain_min": adaptive_ff_gain_min,
+                "adaptive_ff_gain_max": adaptive_ff_gain_max,
+                "vesc_max_speed": vesc_max_speed,
+                "vesc_max_steering_angle": vesc_max_steering_angle,
+                "use_accel_ff": use_accel_ff,
+                "accel_to_erpm_gain": accel_to_erpm_gain,
+                "use_cmd_accel_rate_limit": use_cmd_accel_rate_limit,
             }.items()
     )
 

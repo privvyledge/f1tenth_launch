@@ -31,9 +31,38 @@
     use_servo_cmd_to_calc_angular_velocity: true
     # car wheelbase is about 25cm
     wheelbase: .25
+    # publish AckermannDriveStamped actuator state (speed, steering, accel, jerk) on sensors/actuator_feedback
+    publish_actuator_feedback: false
+    # use gyro-z from sensors/imu/raw for yaw integration instead of kinematic model
+    use_imu_yaw_rate: false
+    imu_yaw_invert: false
+    # odometry covariance diagonals: [x, y, z, roll, pitch, yaw]
+    # z/roll/pitch set to 1e9 (unobservable on a ground vehicle)
+    odom_pose_covariance_diagonal: [0.05, 0.05, 1.0e9, 1.0e9, 1.0e9, 0.1]
+    # vy set to 0.1 (lateral velocity inferred, not directly measured)
+    odom_twist_covariance_diagonal: [0.01, 0.1, 1.0e9, 1.0e9, 1.0e9, 0.05]
 
     # USB polling rate, i.e IMU and odometry update rate
     poll_rate: 50.0  # default: 50.0
+    imu_poll_rate: 100.0  # default: 100.0
+    imu_frame: imu_link
+    # IMU covariance matrices (9-element row-major 3x3; diagonal only — axes are independent)
+    # set a diagonal element to -1 to signal "not measured" to robot_localization
+    # units: rad^2 for orientation, (rad/s)^2 for angular velocity, (m/s^2)^2 for linear accel
+    imu_orientation_covariance: [0.001, 0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 0.005]
+    imu_angular_velocity_covariance: [0.001, 0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 0.001]
+    imu_linear_accel_covariance: [0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01]
+
+    # ackermann_to_vesc: closed-loop PI speed control (disabled by default)
+    use_closed_loop_speed: false
+    speed_kp: 0.0
+    speed_ki: 0.0
+    speed_anti_windup: 1000.0
+    # ackermann_to_vesc: adaptive feedforward gain (disabled by default)
+    use_adaptive_ff: false
+    adaptive_ff_alpha: 0.95
+    adaptive_ff_gain_min: 1875.0  # speed_to_erpm_gain * 0.5
+    adaptive_ff_gain_max: 7500.0  # speed_to_erpm_gain * 2.0
 
 #throttle_interpolator:
 #  ros__parameters:

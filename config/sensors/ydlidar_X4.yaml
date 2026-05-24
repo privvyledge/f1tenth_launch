@@ -13,11 +13,11 @@
     inverted: true
     auto_reconnect: true
     isSingleChannel: false
-    intensity: false
+    intensity: true   # enables triangulation quality signal; used by intensity filter in laser_filter.yaml
     support_motor_dtr: true
     angle_max: 180.0
     angle_min: -180.0
-    range_max: 12.0  # this should be 10
-    range_min: 0.1  # this should be 0.12
-    frequency: 10.0
-    invalid_range_is_inf: false
+    range_max: 10.0   # X4 spec max; was 12.0 (out-of-spec returns caused phantom obstacles)
+    range_min: 0.12   # X4 blind spot limit; was 0.1 (0.10–0.12m produced ghost returns at origin)
+    frequency: 12.0   # request 12 Hz; observed ~8 Hz on Jetson Orin Nano due to USB/CPU overhead
+    invalid_range_is_inf: true  # out-of-range returns → inf (not 0.0); fixes particle_filter and slam_toolbox occupancy grid

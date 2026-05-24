@@ -1,33 +1,54 @@
 /**:
   ros__parameters:
-    filter1:
-      name: box_filter  # to remove parts of the car, e.g antennae from the laserscan
-      type: laser_filters/LaserScanBoxFilter
-      params:
-        box_frame: lidar  # lidar, sensor_kit_link, base_link
-        max_x: 0.246 # 0.3302 (for base_link frame)
-        max_y: 0.1016
-        max_z: 0.5
-        min_x: -0.2 # -0.0562 (for base_link frame)
-        min_y: -0.1016
-        min_z: -0.5
+    # Intensity filter: removes low-quality returns caused by poor triangulation (multipath,
+    # near-range scatter, dark/reflective surfaces). Requires intensity: true in ydlidar_X4.yaml.
+    #
+    # Tuning procedure:
+    #   1. Enable intensity in ydlidar_X4.yaml (already done).
+    #   2. Run: ros2 topic echo /lidar/scan | grep -A2 intensities
+    #      to observe the intensity range; valid returns are typically 100–255 for X4.
+    #   3. Start with lower_threshold: 100, increase until phantom returns disappear without
+    #      losing real walls. Check with: ros2 run rviz2 rviz2 (add LaserScan /lidar/scan_filtered).
+    #   4. upper_threshold: 65535 keeps all strong returns; lower only if specular spikes appear.
+#    filter1:
+#      name: intensity_filter
+#      type: laser_filters/LaserScanIntensityFilter
+#      params:
+#        lower_threshold: 100
+#        upper_threshold: 65535
+#        invert: false
 
-        invert: false # activate to remove all points outside of the box
-
+    # Box filter: removes returns from the vehicle chassis/antennae.
+    # DISABLED — LiDAR was relocated and no longer scans the chassis.
+    # Re-enable and retune dimensions if body returns reappear.
+    # Note: invert: false removes points INSIDE the box; invert: true removes points OUTSIDE.
 #    filter2:
-#      name: box_filter  # to remove parts outside of a specified range, e.g the max laser range
+#      name: box_filter
 #      type: laser_filters/LaserScanBoxFilter
 #      params:
 #        box_frame: lidar
-#        max_x: 12.0
-#        max_y: 12.0
+#        max_x: 0.246
+#        max_y: 0.1016
 #        max_z: 0.5
-#        min_x: -12.0
-#        min_y: -12.0
+#        min_x: -0.2
+#        min_y: -0.1016
 #        min_z: -0.5
-#
-#        invert: true # activate to remove all points outside of the box
+#        invert: false
 
+    # Range clamp: removes returns outside the sensor's reliable range (matches ydlidar_X4.yaml).
 #    filter3:
+#      name: range_clamp
+#      type: laser_filters/LaserScanBoxFilter
+#      params:
+#        box_frame: lidar
+#        max_x: 10.0
+#        max_y: 10.0
+#        max_z: 0.5
+#        min_x: -10.0
+#        min_y: -10.0
+#        min_z: -0.5
+#        invert: true  # removes all points OUTSIDE this box
+
+#    filter4:
 #      name: interpolation
 #      type: laser_filters/InterpolationFilter

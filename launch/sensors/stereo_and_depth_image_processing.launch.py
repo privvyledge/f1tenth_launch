@@ -193,6 +193,9 @@ def launch_setup(context, *args, **kwargs):
     qos_str = qos.perform(context)
     use_gpu_str = use_gpu.perform(context)
     depth_image_topic_str = depth_image_topic.perform(context)
+    rgb_image_topic_str = rgb_image_topic.perform(context)
+    left_image_topic_str = left_image_topic.perform(context)
+    right_image_topic_str = right_image_topic.perform(context)
     if camera_name_str != '':
         camera_name_str += '/'
 
@@ -661,8 +664,10 @@ def launch_setup(context, *args, **kwargs):
                 SetRemap(src='depth', dst=camera_name_str + 'depth_from_disparity'),
                 SetRemap(src='depth_raw', dst=camera_name_str + 'depth_from_disparity_raw'),
 
-                # rtabmap_depth_to_pointcloud_xyz
-                SetRemap(src='depth/image', dst=depth_image_topic, condition=IfCondition(depthimage_to_pointcloud)),  # common with xyzrgb
+                # rtabmap_depth_to_pointcloud_xyz / xyzrgb (depth mode)
+                # SetRemap conditions inside GroupAction are unreliable in ROS2 Humble — use resolved strings, no condition.
+                # Both depth and stereo remaps are always applied; only the set with active publishers produces output.
+                SetRemap(src='depth/image', dst=depth_image_topic_str),  # common with xyzrgb
                 # SetRemap(src='disparity/image', dst='disparity'),
                 # use either: aligned_depth_to_color/camera_info, depth/camera_info
                 SetRemap(src='depth/camera_info', dst=camera_name_str + depth_camera_info),
@@ -670,13 +675,13 @@ def launch_setup(context, *args, **kwargs):
                 # cloud is common to xyzrgb and obstacles and registration nodes
                 SetRemap(src='cloud', dst=camera_name_str + 'downsampled_cloud_from_depth'),
 
-                # rtabmap_depth_to_pointcloud_xyzrgb. Uncomment left/right to use stereo (and comment out rgb/depth).
-                SetRemap(src='rgb/image', dst=rgb_image_topic, condition=IfCondition(depthimage_to_pointcloud)),
-                SetRemap(src='rgb/camera_info', dst=camera_name_str + 'color/camera_info', condition=IfCondition(depthimage_to_pointcloud)),
-                SetRemap(src='left/image', dst=left_image_topic, condition=IfCondition(stereo_to_pointcloud)),
-                SetRemap(src='left/camera_info', dst=camera_name_str + 'infra1/camera_info', condition=IfCondition(stereo_to_pointcloud)),
-                SetRemap(src='right/image', dst=right_image_topic, condition=IfCondition(stereo_to_pointcloud)),
-                SetRemap(src='right/camera_info', dst=camera_name_str + 'infra2/camera_info', condition=IfCondition(stereo_to_pointcloud)),
+                # rtabmap_depth_to_pointcloud_xyzrgb (depth mode: rgb+depth; stereo mode: left+right+disparity)
+                SetRemap(src='rgb/image', dst=rgb_image_topic_str),
+                SetRemap(src='rgb/camera_info', dst=camera_name_str + 'color/camera_info'),
+                SetRemap(src='left/image', dst=left_image_topic_str),
+                SetRemap(src='left/camera_info', dst=camera_name_str + 'infra1/camera_info'),
+                SetRemap(src='right/image', dst=right_image_topic_str),
+                SetRemap(src='right/camera_info', dst=camera_name_str + 'infra2/camera_info'),
 
                 # rtabmap_obstacle_and_floor_detection_node
                 SetRemap(src='obstacles', dst=camera_name_str + 'obstacles_from_cloud'),
