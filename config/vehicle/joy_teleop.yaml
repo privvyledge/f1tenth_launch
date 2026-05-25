@@ -22,9 +22,18 @@
       axis_mappings:
         drive-speed:
           axis: 1
-          scale: 5.0
+          scale: 1.0  # [m/s] 5.0
           offset: 0.0
         drive-steering_angle:
           axis: 2  # 2 for DualShock/DualSense, 3 for Logitech F710. This is actually responsible for controlling the actuator
-          scale: 0.34
+          scale: 0.34  # [rads]
           offset: 0.0
+
+    autonomous_control:
+      type: topic
+      interface_type: std_msgs/msg/Int8
+      topic_name: /dev/null
+      deadman_buttons: [5]
+      message_value:
+        data:
+          value: 0

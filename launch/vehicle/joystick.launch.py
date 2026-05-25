@@ -28,6 +28,7 @@ def generate_launch_description():
     joy_teleop_config = LaunchConfiguration('joy_teleop_config')
     require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    empty_deadman_button = LaunchConfiguration('empty_deadman', default='[]')
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
@@ -46,7 +47,9 @@ def generate_launch_description():
             'require_deadman',
             default_value='True',
             description='Require a deadman button (L1/LB) to be held to arm actuators. '
-                        'Set False to disable the safety interlock.')
+                        'Set False to disable the safety interlock.'
+                        'Note: The current upstream joy_teleop package requires deadman buttons to be passed. '
+                        'Therefore, this is deactivated for now. Will make truly optional when I patch the upstream package.')
 
     deadman_buttons_la = DeclareLaunchArgument(
             'deadman_buttons',
@@ -69,8 +72,9 @@ def generate_launch_description():
             description='The maximum steering angle in rads.')
 
     # When require_deadman=False, pass an empty list so joy_teleop fires without any held button.
-    effective_deadman_buttons = PythonExpression(
-            ["'[]' if '", require_deadman, "' == 'False' else '", deadman_buttons, "'"])
+    # effective_deadman_buttons = PythonExpression(
+    #         [empty_deadman_button, " if '", require_deadman, "'.lower() in ['false', '0'] else '", deadman_buttons, "'"])
+    effective_deadman_buttons = deadman_buttons
 
     ld = LaunchDescription([joy_la, joy_teleop_la, require_deadman_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
 

@@ -1,5 +1,5 @@
-/**:
-  ros__parameters:
+#/**:
+#  ros__parameters:
     # Intensity filter: removes low-quality returns caused by poor triangulation (multipath,
     # near-range scatter, dark/reflective surfaces). Requires intensity: true in ydlidar_X4.yaml.
     #

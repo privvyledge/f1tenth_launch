@@ -82,11 +82,11 @@ def launch_setup(context, *args, **kwargs):
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
-    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')  # use this instead of RealSense till I release my node.
+    depthimage_to_pointcloud = LaunchConfiguration('depthimage_to_pointcloud', default='False')
     detect_ground_and_obstacles = LaunchConfiguration('detect_ground_and_obstacles', default='False')
 
     reset_realsense = LaunchConfiguration('reset_realsense', default='False')
-    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')
+    publish_realsense_pointcloud = LaunchConfiguration('publish_realsense_pointcloud', default='False')  # use this until I port over my accelerated cv package
     align_realsense_depth = LaunchConfiguration('align_realsense_depth', default='True')
     realsense_emitter_enabled = LaunchConfiguration('realsense_emitter_enabled', default='0')
     realsense_emitter_on_off = LaunchConfiguration('realsense_emitter_on_off', default='False')

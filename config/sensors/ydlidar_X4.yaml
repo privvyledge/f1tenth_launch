@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    port: /dev/ttyUSB0
+    port: /dev/ydlidar # /dev/ttyUSB0
     frame_id: lidar  # should be overwritten by the launch file
     ignore_array: ""
     baudrate: 128000
@@ -13,7 +13,7 @@
     inverted: true
     auto_reconnect: true
     isSingleChannel: false
-    intensity: true   # enables triangulation quality signal; used by intensity filter in laser_filter.yaml
+    intensity: false   # enables triangulation quality signal; used by intensity filter in laser_filter.yaml
     support_motor_dtr: true
     angle_max: 180.0
     angle_min: -180.0

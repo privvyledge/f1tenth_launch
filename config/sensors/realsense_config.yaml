@@ -32,17 +32,17 @@
     # tip: if not using Pointcloud, increase the resolutions
     # tip: reduce to 640x360x30 if CPU utilization is too high (reducing resolution and/or fps leads to lower utilization)
     rgb_camera:
-      profile: "848x480x60"   # warning: depracated. Use color_profile instead
-      color_profile: "848x480x60"  # 640x360x60, 640x360x30, 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      profile: "848x480x30"   # warning: depracated. Use color_profile instead
+      color_profile: "848x480x30"  # 640x360x60, 640x360x30, 640x360x15, 640x480x60, 848x480x30, 1280x720x30
       color_format: "RGB8"  # RGB8, BGR8, etc. Note that to generate colored pointclouds, RGB8 must be used. Other formats will lead to "No stream match for pointcloud chosen texture Process - Color" errors
       enable_auto_exposure: true
 
     depth_module:
-      profile: "848x480x60"  # warning: depracated. Use depth_profile and infra_profile instead
-      depth_profile: "848x480x60"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
+      profile: "848x480x30"  # warning: depracated. Use depth_profile and infra_profile instead
+      depth_profile: "848x480x30"  # 640x360x15, 640x480x60, 848x480x30, 1280x720x30
       depth_format: "Z16"
       enable_auto_exposure: true
-      infra_profile: "848x480x60"
+      infra_profile: "848x480x30"
       infra1_format: "Y8"
       infra2_format: "Y8"
       emitter_enabled: 0  # set to 0 if using infra.  Overridden by launch files

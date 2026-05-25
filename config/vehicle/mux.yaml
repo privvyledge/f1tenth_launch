@@ -13,8 +13,9 @@
         priority: 10
       joystick:
         topic   : teleop
-        timeout : 0.05
+        timeout : 0.1
         priority: 100
+      # todo: should I add a separate topic for autonomous commands?
       safety:
         topic   : safety
         timeout : 0.05
