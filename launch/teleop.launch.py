@@ -79,6 +79,7 @@ def launch_setup(context, *args, **kwargs):
     launch_ackermann_to_vesc_node = LaunchConfiguration('launch_ackermann_to_vesc_node', default='True')
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
+    launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
 
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
@@ -279,6 +280,10 @@ def launch_setup(context, *args, **kwargs):
             default_value=launch_throttle_interpolator_node,
             description='Interpolate commands before sending to the VESC. '
                         'Set to False if using MPC (or increase limits), True otherwise')
+    declare_launch_ackermann_to_twist = DeclareLaunchArgument(
+            'launch_ackermann_to_twist',
+            default_value=launch_ackermann_to_twist,
+            description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
 
     camera_name_la = DeclareLaunchArgument(
             'camera_name', default_value=camera_name,
@@ -379,7 +384,7 @@ def launch_setup(context, *args, **kwargs):
         vesc_max_speed_la, vesc_max_steering_angle_la,
         use_accel_ff_la, accel_to_erpm_gain_la, use_cmd_accel_rate_limit_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
-        declare_launch_throttle_interpolator_node,
+        declare_launch_throttle_interpolator_node, declare_launch_ackermann_to_twist,
         camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
@@ -520,6 +525,7 @@ def launch_setup(context, *args, **kwargs):
                 "launch_ackermann_to_vesc_node": launch_ackermann_to_vesc_node,
                 "launch_vesc_to_odom_node": launch_vesc_to_odom_node,
                 "launch_throttle_interpolator_node": launch_throttle_interpolator_node,
+                "launch_ackermann_to_twist": launch_ackermann_to_twist,
                 "max_acceleration": max_acceleration,
                 "max_steering_rate": max_steering_rate,
                 "vesc_poll_rate": vesc_poll_rate,

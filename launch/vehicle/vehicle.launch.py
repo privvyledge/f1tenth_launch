@@ -32,6 +32,7 @@ def generate_launch_description():
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
     launch_twist_to_ackermann = LaunchConfiguration('launch_twist_to_ackermann', default='False')
+    launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
 
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
@@ -79,6 +80,10 @@ def generate_launch_description():
             'launch_twist_to_ackermann',
             default_value='False',
             description='Start twist_to_ackermann converter (requires trajectory_following_ros2).')
+    declare_launch_ackermann_to_twist = DeclareLaunchArgument(
+            'launch_ackermann_to_twist',
+            default_value='True',
+            description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
 
     max_acceleration_la = DeclareLaunchArgument(
             'max_acceleration',
@@ -165,6 +170,7 @@ def generate_launch_description():
                             declare_launch_vesc_to_odom_node,
                             declare_launch_throttle_interpolator_node,
                             declare_launch_twist_to_ackermann,
+                            declare_launch_ackermann_to_twist,
                             max_acceleration_la, max_steering_rate_la,
                             vesc_poll_rate_la,
                             vesc_imu_poll_rate_la,
@@ -302,6 +308,20 @@ def generate_launch_description():
                         *remappings]
     )
 
+    ackermann_to_twist_node = Node(
+            condition=IfCondition(launch_ackermann_to_twist),
+            package='f1tenth_stack',
+            executable='ackermann_to_twist',
+            name='ackermann_to_twist',
+            parameters=[{
+                'ackermann_topic': 'ackermann_cmd',
+                'twist_topic': 'cmd_vel',
+                'wheelbase': 0.256,
+                'use_stamped_subscriber': True,
+                'use_stamped_publisher': True
+            }]
+    )
+
     imu_filter_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                     [f1tenth_launch_dir, 'launch/filters', 'imu_filter.launch.py']
@@ -330,6 +350,7 @@ def generate_launch_description():
     ld.add_action(vesc_driver_node)
     ld.add_action(throttle_interpolator_node)
     ld.add_action(twist_to_ackermann_node)
+    ld.add_action(ackermann_to_twist_node)
     ld.add_action(imu_filter_node)
 
     return ld

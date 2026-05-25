@@ -5,6 +5,7 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Pyth
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
+from launch.conditions import IfCondition
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -56,7 +57,7 @@ def generate_launch_description():
             default_value=deadman_buttons,
             description='Buttons used to arm the vehicle actuators. Ignored when require_deadman:=False.')
 
-    auton_deadman_buttons_la = DeclareLaunchArgument(
+    autonomous_deadman_buttons_la = DeclareLaunchArgument(
             'autonomous_deadman_buttons',
             default_value=autonomous_deadman_buttons,
             description='Buttons used to enable autonomous control. Ignored when require_deadman:=False.')
@@ -76,7 +77,7 @@ def generate_launch_description():
             default_value=max_steering,
             description='The maximum steering angle in rads.')
 
-    ld = LaunchDescription([joy_la, joy_teleop_la, require_deadman_la, deadman_buttons_la, auton_deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
+    ld = LaunchDescription([joy_la, joy_teleop_la, require_deadman_la, deadman_buttons_la, autonomous_deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la])
 
     joy_node = Node(
             package='joy',
