@@ -47,7 +47,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='vslam')  # ekf
+    odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
