@@ -18,7 +18,7 @@
       type: topic
       interface_type: ackermann_msgs/msg/AckermannDriveStamped
       topic_name: teleop
-      deadman_buttons: [4, 9]  # 9/4 for PS4, 4 for Logitech F710
+#      deadman_buttons: [4, 9]  # 9/4 for PS4, 4 for Logitech F710. Commented out here to enable disabling via launch files
       axis_mappings:
         drive-speed:
           axis: 1
@@ -29,11 +29,26 @@
           scale: 0.34  # [rads]
           offset: 0.0
 
+#    human_control2:
+#      type: topic
+#      interface_type: geometry_msgs/msg/Twist
+#      topic_name: cmd_vel
+#      deadman_buttons: [4, 9]  # 9/4 for PS4, 4 for Logitech F710
+#      axis_mappings:
+#        linear-x:
+#          axis: 1
+#          scale: 1.0  # [m/s] 5.0
+#          offset: 0.0
+#        angular-z:
+#          axis: 2  # 2 for DualShock/DualSense, 3 for Logitech F710. This is actually responsible for controlling the actuator
+#          scale: 0.34  # [rads]
+#          offset: 0.0
+
     autonomous_control:
       type: topic
       interface_type: std_msgs/msg/Int8
       topic_name: /dev/null
-      deadman_buttons: [5]
+#      deadman_buttons: [5]  # Commented out here to enable overriding via launch files
       message_value:
         data:
           value: 0

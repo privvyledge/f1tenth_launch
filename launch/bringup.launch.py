@@ -89,6 +89,7 @@ def launch_setup(context, *args, **kwargs):
 
     require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
+    autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[5]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
@@ -309,6 +310,11 @@ def launch_setup(context, *args, **kwargs):
             default_value=deadman_buttons,
             description='Buttons used to arm the vehicle actuators. Ignored when require_deadman:=False.')
 
+    autonomous_deadman_buttons_la = DeclareLaunchArgument(
+            'autonomous_deadman_buttons',
+            default_value=autonomous_deadman_buttons,
+            description='Buttons used to enable autonomous control. Ignored when require_deadman:=False.')
+
     steering_button_la = DeclareLaunchArgument(
             'steering_button',
             default_value=steering_button,
@@ -512,7 +518,7 @@ def launch_setup(context, *args, **kwargs):
         online_mapping_2d_param_file_la,
         map_2d_file_la,
         rtabmap_database_file_la,
-        require_deadman_la, deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la,
+        require_deadman_la, deadman_buttons_la, autonomous_deadman_buttons_la, steering_button_la, max_speed_la, max_steering_la,
         max_acceleration_la, max_steering_rate_la, vesc_poll_rate_la,
         vesc_imu_poll_rate_la, use_imu_yaw_rate_la,
         use_closed_loop_speed_la, speed_kp_la, speed_ki_la, speed_anti_windup_la,
@@ -585,6 +591,7 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "require_deadman": require_deadman,
                 "deadman_buttons": deadman_buttons,
+                "autonomous_deadman_buttons": autonomous_deadman_buttons,
                 "steering_button": steering_button,
                 "max_speed": max_speed,
                 "max_steering": max_steering
