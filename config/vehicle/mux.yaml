@@ -8,14 +8,13 @@
   ros__parameters:
     topics:
       navigation:
-        topic   : drive
+        topic   : drive  # autonomous commands
         timeout : 0.2
         priority: 10
       joystick:
-        topic   : teleop
+        topic   : teleop  # human driver
         timeout : 0.1
         priority: 100
-      # todo: should I add a separate topic for autonomous commands?
       safety:
         topic   : safety
         timeout : 0.05
