@@ -691,6 +691,8 @@ def launch_setup(context, *args, **kwargs):
             namespace=namespace_str,
             respawn=use_respawn,
             respawn_delay=2.0,
+            output='log',  # suppress per-iteration console spam; errors still go to ~/.ros/log
+            arguments=['--ros-args', '--log-level', 'rtabmap_icp_odom:=WARN'],
             parameters=[
                 icp_parameters,
                 {
@@ -715,7 +717,6 @@ def launch_setup(context, *args, **kwargs):
                     # 'rtabmap_config_path': rtabmap_database_file_path,
                 }
             ],
-            output='log',
             remappings=[
                 ('scan', scan_prefix_str + 'scan_filtered'),
                 ('imu', 'vehicle/sensors/imu/raw'),  # imu must have orientation. /camera/camera/imu/filtered
@@ -747,7 +748,8 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(PythonExpression(['not ', use_composition, ' and ', launch_laserscan_odometry])),
             name='rf2o_laser_odometry',
             namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
-            output='screen',
+            output='log',  # suppress per-scan console spam; errors still go to ~/.ros/log
+            arguments=['--ros-args', '--log-level', 'rf2o_laser_odometry:=WARN'],
             parameters=rf2o_parameters,
             remappings=remappings,
     )
@@ -979,8 +981,7 @@ def launch_setup(context, *args, **kwargs):
                 condition=IfCondition(launch_particle_filter),
                 package='particle_filter',
                 executable='particle_filter',
-                name='particle_filter',
-                output='screen',
+                name='particle_filter',                output='log',  # suppress per-iteration MCL console spam; errors still go to ~/.ros/log
                 namespace=namespace_str,
                 respawn=use_respawn,
                 respawn_delay=2.0,
