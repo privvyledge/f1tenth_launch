@@ -351,7 +351,7 @@ def launch_setup(context, *args, **kwargs):
 
     # ######### RTabMap depth to pointcloud to depth.
     rtabmap_depth_to_pointcloud_xyz = GroupAction(
-            condition=IfCondition(PythonExpression(["'", depthimage_to_pointcloud, "' == 'True' and '", color_pointcloud, "' != 'True'"])),
+            condition=IfCondition(PythonExpression(["'", depthimage_to_pointcloud, "'.lower() == 'true' and '", color_pointcloud, "'.lower() != 'true'"])),
             actions=[
                 Node(
                         name='rtabmap_depth_to_pointcloud_xyz',
@@ -382,7 +382,7 @@ def launch_setup(context, *args, **kwargs):
 
     # use either RGB and depth or stereo.
     rtabmap_depth_to_pointcloud_xyz_rgb = GroupAction(
-            condition=IfCondition(PythonExpression(["'", depthimage_to_pointcloud, "' == 'True' and '", color_pointcloud, "' == 'True'"])),
+            condition=IfCondition(PythonExpression(["'", depthimage_to_pointcloud, "'.lower() == 'true' and '", color_pointcloud, "'.lower() == 'true'"])),
             actions=[
                 Node(
                         name='rtabmap_depth_to_pointcloud_xyzrgb',

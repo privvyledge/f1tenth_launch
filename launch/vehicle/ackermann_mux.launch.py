@@ -53,6 +53,13 @@ def launch_setup(context, *args, **kwargs):
     # Prevents a pre-existing /drive publisher (priority 10) from commanding motion before
     # the joystick connects and teleop (priority 100) takes over. After 600 messages the
     # publisher exits; the nav_block topic times out in 0.5 s and drops out of contention.
+    # Note: this is purely a temporary stop gap and does not actually prevent pre-existing drive topics from passing through the mux.
+    # Instead, it reduces the duration of the drive bleeding from about 5-10s to less than 1.5 seconds.
+    # Will be removed when I set up:
+    #   (1) a fast starting node that sits in-between the mux and the actuator (vesc_driver):
+    #       i. this node starts disabled and as such will never let any command through unless either a constant heartbeat bool is continuously sent or an engage service is called.
+    #       ii. a composable node that just passes through messages but filtered through the enable feedback mechanism above
+    #   (2) lifecycle controllers, e.g MPC that only send commands when a supervisor, e.g mux sends a signal
     startup_nav_block_publisher = ExecuteProcess(
             cmd=[
                 'ros2', 'topic', 'pub', '--times', '600', '--rate', '40',
