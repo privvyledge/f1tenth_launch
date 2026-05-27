@@ -579,6 +579,7 @@ def launch_setup(context, *args, **kwargs):
                             'launch_rgbd_odometry': 'False',
                             'launch_stereo_odometry': 'True',
                             'launch_laserscan_odometry': 'True',
+                            'launch_icp_odometry': 'True',
                             'launch_amcl': launch_global_localization,
                             'launch_particle_filter': 'False',  # launch_global_localization
                             # "map_file": map_file,

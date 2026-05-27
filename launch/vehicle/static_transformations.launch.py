@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Todo: switch to new style
-
 Todo: switch to URDF
 Base_link here refers to the rear_axle
 
@@ -38,14 +36,18 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_sensor_kit',
-            arguments=['0.0084836', '0.0', '0.0454914', '0.0', '0.0', '0.0', 'base_link', 'sensor_kit_link']
+            arguments=['--x', '0.0084836', '--y', '0.0', '--z', '0.0454914',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'sensor_kit_link']
     )  # rear axle to aluminum plate back edge (centered)
 
     lidar_static_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_sensor_kit_to_laser',
-            arguments=['0.0757164', '0.0', '0.0886086', '0.0', '0.0', '0.0', 'sensor_kit_link', 'lidar']
+            arguments=['--x', '0.0757164', '--y', '0.0', '--z', '0.0886086',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'lidar']
     )  # aluminum plate to YDLidar
 
     # todo: pass base_link to camera_bottom_screw as an argument
@@ -66,56 +68,72 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_sensor_kit_to_vesc_imu',
-            arguments=['0.1326164', '0.0', '-0.01218', '-1.57079633', '0.0', '3.14159265', 'sensor_kit_link', 'imu_link']
+            arguments=['--x', '0.1326164', '--y', '0.0', '--z', '-0.01218',
+                       '--yaw', '-1.57079633', '--pitch', '0.0', '--roll', '3.14159265',
+                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'imu_link']
     )  # aluminum plate to VESC IMU (/sensors/imu/raw)
 
     base_footprint_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_sensor_kit_to_basefootprint',
-            arguments=['0.0', '0.0', '-0.033', '0.0', '0.0', '0.0', 'base_link', 'base_footprint']
+            arguments=['--x', '0.0', '--y', '0.0', '--z', '-0.033',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'base_footprint']
     )  # rear axle to ground
 
     base_link_to_rear_axle_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_rear_axle',
-            arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'rear_axle']  # wheelbase
+            arguments=['--x', '0.0', '--y', '0.0', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'rear_axle']
     )  # base_link == rear_axle
 
     rear_axle_to_front_axle_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_front_axle',
-            arguments=['0.256', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'front_axle']  # wheelbase
+            arguments=['--x', '0.256', '--y', '0.0', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'front_axle']
     )  # rear axle to front axle
 
     rear_axle_to_right_rear_wheel_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_right_rear_wheel',
-            arguments=['0.0', '-0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'right_rear_wheel']
+            arguments=['--x', '0.0', '--y', '-0.1016', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'right_rear_wheel']
     )  # rear axle to right rear wheel
 
     rear_axle_to_left_rear_wheel_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_left_rear_wheel',
-            arguments=['0.0', '0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'left_rear_wheel']
+            arguments=['--x', '0.0', '--y', '0.1016', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'left_rear_wheel']
     )  # rear axle to left rear wheel
 
     rear_axle_to_right_front_wheel_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_right_front_wheel',
-            arguments=['0.256', '-0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'right_front_wheel']
+            arguments=['--x', '0.256', '--y', '-0.1016', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'right_front_wheel']
     )  # rear axle to right front wheel
 
     rear_axle_to_left_front_wheel_tf_node = Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='static_baselink_to_left_front_wheel',
-            arguments=['0.256', '0.1016', '0.0', '0.0', '0.0', '0.0', 'base_link', 'left_front_wheel']
+            arguments=['--x', '0.256', '--y', '0.1016', '--z', '0.0',
+                       '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
+                       '--frame-id', 'base_link', '--child-frame-id', 'left_front_wheel']
     )  # rear axle to left front wheel
 
     static_tf_group = GroupAction(

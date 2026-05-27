@@ -706,8 +706,8 @@ def launch_setup(context, *args, **kwargs):
                     'approx_sync': True,
                     'frame_id': base_frame,
                     'odom_frame_id': odom_frame,
-                    'scan_range_min': 0.1,
-                    'scan_range_max': 12.0,
+                    'scan_range_min': 0.12,
+                    'scan_range_max': 10.0,
                     'deskewing': False,
                     'guess_frame_id': odom_frame if odom_tf_publisher_str.lower() != 'icp' else '',  # comment out if this node is going to publish the tf, i.e if publish_odom_tf is True
                     # 'guess_min_translation': 0.05, # m
@@ -727,23 +727,46 @@ def launch_setup(context, *args, **kwargs):
             ]
     )
 
+    rf2o_parameters = [{
+        'laser_scan_topic': scan_prefix_str + 'scan_filtered',
+        'odom_topic': 'odom/rf2o',
+        'publish_tf': True if odom_tf_publisher_str.lower() == 'rf2o' else False,
+        'base_frame_id': 'base_link',
+        'odom_frame_id': 'odom',
+        'init_pose_from_topic': '',
+        'use_sim_time': use_sim_time,
+        'freq': 10.0,
+        'publish_covariance': True,
+        'use_rf2o_twist_covariance': True,
+        'pose_covariance_diagonal': [0.0025, 0.0025, 1000000.0, 1000000.0, 1000000.0, 0.0025],
+        'twist_covariance_diagonal': [0.01, 0.01, 1000000.0, 1000000.0, 1000000.0, 0.01],
+        'covariance_scale': 1.0,
+    }]
+
     rf2o_odometry_node = Node(
             package='rf2o_laser_odometry',
             executable='rf2o_laser_odometry_node',
-            condition=IfCondition(launch_laserscan_odometry),
-            # name='rf2o_laser_odometry',
+            condition=IfCondition(PythonExpression(['not ', use_composition, ' and ', launch_laserscan_odometry])),
+            name='rf2o_laser_odometry',
             namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
             output='screen',
-            parameters=[{
-                'laser_scan_topic': scan_prefix_str + 'scan_filtered',
-                'odom_topic': 'odom/rf2o',
-                'publish_tf': True if odom_tf_publisher_str.lower() == 'rf2o' else False,
-                'base_frame_id': 'base_link',
-                'odom_frame_id': 'odom',
-                'init_pose_from_topic': '',
-                'use_sim_time': use_sim_time,
-                'freq': 10.0}],
+            parameters=rf2o_parameters,
             remappings=remappings,
+    )
+
+    load_rf2o_composable_node = LoadComposableNodes(
+            condition=IfCondition(PythonExpression([use_composition, ' and ', launch_laserscan_odometry])),
+            target_container=container_name_full,
+            composable_node_descriptions=[
+                ComposableNode(
+                        package='rf2o_laser_odometry',
+                        plugin='rf2o::CLaserOdometry2DNode',
+                        name='rf2o_laser_odometry',
+                        namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+                        parameters=rf2o_parameters,
+                        remappings=remappings,
+                ),
+            ],
     )
 
     # laser_scan_matcher_node = Node(
@@ -1039,7 +1062,8 @@ def launch_setup(context, *args, **kwargs):
         use_gpu_la,
         rtabmap_group,
         rtabmap_icp_odometry,  # separate from rtabmap group; controlled by launch_icp_odometry (default False)
-        rf2o_odometry_node,    # cheap range-flow LiDAR odometry; feeds EKF odom2 via odom/rf2o
+        rf2o_odometry_node,          # cheap range-flow LiDAR odometry; feeds EKF odom2 via odom/rf2o
+        load_rf2o_composable_node,   # composed path: loads rf2o into existing container when use_composition=True
         kiss_icp_node,
         gpu_group,
         qos_rtabmap_la, qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,

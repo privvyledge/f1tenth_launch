@@ -31,6 +31,7 @@
 
     # tip: if not using Pointcloud, increase the resolutions
     # tip: reduce to 640x360x30 if CPU utilization is too high (reducing resolution and/or fps leads to lower utilization)
+    # note: 848x480x60 is achievable standalone but drops to ~20 Hz under full teleop load (USB + CPU contention with VESC/LiDAR/joystick); 30 Hz is stable integrated
     rgb_camera:
       profile: "848x480x30"   # warning: depracated. Use color_profile instead
       color_profile: "848x480x30"  # 640x360x60, 640x360x30, 640x360x15, 640x480x60, 848x480x30, 1280x720x30

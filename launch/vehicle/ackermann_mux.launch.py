@@ -19,8 +19,10 @@ def launch_setup(context, *args, **kwargs):
     # namespaced topic to match what ackermann_mux subscribes to.
     if use_f1tenth_namespace_string.lower() == 'true' and f1tenth_namespace_string:
         safety_topic = f'/{f1tenth_namespace_string}/safety'
+        nav_block_topic = f'/{f1tenth_namespace_string}/nav_block'
     else:
         safety_topic = 'safety'
+        nav_block_topic = 'nav_block'
 
     ackermann_mux_node = Node(
             package='ackermann_mux',
@@ -47,7 +49,21 @@ def launch_setup(context, *args, **kwargs):
             output='log'
     )
 
-    return [ackermann_mux_node, safety_zero_speed_publisher]
+    # Startup lock: publishes zero speed to nav_block (priority 15) for 15 seconds.
+    # Prevents a pre-existing /drive publisher (priority 10) from commanding motion before
+    # the joystick connects and teleop (priority 100) takes over. After 600 messages the
+    # publisher exits; the nav_block topic times out in 0.5 s and drops out of contention.
+    startup_nav_block_publisher = ExecuteProcess(
+            cmd=[
+                'ros2', 'topic', 'pub', '--times', '600', '--rate', '40',
+                nav_block_topic,
+                'ackermann_msgs/msg/AckermannDriveStamped',
+                '{drive: {speed: 0.0, steering_angle: 0.0}}'
+            ],
+            output='log'
+    )
+
+    return [ackermann_mux_node, safety_zero_speed_publisher, startup_nav_block_publisher]
 
 
 def generate_launch_description():
