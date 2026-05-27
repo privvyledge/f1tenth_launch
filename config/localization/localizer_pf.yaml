@@ -1,0 +1,136 @@
+/**:
+  ros__parameters:
+
+    # ---------------------------------------------------------------------------
+    # Initial pose
+    # set_initial_pose: true  → use values below as the starting estimate
+    # set_initial_pose: false → automatically triggers global initialization, value can be overwritten by a 2D Pose Estimate from RViz / /initialpose
+    # ---------------------------------------------------------------------------
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    # ---------------------------------------------------------------------------
+    # Topics
+    # These are fallback names; localization.launch.py remaps scan→lidar/scan_filtered
+    # and odom→odometry/local at the node level.
+    # ---------------------------------------------------------------------------
+    scan_topic: scan
+    odometry_topic: odom
+
+    # Scan QoS: 'best_effort' for real hardware, 'reliable' for simulation
+    scan_qos_reliability: best_effort
+
+    # ---------------------------------------------------------------------------
+    # Scan preprocessing
+    # YDLIDAR X4: ~625 beams/rev; angle_step=18 → ~35 beams per MCL cycle.
+    # Fewer beams = faster ray casting; ~35 is sufficient for corridor-scale maps.
+    # ---------------------------------------------------------------------------
+    angle_step: 18
+    max_range: 10.0  # YDLIDAR X4 maximum range (metres)
+
+    # ---------------------------------------------------------------------------
+    # MCL loop timing
+    # mcl_hz is decoupled from the odometry topic rate — the filter runs at a
+    # fixed rate and integrates whatever odometry has arrived since last cycle.
+    # scan_max_age: skip a cycle if the most recent scan is older than this (s).
+    # ---------------------------------------------------------------------------
+    mcl_hz: 40.0
+    scan_max_age: 0.5
+
+    # ---------------------------------------------------------------------------
+    # Particle filter
+    # max_particles: 2000 halves the O(N) work vs the 4000 upstream default.
+    # Benchmark: 1500 (Autoware MIT), 3000 (ForzaETH) — 2000 is a good balance
+    # for the Jetson Orin at 40 Hz.
+    # seed: -1 = random RNG each run; set >=0 for reproducible divergence tests.
+    # ---------------------------------------------------------------------------
+    max_particles: 2000
+    squash_factor: 2.2
+    seed: -1
+
+    # ---------------------------------------------------------------------------
+    # Ray marching backend
+    # range_method and rangelib_variant are overridden at runtime by
+    # localization.launch.py based on the use_gpu arg:
+    #   GPU path → range_method: rmgpu,  rangelib_variant: 2
+    #   CPU path → range_method: pcddt,  rangelib_variant: 4
+    # Values here serve as documentation / standalone fallback.
+    # Other valid methods: cddt, rm, glt, bl
+    # ---------------------------------------------------------------------------
+    range_method: pcddt
+    rangelib_variant: 4
+    theta_discretization: 112
+
+    # ---------------------------------------------------------------------------
+    # Sensor model — YDLIDAR X4 tuned values (Thrun beam model)
+    # Weights must sum to ≈1.0: z_hit + z_rand + z_short + z_max = 0.95
+    # sigma_hit is in pixels (map resolution × metres); X4 ±2% at 5 m ≈ 10 cm
+    # ≈ 2 px at 0.05 m/px — 4.0 px is a conservative starting point.
+    # ---------------------------------------------------------------------------
+    z_hit: 0.75       # probability of hitting the intended obstacle
+    z_rand: 0.12      # uniform random noise returns
+    z_short: 0.01     # low glass / crosstalk return probability
+    z_max: 0.07       # occasional max-range misses
+    sigma_hit: 4.0    # beam std dev (pixels)
+    lambda_short: 0.05  # rate parameter for the z_short exponential component
+
+    # ---------------------------------------------------------------------------
+    # Motion model dispersion
+    # These scale noise injected per MCL step based on observed wheel odometry.
+    # motion_dispersion_theta: 0.20 (f1tenth_gym JAX); 0.25 is the tuned value.
+    # ---------------------------------------------------------------------------
+    motion_dispersion_x: 0.05
+    motion_dispersion_y: 0.025
+    motion_dispersion_theta: 0.25
+
+    # ---------------------------------------------------------------------------
+    # Visualization
+    # viz_throttle: publish the particle cloud every Nth MCL cycle.
+    # At mcl_hz=40, viz_throttle=4 → 10 Hz marker updates — enough for RViz
+    # without saturating the visualisation bus.
+    # ---------------------------------------------------------------------------
+    viz: 1
+    max_viz_particles: 60
+    viz_throttle: 4
+    fine_timing: 0
+
+    # ---------------------------------------------------------------------------
+    # Output
+    # publish_odom: 1 emits an Odometry message in addition to the PoseStamped.
+    # ---------------------------------------------------------------------------
+    publish_odom: 1
+
+    # ---------------------------------------------------------------------------
+    # Hybrid / global localization (Task 9)
+    # Triggered either by a /initialpose message or automatically after
+    # global_loc_timeout seconds if no pose estimate has been received.
+    # Resolution is doubled automatically if candidate count exceeds
+    # global_loc_max_candidates.
+    # ---------------------------------------------------------------------------
+    global_loc_coarse_res: 0.3       # metres between candidate x/y grid positions
+    global_loc_theta_res: 30.0       # degrees between candidate orientations
+    global_loc_top_k: 3              # number of best-scoring hypotheses to seed particles around
+    global_loc_min_dist: 1.0         # minimum metres between chosen hypotheses (avoids clustering)
+    global_loc_max_candidates: 50000 # safety cap; resolution is doubled if exceeded
+    global_loc_timeout: 5.0          # seconds to wait for /initialpose before auto-triggering
+
+    # ---------------------------------------------------------------------------
+    # Frame IDs and TF
+    # Overridden at runtime by localization.launch.py (global_frame_id='map',
+    # odom_frame_id from odom_frame arg, base_frame_id from base_frame arg).
+    # tf_broadcast is overridden: true only when map_tf_publisher:='pf'.
+    # publish_map_to_odom_tf: true publishes map→odom (nav-stack standard).
+    #   Set odom_frame_id to '' to publish map→base_link directly instead.
+    # ---------------------------------------------------------------------------
+    global_frame_id: map
+    odom_frame_id: odom
+    base_frame_id: base_link
+    static_laser_to_base_link: true
+    transform_tolerance: 0.5
+    tf_broadcast: false
+    publish_map_to_odom_tf: true
+    project_to_baselink: true

@@ -45,11 +45,9 @@ def launch_setup(context, *args, **kwargs):
     rtabmap_database_file_path = os.path.join(f1tenth_launch_pkg_prefix, 'data', 'maps', 'rtabmap', 'rtabmap.db')
     # ekf_param_file = os.path.join(
     #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')
-    try:
-        particle_filter_config_file = os.path.join(
-                get_package_share_directory('particle_filter'), 'config', 'localize.yaml')
-    except ROS2PackageNotFoundError as e:
-        particle_filter_config_file = ''
+    
+    particle_filter_config_file = os.path.join(
+            f1tenth_launch_pkg_prefix, 'config', 'localization', 'localizer_pf.yaml')
 
     # declare launch configurations
     namespace = LaunchConfiguration('namespace', default='')
@@ -293,8 +291,8 @@ def launch_setup(context, *args, **kwargs):
     map_file_str = map_file.perform(context)
     use_composition_str = use_composition.perform(context)
     use_gpu_str = use_gpu.perform(context)
+    use_sim_time_str = use_sim_time.perform(context)
 
-    # todo: also add pf node here
     lifecycle_nodes = ['map_server']
     # if pathlib.Path(map_file_str).exists():
     #     lifecycle_nodes.append('map_server')  # could create an if-block to check if lifecycle_nodes is empty
@@ -989,27 +987,19 @@ def launch_setup(context, *args, **kwargs):
                 parameters=[
                     particle_filter_config,
                     {
+                        # --- Runtime-computed overrides (cannot live in YAML) ---
                         'use_sim_time': use_sim_time,
-                        # rmgpu, pcddt, cddt, rm, glt, bl
+                        # scan_qos_reliability: switch to 'reliable' when replaying bags
+                        'scan_qos_reliability': 'reliable' if use_sim_time_str.lower() == 'true' else 'best_effort',
+                        # Ray backend: rmgpu requires range_libc CUDA build; fall back to pcddt on CPU
                         'range_method': 'rmgpu' if use_gpu_str.lower() == 'true' else 'pcddt',
                         'rangelib_variant': 2 if use_gpu_str.lower() == 'true' else 4,
-                        # 'queue_size': 10,
+                        # Frame IDs come from launch args so they stay here
                         'global_frame_id': 'map',
                         'base_frame_id': base_frame,
                         'odom_frame_id': odom_frame,
-                        # 'scan_topic': scan_prefix_str + 'scan_filtered',
-                        # 'odometry_topic': 'odometry/local',
-                        'publish_odom': 1,  # whether to publish an odometry message
-                        'publish_map_to_odom_tf': True,
-                        'project_to_baselink': True,
-                        'static_laser_to_base_link': True,
+                        # TF ownership: only broadcast map→odom when this node is the designated publisher
                         'tf_broadcast': True if map_tf_publisher_str.lower() == 'pf' else False,
-                        'transform_tolerance': 0.5,
-                        'set_initial_pose': True,
-                        'initial_pose.x': 0.0,
-                        'initial_pose.y': 0.0,
-                        'initial_pose.z': 0.0,
-                        'initial_pose.yaw': 0.0,
                     }
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
