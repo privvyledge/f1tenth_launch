@@ -668,7 +668,7 @@ def launch_setup(context, *args, **kwargs):
                 "camera_info_topic": camera_name_string + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
                 "scan_topic": 'lidar/scan_filtered',
                 "approx_sync": 'true',
-                "rtabmap_viz_view": 'false',  # launch_visualization
+                "rtabmap_viz_view": launch_visualization,
                 "rviz_view": 'false',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "qos": "1",
