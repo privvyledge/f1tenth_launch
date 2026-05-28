@@ -79,6 +79,7 @@ def launch_setup(context, *args, **kwargs):
     launch_laserscan_odometry = LaunchConfiguration('launch_laserscan_odometry', default='True')
     launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')  # RTABMap ICP; expensive, disabled by default in favour of rf2o
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
+    launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
@@ -216,6 +217,11 @@ def launch_setup(context, *args, **kwargs):
             'launch_amcl', default_value=launch_amcl,
             description='Whether to launch AMCL global localizer.')
 
+    launch_map_server_la = DeclareLaunchArgument(
+            'launch_map_server', default_value=launch_map_server,
+            description='Whether to launch the map server. '
+                        'Disable when building a new map to prevent a stale stored map from being published.')
+
     odom_tf_publisher_la = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
             description='The node responsible for publishing the odometry tf. '
@@ -288,16 +294,19 @@ def launch_setup(context, *args, **kwargs):
     odom_tf_publisher_str = odom_tf_publisher.perform(context)
     map_tf_publisher_str = map_tf_publisher.perform(context)
     launch_amcl_str = launch_amcl.perform(context)
+    launch_map_server_str = launch_map_server.perform(context)
     map_file_str = map_file.perform(context)
     use_composition_str = use_composition.perform(context)
     use_gpu_str = use_gpu.perform(context)
     use_sim_time_str = use_sim_time.perform(context)
 
-    lifecycle_nodes = ['map_server']
+    lifecycle_nodes = []
+    if launch_map_server_str.lower() == 'true':
+        lifecycle_nodes.append('map_server')
     # if pathlib.Path(map_file_str).exists():
     #     lifecycle_nodes.append('map_server')  # could create an if-block to check if lifecycle_nodes is empty
 
-    if launch_amcl_str.lower() == 'true' or map_tf_publisher_str.lower() == 'amcl':
+    if launch_amcl_str.lower() == 'true':
         lifecycle_nodes.append('amcl')
 
     if camera_name_str != '':
@@ -313,7 +322,7 @@ def launch_setup(context, *args, **kwargs):
                 Node(
                         package='nav2_map_server',
                         executable='map_server',
-                        # condition=IfCondition(launch_amcl),  # launch_amcl
+                        condition=IfCondition(launch_map_server),
                         name='map_server',
                         #namespace=namespace,
                         output='screen',
@@ -383,8 +392,8 @@ def launch_setup(context, *args, **kwargs):
             ],
     )
 
-    load_composable_nodes = LoadComposableNodes(
-            condition=IfCondition(use_composition),
+    load_composable_map_server = LoadComposableNodes(
+            condition=IfCondition(PythonExpression([use_composition, ' and ', launch_map_server])),
             target_container=container_name_full,
             composable_node_descriptions=[
                 ComposableNode(
@@ -399,6 +408,13 @@ def launch_setup(context, *args, **kwargs):
                                 'yaml_filename': map_file},
                         ],
                         remappings=remappings),
+            ],
+    )
+
+    load_composable_lifecycle_manager = LoadComposableNodes(
+            condition=IfCondition(use_composition),
+            target_container=container_name_full,
+            composable_node_descriptions=[
                 ComposableNode(
                         package='nav2_lifecycle_manager',
                         plugin='nav2_lifecycle_manager::LifecycleManager',
@@ -515,7 +531,7 @@ def launch_setup(context, *args, **kwargs):
                                 # '--RGBD/CreateOccupancyGrid false '
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '
-                                '--Grid/RangeMax 12.0 '  # 0=inf
+                                '--Grid/RangeMax 10.0 '  # 0=inf
                                 '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
                                 '--Optimizer/Slam2D true '
                                 '--Optimizer/GravitySigma 0 '
@@ -679,7 +695,7 @@ def launch_setup(context, *args, **kwargs):
         'Icp/VoxelSize': '0.05',  # increase to 0.2 for performance boost at the cost of accuracy
         'Icp/Epsilon': '0.0001',  # increase for performance boost at the cost of accuracy. Default=0.0
         'Icp/Iterations': '10',  # set to 10 for performance boost at the cost of accuracy. Default=30
-        'Icp/RangeMax': '12.0',
+        'Icp/RangeMax': '10.0',
         'Icp/Force4DoF': 'True',
         'Reg/Force3DoF': 'True',
     }
@@ -1025,6 +1041,7 @@ def launch_setup(context, *args, **kwargs):
         launch_laserscan_odometry_la,
         launch_icp_odometry_la,
         launch_amcl_la,
+        launch_map_server_la,
         odom_tf_publisher_la,
         map_tf_publisher_la,
         localization_param,
@@ -1043,7 +1060,8 @@ def launch_setup(context, *args, **kwargs):
         declare_log_level_cmd,
         load_nodes,
         load_composed_amcl_node,
-        load_composable_nodes,
+        load_composable_map_server,
+        load_composable_lifecycle_manager,
         slam_toolbox_localizer_node,
         ekf_nodes,
         rtabmap_localizer_node,

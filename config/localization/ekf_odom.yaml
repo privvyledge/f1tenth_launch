@@ -1,6 +1,7 @@
 /**:
   ros__parameters:
-    use_sim_time: False
+    # use_sim_time is intentionally omitted here — set via launch arg (use_sim_time:=True/False).
+    # Hardcoding it here overrides the launch arg in some ROS 2 Humble builds.
     # The frequency, in Hz, at which the filter will output a position estimate. Note that the filter will not begin
     # computation until it receives at least one message from one of the inputs. It will then run continuously at the
     # frequency specified here, regardless of whether it receives more measurements. Defaults to 30 if unspecified.
@@ -151,8 +152,8 @@
     odom2_queue_size: 2
     odom2_differential: true  # true
     odom2_relative: true  # false
-    #odom2_pose_rejection_threshold: 1.0
-    #odom2_twist_rejection_threshold: 0.5
+    odom2_pose_rejection_threshold: 5.0   # Mahalanobis gate; rejects timestamp-induced position spikes
+    odom2_twist_rejection_threshold: 5.0  # same for velocity
 
     odom3: odom/rtabmap/icp  # todo: tune
     odom3_config: [ true, true, true,  # true, true

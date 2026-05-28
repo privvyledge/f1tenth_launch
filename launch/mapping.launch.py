@@ -80,6 +80,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    launch_map_server = LaunchConfiguration('launch_map_server', default=False)  # False: building a map, not consuming one
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default='False')
@@ -200,6 +201,13 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    launch_map_server_la = DeclareLaunchArgument(
+            'launch_map_server', default_value=launch_map_server,
+            description='Whether to launch the map server. '
+                        'Defaults to False in mapping mode since a stale stored map should not be published '
+                        'while building a new one.')
+
     odom_tf_publisher_arg = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
             description='Node responsible for publishing the odom->base_link TF. '
@@ -408,6 +416,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        launch_map_server_la,
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
         launch_visualization_arg,
@@ -519,7 +528,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_sim_time": use_sim_time,
                 "use_f1tenth_namespace": use_f1tenth_namespace,
                 "f1tenth_namespace": f1tenth_namespace,
-                "use_gpu": 'True' if (use_gpu_string.lower() == 'true' or not enable_odom_here) else 'False',
+                "use_gpu": use_gpu,
                 "launch_joystick": launch_joystick,
                 "launch_sensors": launch_sensors,
                 "launch_vehicle": launch_vehicle,
@@ -527,6 +536,7 @@ def launch_setup(context, *args, **kwargs):
                 "launch_localization": launch_localization,
                 "launch_local_localization": launch_local_localization,
                 "launch_global_localization": launch_global_localization,
+                "launch_map_server": launch_map_server,
                 "odom_tf_publisher": odom_tf_publisher,
                 "map_tf_publisher": map_tf_publisher,
                 "launch_visualization": 'False',
@@ -607,11 +617,20 @@ def launch_setup(context, *args, **kwargs):
         depth_info_topic = camera_name_string + 'depth/camera_info'
 
     # See (https://github.com/introlab/rtabmap/blob/master/corelib/include/rtabmap/core/Parameters.h#L161)
+    # Eagerly evaluate use_gpu_string here inside OpaqueFunction so the condition is baked as a
+    # literal string ('True'/'False') before the launch system processes the action list.
+    # Using LaunchConfiguration(use_gpu) as the condition instead would be evaluated *after*
+    # OpaqueFunction returns — by which time IncludeLaunchDescription's launch_arguments for
+    # teleop_launch (processed earlier in the ld list) will have mutated
+    # context.launch_configurations['use_gpu'] via SetLaunchConfiguration, causing the condition
+    # to see the wrong value.
+    gpu_enabled = 'True' if use_gpu_string.lower() == 'true' else 'False'
+
     mapping_3d_cpu_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '3d_mapping.launch.py'])
             ),
-            condition=UnlessCondition(use_gpu),
+            condition=UnlessCondition(gpu_enabled),
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "namespace": f1tenth_namespace if use_f1tenth_namespace_string.lower() == 'true' else '',
@@ -677,7 +696,7 @@ def launch_setup(context, *args, **kwargs):
                                 '--RGBD/CreateOccupancyGrid false '  # tested with false.
                                 # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
                                 '--Grid/Sensor 0 '  # tested with 0.
-                                '--Grid/RangeMax 12.0 '  # 0=inf
+                                '--Grid/RangeMax 10.0 '  # 0=inf
                                 # enable ray-tracing to clear out cells and mark as free 
                                 # space in occupancy grid map
                                 '--Grid/RayTracing True '
@@ -721,7 +740,7 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([nvidia_isaac_launch_dir, 'isaac_ros_nvblox.launch.py'])
             ),
-            condition=IfCondition(use_gpu),
+            condition=IfCondition(gpu_enabled),
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "use_namespace": use_f1tenth_namespace,

@@ -47,6 +47,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
@@ -147,6 +148,11 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    launch_map_server_la = DeclareLaunchArgument(
+            'launch_map_server', default_value=launch_map_server,
+            description='Whether to launch the map server. '
+                        'Disable when building a new map to prevent a stale stored map from being published.')
 
     odom_tf_publisher_la = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
@@ -371,6 +377,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        launch_map_server_la,
         odom_tf_publisher_la,
         map_tf_publisher_la,
         launch_visualization_arg,
@@ -582,6 +589,7 @@ def launch_setup(context, *args, **kwargs):
                             'launch_icp_odometry': 'True',
                             'launch_amcl': launch_global_localization,
                             'launch_particle_filter': 'False',  # launch_global_localization
+                            'launch_map_server': launch_map_server,
                             # "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,

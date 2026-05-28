@@ -72,6 +72,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
@@ -252,6 +253,13 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    launch_map_server_la = DeclareLaunchArgument(
+            'launch_map_server', default_value=launch_map_server,
+            description='Whether to launch the map server. '
+                        'Disable when building a new map (slam:=True) to prevent a stale stored map '
+                        'from being published during mapping.')
+
     odom_tf_publisher_arg = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
             description='Node responsible for publishing the odom->base_link TF. '
@@ -511,6 +519,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        launch_map_server_la,
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
         launch_navigation_arg,
@@ -696,6 +705,7 @@ def launch_setup(context, *args, **kwargs):
                                         "use_namespace": use_f1tenth_namespace,
                                         "camera_name": camera_name,
                                         "launch_sensor_fusion": 'True',
+                                        "launch_map_server": launch_map_server,
                                         "launch_ekf_odom": launch_local_localization,
                                         "launch_ekf_map": launch_global_localization,
                                         "odom_tf_publisher": odom_tf_publisher,

@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    use_sim_time: false
+    # use_sim_time is intentionally omitted here — set via launch arg (use_sim_time:=True/False).
     frequency: 10.0
     sensor_timeout: 0.13
     two_d_mode: true
