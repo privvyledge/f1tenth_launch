@@ -55,6 +55,7 @@ def generate_launch_description():
 
     input_topic = LaunchConfiguration('input_topic')
     output_topic = LaunchConfiguration('output_topic')
+    mag_topic = LaunchConfiguration('mag_topic')
     imu_corrector_output_topic = LaunchConfiguration('imu_corrector_output_topic')
     remove_gravity_vector = LaunchConfiguration('remove_gravity_vector')
     imu_gyro_stddev = LaunchConfiguration('imu_gyro_stddev')
@@ -63,6 +64,7 @@ def generate_launch_description():
     node_name = LaunchConfiguration('node_name')
     imu_corrector_node_name = LaunchConfiguration('imu_corrector_node_name')
     use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
+    use_mag = LaunchConfiguration('use_mag')
     remove_imu_bias = LaunchConfiguration('remove_imu_bias')
 
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -89,6 +91,19 @@ def generate_launch_description():
             'input_topic',
             default_value='',
             description='Raw IMU message')
+
+    mag_topic_la = DeclareLaunchArgument(
+            'mag_topic',
+            default_value='',
+            description='Magnetometer topic (sensor_msgs/MagneticField). '
+                        'Set use_mag:=True and provide this topic to enable magnetometer-aided yaw. '
+                        'VESC 6 75 MkII publishes magnetometer data; the firmware already fuses it '
+                        'internally, so host-side mag fusion is optional tuning.')
+
+    use_mag_la = DeclareLaunchArgument(
+            'use_mag',
+            default_value='False',
+            description='Whether to use magnetometer data for heading. Requires mag_topic to be set.')
 
     imu_corrector_output_topic_la = DeclareLaunchArgument(
             'imu_corrector_output_topic',
@@ -139,11 +154,11 @@ def generate_launch_description():
 
     ld = LaunchDescription([declare_namespace_cmd, declare_use_namespace_cmd, declare_use_sim_time_cmd,
                             declare_imu_corrector_params_file_cmd,
-                            imu_frame_la, imu_corrector_frame_la, input_topic_la, output_topic_la,
-                            imu_corrector_output_topic_la, imu_corrector_node_name_la,
+                            imu_frame_la, imu_corrector_frame_la, input_topic_la, mag_topic_la,
+                            output_topic_la, imu_corrector_output_topic_la, imu_corrector_node_name_la,
                             remove_gravity_vector_la,
                             imu_gyro_stddev_la, imu_accel_stddev_la, imu_orientation_stddev_la,
-                            node_name_la, use_madgwick_filter_la, remove_imu_bias_la])
+                            node_name_la, use_madgwick_filter_la, use_mag_la, remove_imu_bias_la])
 
     imu_filter_with_correction_node = GroupAction(
             condition=IfCondition(remove_imu_bias),
@@ -163,6 +178,7 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=imu_corrector_output_topic),
                 SetRemap(src='imu/data', dst=output_topic),
+                SetRemap(src='imu/mag', dst=mag_topic),
                 SetRemap(src=['/tf'], dst=['tf']),
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
 
@@ -202,7 +218,7 @@ def generate_launch_description():
                         parameters=[
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
-                            {'use_mag': False},
+                            {'use_mag': use_mag},
                             {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
@@ -228,7 +244,7 @@ def generate_launch_description():
                         parameters=[
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
-                            {'use_mag': False},
+                            {'use_mag': use_mag},
                             {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
@@ -260,6 +276,7 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=input_topic),
                 SetRemap(src='imu/data', dst=output_topic),
+                SetRemap(src='imu/mag', dst=mag_topic),
                 SetRemap(src=['/tf'], dst=['tf']),
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
                 Node(
@@ -272,7 +289,7 @@ def generate_launch_description():
                         parameters=[
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
-                            {'use_mag': False},
+                            {'use_mag': use_mag},
                             {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},
@@ -298,7 +315,7 @@ def generate_launch_description():
                         parameters=[
                             {'do_bias_estimation': True},
                             {'do_adaptive_gain': True},
-                            {'use_mag': False},
+                            {'use_mag': use_mag},
                             {'gain': 0.3},
                             {'gain_acc': 0.01},
                             {'gain_mag': 0.01},

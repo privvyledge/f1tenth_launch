@@ -46,6 +46,7 @@ def generate_launch_description():
     online_mapping_param_file = LaunchConfiguration('online_mapping_param_file',
                                                     default=online_mapping_param_file_path)
     map_file_path = LaunchConfiguration('map_file_path', default=default_map_file_path)
+    launch_map_server = LaunchConfiguration('launch_map_server', default='True')
     map_subscribe_transient_local = LaunchConfiguration('map_subscribe_transient_local', default='True')
     map_topic = LaunchConfiguration('map_topic', default='map')
     with_rviz = LaunchConfiguration('with_rviz', default='False')
@@ -56,6 +57,12 @@ def generate_launch_description():
     lifecycle_nodes = ['map_saver']
 
     # Declare launch arguments
+    declare_launch_map_server_cmd = DeclareLaunchArgument(
+            'launch_map_server',
+            default_value='True',
+            description='Whether to launch the map saver server (lifecycle) for periodic map saving. '
+                        'Defaults to False; normally disabled during active mapping.')
+
     declare_namespace_cmd = DeclareLaunchArgument(
             'namespace',
             default_value='',
@@ -162,6 +169,7 @@ def generate_launch_description():
     # ros2 run nav2_map_server map_saver_cli -f /f1tenth/data/maps/raslab
     # ros2 service call /slam_toolbox/serialize_map slam_toolbox/SerializePoseGraph "{filename: '/f1tenth/data/maps/raslab'}"
     start_map_saver_server_cmd = Node(
+            condition=IfCondition(launch_map_server),
             package='nav2_map_server',
             executable='map_saver_server',
             namespace=namespace,
@@ -178,6 +186,7 @@ def generate_launch_description():
                         ('/tf_static', 'tf_static')])
 
     start_lifecycle_manager_cmd = Node(
+            condition=IfCondition(launch_map_server),
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
             name='lifecycle_manager_2d_mapping',
@@ -189,6 +198,7 @@ def generate_launch_description():
                         {'node_names': lifecycle_nodes}])
 
     return LaunchDescription([
+        declare_launch_map_server_cmd,
         declare_namespace_cmd,
         declare_use_namespace_cmd,
         use_sim_time_la,

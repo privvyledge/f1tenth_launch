@@ -109,6 +109,9 @@ def launch_setup(context, *args, **kwargs):
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
     launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
 
+    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration', default='9.80665')
+    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration', default='9.80665')
+
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
@@ -317,6 +320,14 @@ def launch_setup(context, *args, **kwargs):
             default_value=launch_ackermann_to_twist,
             description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
 
+    imu0_gravitational_acceleration_la = DeclareLaunchArgument(
+            'imu0_gravitational_acceleration', default_value=imu0_gravitational_acceleration,
+            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot.')
+
+    imu1_gravitational_acceleration_la = DeclareLaunchArgument(
+            'imu1_gravitational_acceleration', default_value=imu1_gravitational_acceleration,
+            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot.')
+
     camera_name_la = DeclareLaunchArgument(
             'camera_name', default_value=camera_name,
             description='Name of the camera. Used to remap topics.')
@@ -438,7 +449,8 @@ def launch_setup(context, *args, **kwargs):
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
         realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la,
-        publish_map_to_odom_tf_la
+        publish_map_to_odom_tf_la,
+        imu0_gravitational_acceleration_la, imu1_gravitational_acceleration_la,
     ]
 
     ''' Launch Nodes '''
@@ -571,6 +583,8 @@ def launch_setup(context, *args, **kwargs):
                 "use_composition": use_composition,
                 "attach_to_shared_component_container": use_composition,  # this launch file starts a container
                 "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
+                "imu0_gravitational_acceleration": imu0_gravitational_acceleration,
+                "imu1_gravitational_acceleration": imu1_gravitational_acceleration,
             }.items()
     )
 
@@ -587,11 +601,12 @@ def launch_setup(context, *args, **kwargs):
                 "use_namespace": 'False', # use_f1tenth_namespace,
                 "offline_mapping": use_sim_time,
                 "use_sim_time": use_sim_time,
+                "launch_map_server": launch_map_server,
                 "offline_mapping_param_file": offline_mapping_2d_param_file,
                 "online_mapping_param_file": online_mapping_2d_param_file,
                 "map_file_path": map_2d_file,
                 "map_topic": 'map',
-                "with_rviz": 'True',  # launch_visualization
+                "with_rviz": launch_visualization
                 # "rviz_cfg_path_param": rviz_config_path,
             }.items()
     )

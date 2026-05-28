@@ -330,6 +330,8 @@ def generate_launch_description():
             launch_arguments={
                 'input_topic': 'vehicle/sensors/imu/raw',
                 'output_topic': 'vehicle/sensors/imu/data',
+                'mag_topic': 'vehicle/sensors/imu/mag',  # sensor_msgs/MagneticField from VESC 6 75 MkII
+                'use_mag': 'False',  # set True once magnetometer topic is verified in live data
                 'remove_gravity_vector': 'False',
                 'imu_gyro_stddev': '0.07',
                 'imu_accel_stddev': '0.07',

@@ -96,6 +96,8 @@ def launch_setup(context, *args, **kwargs):
 
     camera_name = LaunchConfiguration('camera_name', default='camera')
     scan_prefix = LaunchConfiguration('scan_prefix', default='lidar/')
+    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration', default='9.80665')
+    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration', default='9.80665')
 
     # Declare default launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -283,6 +285,14 @@ def launch_setup(context, *args, **kwargs):
             'scan_prefix', default_value=scan_prefix,
             description='String to prefix to laserscan topic. Should match LaserScan namespace. Default: lidar/')
 
+    imu0_gravitational_acceleration_la = DeclareLaunchArgument(
+            'imu0_gravitational_acceleration', default_value=imu0_gravitational_acceleration,
+            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot. Default: 9.80665')
+
+    imu1_gravitational_acceleration_la = DeclareLaunchArgument(
+            'imu1_gravitational_acceleration', default_value=imu1_gravitational_acceleration,
+            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot. Default: 9.80665')
+
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
@@ -460,6 +470,8 @@ def launch_setup(context, *args, **kwargs):
                 'publish_odom_tf': 'True' if odom_tf_publisher_str.lower() == 'ekf' else 'False',
                 'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'ekf' else 'False',
                 'map_frequency': map_frequency,
+                'imu0_gravitational_acceleration': imu0_gravitational_acceleration,
+                'imu1_gravitational_acceleration': imu1_gravitational_acceleration,
             }.items()
     )
 
@@ -1061,7 +1073,8 @@ def launch_setup(context, *args, **kwargs):
         load_nodes,
         load_composed_amcl_node,
         load_composable_map_server,
-        load_composable_lifecycle_manager,
+        # Skip when empty: ROS 2 Humble converts [] to () and fails the scalar-type check in evaluate_parameter_dict.
+        *([load_composable_lifecycle_manager] if lifecycle_nodes else []),
         slam_toolbox_localizer_node,
         ekf_nodes,
         rtabmap_localizer_node,
@@ -1078,6 +1091,8 @@ def launch_setup(context, *args, **kwargs):
         qos_rtabmap_la, qos_rtabmap_camera_la, qos_rtabmap_imu_la, qos_rtabmap_laserscan_la, qos_la, qos_imu_la,
         camera_name_la,
         scan_prefix_la,
+        imu0_gravitational_acceleration_la,
+        imu1_gravitational_acceleration_la,
         launch_particle_filter_la,
         particle_filter_config_la,
         particle_filter_node,

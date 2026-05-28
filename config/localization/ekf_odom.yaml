@@ -99,7 +99,7 @@
 
     # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
     # the size of the subscription queue so that more measurements are fused.
-    odom0_queue_size: 10
+    odom0_queue_size: 5
 
     # [ADVANCED] Large messages in ROS can exhibit strange behavior when they arrive at a high frequency. This is a result
     # of Nagle's algorithm. This option tells the ROS subscriber to use the tcpNoDelay option, which disables Nagle's
@@ -137,7 +137,7 @@
                    false, false, false,  # true, true
                    false, false, false,  # , , true
                    false, false, false ]
-    odom1_queue_size: 2
+    odom1_queue_size: 5
     odom1_differential: false  # false: use visual odometry as the main orientation source [good since the covariance is accurate], true: use IMU(s) as the main orientation source
     odom1_relative: true  # false
     #odom1_pose_rejection_threshold: 1.0
@@ -151,7 +151,7 @@
                     false, false, false ]
     odom2_queue_size: 2
     odom2_differential: true  # true
-    odom2_relative: true  # false
+    odom2_relative: false
     odom2_pose_rejection_threshold: 5.0   # Mahalanobis gate; rejects timestamp-induced position spikes
     odom2_twist_rejection_threshold: 5.0  # same for velocity
 
@@ -163,31 +163,32 @@
                     false, false, false ]
     odom3_queue_size: 2
     odom3_differential: true  # true
-    odom3_relative: true  # false
-    #odom3_pose_rejection_threshold: 1.0
-    #odom3_twist_rejection_threshold: 0.5
+    odom3_relative: false
+    odom3_pose_rejection_threshold: 3.0
+    odom3_twist_rejection_threshold: 3.0
 
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
     # the VESCs yaw drifts a lot. Will need to remove this bias after calibrating or set yaw to false below. Todo: set to true after calibrating
     # topics: /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
     imu0: vehicle/sensors/imu/raw
     imu0_config: [false, false, false,
-                  true,  true,  true,  # false, false, true
+                  true,  true,  true,   # roll, pitch, yaw — VESC 6 75 MkII has magnetometer;
+                                        # firmware runs Madgwick internally → quaternion is globally
+                                        # referenced and wrap-free. two_d_mode ignores roll/pitch.
                   false, false, false,
-                  false,  false,  false,  # false, false, true
-                  false,  false,  false]  # false, false, true
+                  false,  false,  false,
+                  false,  false,  false]
     imu0_nodelay: false
-    imu0_differential: true  # false
-    imu0_relative: true  # true
-    imu0_queue_size: 10  # 5
-    #imu0_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
-    #imu0_twist_rejection_threshold: 0.8                #
-    #imu0_linear_acceleration_rejection_threshold: 1.0  #
+    imu0_differential: false  # use absolute orientation from VESC firmware's Madgwick output
+    imu0_relative: true       # discard magnetic-north initial offset so EKF frame ≠ magnetic north
+    imu0_queue_size: 10
+    imu0_pose_rejection_threshold: 0.5   # gate magnetic interference spikes
 
     # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
     # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
     imu0_remove_gravitational_acceleration: true  # false
-    imu0_gravitational_acceleration: 10.035  # 9.80665
+    # Set via launch arg imu0_gravitational_acceleration (default 9.80665). Override per-robot at launch time.
+    imu0_gravitational_acceleration: 9.80665
 
     # https://github.com/IntelRealSense/realsense-ros/blob/ros1-legacy/realsense2_camera/launch/opensource_tracking.launch
     imu1: camera/imu/filtered
@@ -199,9 +200,10 @@
     imu1_nodelay: false
     imu1_differential: false  # false
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
-    imu1_queue_size: 15
+    imu1_queue_size: 20
     imu1_remove_gravitational_acceleration: true  # false
-    imu1_gravitational_acceleration: 9.87  # 9.80665
+    # Set via launch arg imu1_gravitational_acceleration (default 9.80665). Override per-robot at launch time.
+    imu1_gravitational_acceleration: 9.80665
 #    imu1_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
 #    imu1_twist_rejection_threshold: 0.8                #
 #    imu1_linear_acceleration_rejection_threshold: 1.0  #
