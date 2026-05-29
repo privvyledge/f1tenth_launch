@@ -82,6 +82,7 @@ def launch_setup(context, *args, **kwargs):
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=False)  # False: building a map, not consuming one
+    launch_map_saver = LaunchConfiguration('launch_map_saver', default=True)   # True: auto-save 2D map during active mapping
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default='False')
@@ -217,6 +218,12 @@ def launch_setup(context, *args, **kwargs):
             description='Whether to launch the map server. '
                         'Defaults to False in mapping mode since a stale stored map should not be published '
                         'while building a new one.')
+
+    launch_map_saver_la = DeclareLaunchArgument(
+            'launch_map_saver', default_value=launch_map_saver,
+            description='Whether to launch the map_saver_server for periodic 2D map auto-saving. '
+                        'Defaults to True so the map is saved automatically during active 2D mapping. '
+                        'Distinct from launch_map_server (which loads a pre-built map for navigation).')
 
     odom_tf_publisher_arg = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
@@ -432,6 +439,7 @@ def launch_setup(context, *args, **kwargs):
         launch_local_localization_arg,
         launch_global_localization_arg,
         launch_map_server_la,
+        launch_map_saver_la,
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
         launch_visualization_arg,
@@ -605,7 +613,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_namespace": 'False', # use_f1tenth_namespace,
                 "offline_mapping": use_sim_time,
                 "use_sim_time": use_sim_time,
-                "launch_map_server": launch_map_server,
+                "launch_map_server": launch_map_saver,
                 "offline_mapping_param_file": offline_mapping_2d_param_file,
                 "online_mapping_param_file": online_mapping_2d_param_file,
                 "map_file_path": map_2d_file,
