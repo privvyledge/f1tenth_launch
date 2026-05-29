@@ -69,6 +69,7 @@ def launch_setup(context, *args, **kwargs):
     map_file = LaunchConfiguration('map_file', default=map_file_path)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)  # set True for offline/rosbag playback
     use_gpu = LaunchConfiguration('use_gpu', default=False)  # False=RTABMap (CPU), True=Nvblox (GPU); bringup.launch.py defaults to True
+    use_gpu_for_localization = LaunchConfiguration('use_gpu_for_localization', default='true')
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     container_name = LaunchConfiguration('container_name', default='f1tenth_container')
@@ -109,8 +110,7 @@ def launch_setup(context, *args, **kwargs):
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
     launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
 
-    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration', default='9.80665')
-    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration', default='9.80665')
+    gravitational_acceleration = LaunchConfiguration('gravitational_acceleration', default='9.80665')
 
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
@@ -160,7 +160,14 @@ def launch_setup(context, *args, **kwargs):
 
     use_gpu_la = DeclareLaunchArgument(
             'use_gpu', default_value=use_gpu,
-            description='Use GPU acceleration. Default: True')
+            description='Use GPU acceleration for the 3D mapper: False=RTABMap (CPU), True=Nvblox (GPU).')
+
+    use_gpu_for_localization_la = DeclareLaunchArgument(
+            'use_gpu_for_localization',
+            default_value='true',
+            description='Enable Isaac VSLAM as the visual odometry source in the localization stack. '
+                        'Independent of use_gpu, which controls only the 3D mapper. '
+                        'Set False on machines without Isaac ROS installed.')
 
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value=autostart,
@@ -320,13 +327,9 @@ def launch_setup(context, *args, **kwargs):
             default_value=launch_ackermann_to_twist,
             description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
 
-    imu0_gravitational_acceleration_la = DeclareLaunchArgument(
-            'imu0_gravitational_acceleration', default_value=imu0_gravitational_acceleration,
-            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot.')
-
-    imu1_gravitational_acceleration_la = DeclareLaunchArgument(
-            'imu1_gravitational_acceleration', default_value=imu1_gravitational_acceleration,
-            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot.')
+    gravitational_acceleration_la = DeclareLaunchArgument(
+            'gravitational_acceleration', default_value=gravitational_acceleration,
+            description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
     camera_name_la = DeclareLaunchArgument(
             'camera_name', default_value=camera_name,
@@ -415,6 +418,7 @@ def launch_setup(context, *args, **kwargs):
         declare_map_yaml_cmd,
         declare_use_sim_time_cmd,
         use_gpu_la,
+        use_gpu_for_localization_la,
         declare_autostart_cmd,
         declare_use_composition_cmd,
         declare_container_name_cmd,
@@ -450,7 +454,7 @@ def launch_setup(context, *args, **kwargs):
         realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la,
         publish_map_to_odom_tf_la,
-        imu0_gravitational_acceleration_la, imu1_gravitational_acceleration_la,
+        gravitational_acceleration_la,
     ]
 
     ''' Launch Nodes '''
@@ -474,6 +478,7 @@ def launch_setup(context, *args, **kwargs):
 
     use_composition_string = use_composition.perform(context)
     use_gpu_string = use_gpu.perform(context)
+    use_gpu_for_localization_string = use_gpu_for_localization.perform(context)
 
     # whether this launch file is responsible for starting up odometry
     enable_odom_here = True
@@ -540,7 +545,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_sim_time": use_sim_time,
                 "use_f1tenth_namespace": use_f1tenth_namespace,
                 "f1tenth_namespace": f1tenth_namespace,
-                "use_gpu": use_gpu,
+                "use_gpu": use_gpu_for_localization_string,
                 "launch_joystick": launch_joystick,
                 "launch_sensors": launch_sensors,
                 "launch_vehicle": launch_vehicle,
@@ -583,8 +588,7 @@ def launch_setup(context, *args, **kwargs):
                 "use_composition": use_composition,
                 "attach_to_shared_component_container": use_composition,  # this launch file starts a container
                 "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
-                "imu0_gravitational_acceleration": imu0_gravitational_acceleration,
-                "imu1_gravitational_acceleration": imu1_gravitational_acceleration,
+                "gravitational_acceleration": gravitational_acceleration,
             }.items()
     )
 

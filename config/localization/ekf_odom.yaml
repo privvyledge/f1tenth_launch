@@ -50,6 +50,9 @@
 
     reset_on_time_jump: true  # # If the filter sees a jump back in time, the filter is reset (convenient for testing with rosbags!)
 
+    # Set via launch arg gravitational_acceleration (default 9.80665). Override per-robot at launch time.
+    gravitational_acceleration: 9.80665
+
     #smooth_lagged_data: True  # for VIO, AMCL and laserscan matching
     #history_length: 2.0  # number of seconds of histor to keep in the filter
 
@@ -93,8 +96,8 @@
     # if unspecified, effectively making this parameter required for each sensor.
     odom0_config: [false, false, false,  # X, Y, Z, [false, false, false]
                    false, false, false,  # roll, pitch, yaw [, , true]
-                   true, true, true,  # vx, vy, vz [, , false]
-                   true, true, false,  # vroll, vpitch, vyaw [, , true]. Either set the yaw rate covariance high or disable by setting to false.
+                   true, true, false,  # vx, vy, vz [, , false]
+                   false, false, false,  # vroll, vpitch, vyaw [, , true]. Either set the yaw rate covariance high or disable by setting to false.
                    false, false, false]  # ax, ay, az [, , false]
 
     # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
@@ -144,10 +147,10 @@
     #odom1_twist_rejection_threshold: 0.5
 
     odom2: odom/rf2o  # rf2o (range-flow odometry)
-    odom2_config: [ true, true, true,  # true, true
-                    true, true, true,
-                    false, false, false,  # true, true
-                    false, false, false,  # , , true
+    odom2_config: [ true,  true,  false,  # x, y only — rf2o is 2D; z covariance is 1e6
+                    false, false, true,   # yaw only — roll/pitch covariance is 1e6
+                    false, false, false,
+                    false, false, false,
                     false, false, false ]
     odom2_queue_size: 2
     odom2_differential: true  # true
@@ -155,9 +158,9 @@
     odom2_pose_rejection_threshold: 5.0   # Mahalanobis gate; rejects timestamp-induced position spikes
     odom2_twist_rejection_threshold: 5.0  # same for velocity
 
-    odom3: odom/rtabmap/icp  # todo: tune
-    odom3_config: [ true, true, true,  # true, true
-                    true, true, true,
+    odom3: odom/rtabmap/icp
+    odom3_config: [ true, true, false,  # true, true
+                    false, false, true,
                     false, false, false,  # true, true
                     false, false, false,  # , , true
                     false, false, false ]
@@ -187,8 +190,6 @@
     # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
     # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
     imu0_remove_gravitational_acceleration: true  # false
-    # Set via launch arg imu0_gravitational_acceleration (default 9.80665). Override per-robot at launch time.
-    imu0_gravitational_acceleration: 9.80665
 
     # https://github.com/IntelRealSense/realsense-ros/blob/ros1-legacy/realsense2_camera/launch/opensource_tracking.launch
     imu1: camera/imu/filtered
@@ -202,8 +203,6 @@
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
     imu1_queue_size: 20
     imu1_remove_gravitational_acceleration: true  # false
-    # Set via launch arg imu1_gravitational_acceleration (default 9.80665). Override per-robot at launch time.
-    imu1_gravitational_acceleration: 9.80665
 #    imu1_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
 #    imu1_twist_rejection_threshold: 0.8                #
 #    imu1_linear_acceleration_rejection_threshold: 1.0  #
@@ -226,7 +225,7 @@
     # predicition. Note that if an acceleration measurement for the variable in question is available from one of the
     # inputs, the control term will be ignored.
     # Whether or not we use the control input during predicition. Defaults to false.
-    use_control: false  # improves prediction between sensor updates; control_config already defined below. todo: test if setting to true improves or degrades performance
+    use_control: false  # Tested: 63 s bag replay showed ~12 cm final position divergence vs. no_control but identical jitter/velocity stats. VESC+rf2o+ICP at 30 Hz are dense enough that control prediction adds no measurable benefit. Only revisit if we observe visible yaw lag during sharp turns and cmd_vel is reliably published throughout the run.
     # Whether the input (assumed to be cmd_vel) is a geometry_msgs/Twist or geometry_msgs/TwistStamped message. Defaults to
     # false. Not used in ros2. Only supports unstamped messages
 #    stamped_control: false
@@ -252,12 +251,12 @@
     # to be larger, which will cause the filter to trust the incoming measurement more during correction. The values are
     # ordered as x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az. Defaults to the matrix below if
     # unspecified.
-    process_noise_covariance: [0.05, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.05, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+    process_noise_covariance: [0.005, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.005, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.06, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.03, 0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.03, 0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.0,    0.0,    0.0,    0.0,    0.06, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.01, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.025, 0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.025, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.04, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,

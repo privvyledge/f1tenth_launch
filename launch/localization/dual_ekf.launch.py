@@ -42,8 +42,7 @@ def generate_launch_description():
     odom_node_name = LaunchConfiguration('odom_node_name')  # ekf_filter_node, ukf_filter_node
     map_node_name = LaunchConfiguration('map_node_name')  # ekf_filter_node, ukf_filter_node
     log_level = LaunchConfiguration('log_level')
-    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration')
-    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration')
+    gravitational_acceleration = LaunchConfiguration('gravitational_acceleration')
 
     # declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -109,13 +108,9 @@ def generate_launch_description():
             'log_level', default_value='info',
             description='log level')
 
-    declare_imu0_gravitational_acceleration = DeclareLaunchArgument(
-            'imu0_gravitational_acceleration', default_value='9.80665',
-            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot.')
-
-    declare_imu1_gravitational_acceleration = DeclareLaunchArgument(
-            'imu1_gravitational_acceleration', default_value='9.80665',
-            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot.')
+    declare_gravitational_acceleration = DeclareLaunchArgument(
+            'gravitational_acceleration', default_value='9.80665',
+            description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
@@ -140,8 +135,7 @@ def generate_launch_description():
                     'use_namespace': 'False',
                     'namespace': '',
                     'publish_tf': publish_odom_tf,
-                    'imu0_gravitational_acceleration': imu0_gravitational_acceleration,
-                    'imu1_gravitational_acceleration': imu1_gravitational_acceleration,
+                    'gravitational_acceleration': gravitational_acceleration,
                 }.items()
         ),
 
@@ -160,6 +154,7 @@ def generate_launch_description():
                     'use_namespace': 'False',
                     'namespace': '',
                     'publish_tf': publish_map_tf,
+                    'gravitational_acceleration': gravitational_acceleration,
                 }.items()
         )
     ])
@@ -185,8 +180,7 @@ def generate_launch_description():
     ld.add_action(declare_odom_node_name)
     ld.add_action(declare_map_node_name)
     ld.add_action(declare_log_level_cmd)
-    ld.add_action(declare_imu0_gravitational_acceleration)
-    ld.add_action(declare_imu1_gravitational_acceleration)
+    ld.add_action(declare_gravitational_acceleration)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(kf_bringup_group)

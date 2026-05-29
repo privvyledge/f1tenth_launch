@@ -82,8 +82,7 @@ def launch_setup(context, *args, **kwargs):
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
     launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
 
-    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration', default='9.80665')
-    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration', default='9.80665')
+    gravitational_acceleration = LaunchConfiguration('gravitational_acceleration', default='9.80665')
 
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
@@ -294,13 +293,9 @@ def launch_setup(context, *args, **kwargs):
             default_value=launch_ackermann_to_twist,
             description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
 
-    imu0_gravitational_acceleration_la = DeclareLaunchArgument(
-            'imu0_gravitational_acceleration', default_value=imu0_gravitational_acceleration,
-            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot.')
-
-    imu1_gravitational_acceleration_la = DeclareLaunchArgument(
-            'imu1_gravitational_acceleration', default_value=imu1_gravitational_acceleration,
-            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot.')
+    gravitational_acceleration_la = DeclareLaunchArgument(
+            'gravitational_acceleration', default_value=gravitational_acceleration,
+            description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
     camera_name_la = DeclareLaunchArgument(
             'camera_name', default_value=camera_name,
@@ -409,7 +404,7 @@ def launch_setup(context, *args, **kwargs):
         realsense_emitter_enabled_la, realsense_emitter_on_off_la, launch_realsense_splitter_node_la,
         realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la,
-        imu0_gravitational_acceleration_la, imu1_gravitational_acceleration_la,
+        gravitational_acceleration_la,
     ]
 
     # Launch nodes
@@ -611,8 +606,7 @@ def launch_setup(context, *args, **kwargs):
                             "qos_rtabmap_imu": str(realsense_qos_int),
                             "qos": realsense_qos,
                             "qos_imu": realsense_qos,
-                            "imu0_gravitational_acceleration": imu0_gravitational_acceleration,
-                            "imu1_gravitational_acceleration": imu1_gravitational_acceleration,
+                            "gravitational_acceleration": gravitational_acceleration,
                         }.items()
                 )
             ]

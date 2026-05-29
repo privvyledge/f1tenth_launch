@@ -34,8 +34,7 @@ def generate_launch_description():
     use_ekf = LaunchConfiguration('use_ekf')  # ekf_node, ukf_node
     frequency = LaunchConfiguration('frequency')
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
-    imu0_gravitational_acceleration = LaunchConfiguration('imu0_gravitational_acceleration')
-    imu1_gravitational_acceleration = LaunchConfiguration('imu1_gravitational_acceleration')
+    gravitational_acceleration = LaunchConfiguration('gravitational_acceleration')
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -101,13 +100,9 @@ def generate_launch_description():
             'node_name', default_value='ekf_odom_node',
             description='ekf_node, ukf_node')
 
-    declare_imu0_gravitational_acceleration = DeclareLaunchArgument(
-            'imu0_gravitational_acceleration', default_value='9.80665',
-            description='Gravitational acceleration for imu0 (VESC IMU). Calibrate per robot.')
-
-    declare_imu1_gravitational_acceleration = DeclareLaunchArgument(
-            'imu1_gravitational_acceleration', default_value='9.80665',
-            description='Gravitational acceleration for imu1 (camera IMU). Calibrate per robot.')
+    declare_gravitational_acceleration = DeclareLaunchArgument(
+            'gravitational_acceleration', default_value='9.80665',
+            description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
@@ -138,8 +133,7 @@ def generate_launch_description():
                     {
                         'frequency': frequency,
                         'publish_tf': publish_tf,
-                        'imu0_gravitational_acceleration': imu0_gravitational_acceleration,
-                        'imu1_gravitational_acceleration': imu1_gravitational_acceleration,
+                        'gravitational_acceleration': gravitational_acceleration,
                     }
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
@@ -161,8 +155,7 @@ def generate_launch_description():
                     {
                         'frequency': frequency,
                         'publish_tf': publish_tf,
-                        'imu0_gravitational_acceleration': imu0_gravitational_acceleration,
-                        'imu1_gravitational_acceleration': imu1_gravitational_acceleration,
+                        'gravitational_acceleration': gravitational_acceleration,
                     }
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
@@ -192,8 +185,7 @@ def generate_launch_description():
     ld.add_action(declare_kf_type)
     ld.add_action(declare_frequency_la)
     ld.add_action(declare_node_name)
-    ld.add_action(declare_imu0_gravitational_acceleration)
-    ld.add_action(declare_imu1_gravitational_acceleration)
+    ld.add_action(declare_gravitational_acceleration)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(kf_bringup_group)
