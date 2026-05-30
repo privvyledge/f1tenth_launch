@@ -53,7 +53,7 @@ def generate_launch_description():
     # todo: pass base_link to camera_bottom_screw as an argument
     # set use_nominal_extrinsics:=True to use ideal dimensions instead of the calibrated dimensions.
     # Useful for simulations, e.g Gazebo
-    robot_state_publisher_node = Node(
+    realsense_state_publisher_node = Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
             name='realsense_state_publisher',
@@ -142,7 +142,7 @@ def generate_launch_description():
                 base_link_to_sensor_kit_tf_node,
                 lidar_static_tf_node,
                 # camera_static_tf_node,
-                robot_state_publisher_node,
+                realsense_state_publisher_node,
                 vesc_imu_static_tf_node,
                 base_footprint_tf_node,
                 base_link_to_rear_axle_tf_node,

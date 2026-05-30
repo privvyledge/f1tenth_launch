@@ -74,6 +74,14 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
+    launch_controller_server = LaunchConfiguration('launch_controller_server', default=True)
+    launch_smoother_server = LaunchConfiguration('launch_smoother_server', default=True)
+    launch_planner_server = LaunchConfiguration('launch_planner_server', default=True)
+    launch_behavior_server = LaunchConfiguration('launch_behavior_server', default=True)
+    launch_bt_navigator = LaunchConfiguration('launch_bt_navigator', default=True)
+    launch_waypoint_follower = LaunchConfiguration('launch_waypoint_follower', default=True)
+    launch_velocity_smoother = LaunchConfiguration('launch_velocity_smoother', default=True)
+    cmd_vel_topic = LaunchConfiguration('cmd_vel_topic', default='cmd_vel')
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
@@ -273,6 +281,34 @@ def launch_setup(context, *args, **kwargs):
     launch_navigation_arg = DeclareLaunchArgument('launch_navigation',
                                                   default_value=launch_navigation,
                                                   description="Launch the navigation.")
+    launch_controller_server_la = DeclareLaunchArgument(
+            'launch_controller_server', default_value=launch_controller_server,
+            description='Launch the Nav2 controller server (local trajectory tracker). '
+                        'Disable to substitute a custom node implementing FollowPath (e.g. MPC).')
+    launch_smoother_server_la = DeclareLaunchArgument(
+            'launch_smoother_server', default_value=launch_smoother_server,
+            description='Launch the Nav2 smoother server (post-processes global paths).')
+    launch_planner_server_la = DeclareLaunchArgument(
+            'launch_planner_server', default_value=launch_planner_server,
+            description='Launch the Nav2 planner server (global path planner). '
+                        'Disable to substitute a custom planner.')
+    launch_behavior_server_la = DeclareLaunchArgument(
+            'launch_behavior_server', default_value=launch_behavior_server,
+            description='Launch the Nav2 behavior server (recovery behaviors).')
+    launch_bt_navigator_la = DeclareLaunchArgument(
+            'launch_bt_navigator', default_value=launch_bt_navigator,
+            description='Launch the Nav2 bt_navigator (behavior-tree coordinator).')
+    launch_waypoint_follower_la = DeclareLaunchArgument(
+            'launch_waypoint_follower', default_value=launch_waypoint_follower,
+            description='Launch the Nav2 waypoint follower.')
+    launch_velocity_smoother_la = DeclareLaunchArgument(
+            'launch_velocity_smoother', default_value=launch_velocity_smoother,
+            description='Launch the Nav2 velocity smoother (rate-limits cmd_vel).')
+    cmd_vel_topic_la = DeclareLaunchArgument(
+            'cmd_vel_topic', default_value=cmd_vel_topic,
+            description='Final cmd_vel output topic from the Nav2 velocity smoother. '
+                        'Default: cmd_vel (drives hardware). Set to e.g. cmd_vel_nav2 when '
+                        'running a custom controller side-by-side for comparison.')
     launch_visualization_arg = DeclareLaunchArgument('launch_visualization',
                                                      default_value=launch_visualization,
                                                      description="Launch RViz.")
@@ -529,6 +565,9 @@ def launch_setup(context, *args, **kwargs):
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
         launch_navigation_arg,
+        launch_controller_server_la, launch_smoother_server_la, launch_planner_server_la,
+        launch_behavior_server_la, launch_bt_navigator_la, launch_waypoint_follower_la,
+        launch_velocity_smoother_la, cmd_vel_topic_la,
         launch_visualization_arg,
         rviz_config_arg,
         launch_2d_mapping_arg,
@@ -584,6 +623,13 @@ def launch_setup(context, *args, **kwargs):
                         'Set the launch argument "f1tenth_namespace" to the namespace you want to use. '
                         'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
                 )
+
+    # Build the absolute container name so LoadComposableNodes can find it regardless of
+    # whether a namespace is active.  Without this, the (namespace, '/', container_name)
+    # pattern in nav2_navigation.launch.py resolves to '//f1tenth_container' (→ absolute
+    # '/f1tenth_container') and silently misses the container at '/gosling1/f1tenth_container'.
+    _resolved_ns = f1tenth_namespace.perform(context)
+    nav2_container_name = f'/{_resolved_ns}/f1tenth_container' if _resolved_ns else 'f1tenth_container'
 
     component_container_node = Node(
             condition=IfCondition(use_composition),
@@ -710,6 +756,7 @@ def launch_setup(context, *args, **kwargs):
                                     launch_arguments={
                                         "namespace": f1tenth_namespace,
                                         "use_namespace": use_f1tenth_namespace,
+                                        "use_composition": use_composition,
                                         "camera_name": camera_name,
                                         "launch_sensor_fusion": 'True',
                                         "launch_map_server": launch_map_server,
@@ -808,13 +855,22 @@ def launch_setup(context, *args, **kwargs):
                                             PathJoinSubstitution(
                                                     [f1tenth_launch_bringup_dir, 'nav2_navigation.launch.py'])),
                                     condition=IfCondition(launch_navigation),
-                                    launch_arguments={'namespace': namespace,
+                                    launch_arguments={'namespace': _resolved_ns,
                                                       'use_sim_time': use_sim_time,
                                                       'autostart': autostart,
                                                       'params_file': params_file,
                                                       'use_composition': use_composition,
                                                       'use_respawn': use_respawn,
-                                                      'container_name': 'f1tenth_container'}.items())
+                                                      'container_name': nav2_container_name,
+                                                      'launch_controller_server': launch_controller_server,
+                                                      'launch_smoother_server': launch_smoother_server,
+                                                      'launch_planner_server': launch_planner_server,
+                                                      'launch_behavior_server': launch_behavior_server,
+                                                      'launch_bt_navigator': launch_bt_navigator,
+                                                      'launch_waypoint_follower': launch_waypoint_follower,
+                                                      'launch_velocity_smoother': launch_velocity_smoother,
+                                                      'cmd_vel_topic': cmd_vel_topic,
+                                                      }.items())
                         ]
                 )
             ]

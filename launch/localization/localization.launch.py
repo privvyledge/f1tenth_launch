@@ -53,7 +53,7 @@ def launch_setup(context, *args, **kwargs):
     namespace = LaunchConfiguration('namespace', default='')
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
-    use_composition = LaunchConfiguration('use_composition', default=False)
+    use_composition = LaunchConfiguration('use_composition', default=True)
     container_name = LaunchConfiguration('container_name', default='f1tenth_container')
     container_name_full = (namespace, '/', container_name)
     autostart = LaunchConfiguration('autostart', default=True)
@@ -506,63 +506,57 @@ def launch_setup(context, *args, **kwargs):
                 'rtabmap_viz_view': 'False',
                 'rviz_view': 'False',
                 'database_path': rtabmap_database_file,
-                'rtabmap_args': '--Mem/IncrementalMemory false '  # false=localization, true=mapping
-                                '--Mem/InitWMWithAllNodes true '  # true=localization, false=mapping
-                                '--RGBD/LoopClosureReextractFeatures false '  # false=localization, true=mapping
+                'rtabmap_args': '--Mem/IncrementalMemory false '      # localization: do not grow the map
+                                '--Mem/InitWMWithAllNodes true '       # load all map nodes into working memory at start
+                                '--RGBD/LoopClosureReextractFeatures false '  # not needed in localization mode
                                 '--RGBD/SavedLocalizationIgnored true '
-                                '--Vis/MinInliers 15 '  # default=20
-                                '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
-                                '--Vis/MaxDepth 0 '
-                                '--RGBD/LinearUpdate 0.1 '  # 0.001
-                                '--RGBD/AngularUpdate 0.1 '  # 0.001
-                                '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0.5 '  # 0
-                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
-                                '--Stereo/OpticalFlow true '  # default=false
-                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
+                                # Feature detector — must match the detector used during mapping (SIFT=1).
+                                # Using a different type here causes the BoW vocabulary lookup to fail silently.
+                                '--Kp/DetectorStrategy 1 '             # was 8 (BRISK): must match mapping (SIFT=1)
+                                '--Vis/FeatureType 1 '                  # was 8 (BRISK): must match mapping (SIFT=1)
+                                '--Kp/MaxFeatures 500 '
+                                '--Kp/MaxDepth 5 '
+                                '--Vis/MinInliers 15 '
+                                '--Vis/EstimationType 0 '
+                                '--Vis/MaxDepth 0 '                    # 0=unlimited: use full depth range for map matching
                                 '--Vis/BundleAdjustment 1 '
-                                # '--Vis/CorNNDR 0.6 '
-                                # '--Vis/CorGuessWinSize 20 '
                                 '--Vis/PnPFlags 0 '
-                                '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
+                                '--Vis/CorType 0 '
+                                '--GFTT/QualityLevel 0.001 '           # was 0.00001: noise keypoints
+                                '--RGBD/LinearUpdate 0.1 '
+                                '--RGBD/AngularUpdate 0.1 '
+                                '--Stereo/MinDisparity 0.5 '
+                                '--Stereo/MaxDisparity 128.0 '
+                                '--Stereo/OpticalFlow true '
+                                '--Stereo/DenseStrategy 1 '
                                 '--Reg/Force3DoF true '
-                                '--RGBD/NeighborLinkRefining true '  # when using laserscan
-                                '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp.
+                                '--RGBD/NeighborLinkRefining true '
+                                '--RGBD/ProximityBySpace true '
+                                '--Reg/Strategy 2 '                    # was 1 (ICP-only): VisIcp — visual estimates initial transform, ICP refines; ICP-only fails when odometry drift > MaxCorrespondenceDistance
                                 '--Icp/VoxelSize 0.05 '
-                                '--Icp/MaxCorrespondenceDistance 0.15 '  # 0.1
-                                '--Grid/FromDepth False '
-                                # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 0 '
-                                # '--RGBD/CreateOccupancyGrid false '
-                                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
-                                '--Grid/Sensor 0 '
-                                '--Grid/RangeMax 10.0 '  # 0=inf
-                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
-                                '--Optimizer/Slam2D true '
-                                '--Optimizer/GravitySigma 0 '
-                                # new
-                                '--Kp/DetectorStrategy 8 '  # 1
-                                '--Kp/MaxFeatures 500 '  # 1000
-                                '--RGBD/OptimizeMaxError 4 '
-                                '--RGBD/ProximityPathMaxNeighbors 10 '
-                                '--Vis/FeatureType 8 '  # 1
-                                '--Kp/MaxDepth 6 '
-                                '--Icp/Strategy 1 '
-                                '--Icp/OutlierRatio 0.75 '  # 0.85
-                                '--Mem/STMSize 50 '
-                                '--Icp/CorrespondenceRatio 0.2 '
-                                '--RGBD/LocalRadius 5 '
-                                # '--Mem/NotLinkedNodesKept true ' # false
-                                '--Icp/PointToPlaneMinComplexity 0.04 '
-                                '--Icp/MaxRotation 1.6 '
+                                '--Icp/MaxCorrespondenceDistance 0.15 '
+                                '--Icp/MaxRotation 0.5 '               # was 1.6 (~91deg): too wide, accepted bad alignments
                                 '--Icp/MaxTranslation 1.0 '
+                                '--Icp/Strategy 1 '
+                                '--Icp/OutlierRatio 0.75 '
+                                '--Icp/CorrespondenceRatio 0.2 '
+                                '--Icp/PointToPlaneMinComplexity 0.04 '
+                                '--Icp/Iterations 50 '
+                                '--Icp/Force4DoF true '
+                                '--Rtabmap/DetectionRate 0 '
+                                '--Rtabmap/ImageBufferSize 5 '
+                                '--Grid/Sensor 0 '
+                                '--Grid/RangeMax 10.0 '
                                 '--Grid/RangeMin 0.2 '
                                 '--Grid/NoiseFilteringMinNeighbors 8 '
                                 '--Grid/NoiseFilteringRadius 0.1 '
-                                '--Icp/Iterations 50 '  # 100
-                                '--Icp/Force4DoF true '
-                                '--Rtabmap/ImageBufferSize 5',
+                                '--Optimizer/Strategy 2 '
+                                '--Optimizer/Slam2D true '
+                                '--Optimizer/GravitySigma 0.3 '        # was 0 (disabled): gravity constraint from IMU reduces drift
+                                '--RGBD/OptimizeMaxError 4 '
+                                '--RGBD/LocalRadius 8 '                # was 5: wider search improves re-localization after drift
+                                '--RGBD/ProximityPathMaxNeighbors 10 '
+                                '--Mem/STMSize 50 ',
             }.items()
     )
 
@@ -576,8 +570,8 @@ def launch_setup(context, *args, **kwargs):
         'Odom/KeyFrameThr': '0.3',  # default = 0.3. 0.6
         'Odom/ScanKeyFrameThr': '0.3',
         'Odom/ResetCountdown': '1',  # reset X frames after losing odometry
-        'Rtabmap/StartNewMapOnLoopClosure': 'True',
-        'Optimizer/GravitySigma': '0',
+        'Rtabmap/StartNewMapOnLoopClosure': 'True',  # resets local odometry window on loop detection, preventing error accumulation in the F2M map
+        'Optimizer/GravitySigma': '0.3',  # was 0 (disabled): gravity constraint from IMU reduces roll/pitch drift in visual odometry
     }
 
     # RGB-D odometry
@@ -695,9 +689,9 @@ def launch_setup(context, *args, **kwargs):
         'Icp/MaxCorrespondenceDistance': '0.1',
         'Icp/MaxTranslation': '0.4',
         # Maximum ICP translation correction accepted (meters). Note. This should be increased for a fast moving robot or low frequency LIDAR or both. Should be scaled based on max vehicle speed expected vs highest lidar frequency. For example, for a LIDAR publishing scans at 8.5 Hz, with a maximum expected robot speed of 10 m/s, max_translation = max_speed (10) * sample_time (1 / 8.5) = 10 * 0.1176470588 = 1.176470588. Default = 0.2
-        'Icp/MaxRotation': '1.6',
+        'Icp/MaxRotation': '0.5',   # was 1.6 (~91deg): too wide; matches mapping.launch.py fix
         # Maximum ICP rotation correction accepted (in radians). See MaxTranslation explanation above. max_rotation = max_yaw_rate * sample_time. Default = 0.78 (45 degrees)
-        'Optimizer/GravitySigma': '0',
+        'Optimizer/GravitySigma': '0.3',  # was 0 (disabled): gravity constraint from IMU reduces roll/pitch drift
         'Icp/VoxelSize': '0.05',  # increase to 0.2 for performance boost at the cost of accuracy
         'Icp/Epsilon': '0.0001',  # increase for performance boost at the cost of accuracy. Default=0.0
         'Icp/Iterations': '10',  # set to 10 for performance boost at the cost of accuracy. Default=30

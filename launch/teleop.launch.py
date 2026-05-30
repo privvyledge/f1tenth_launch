@@ -84,6 +84,9 @@ def launch_setup(context, *args, **kwargs):
 
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration', default='9.80665')
 
+    map_file = LaunchConfiguration('map_file', default=os.path.join(
+            get_package_share_directory('f1tenth_launch'), 'data/maps', 'raslab.yaml'))
+
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
     stereo_to_pointcloud = LaunchConfiguration('stereo_to_pointcloud', default='False')
@@ -297,6 +300,10 @@ def launch_setup(context, *args, **kwargs):
             'gravitational_acceleration', default_value=gravitational_acceleration,
             description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
+    map_file_la = DeclareLaunchArgument(
+            'map_file', default_value=map_file,
+            description='Path to the 2D map YAML file used by AMCL and the map server.')
+
     camera_name_la = DeclareLaunchArgument(
             'camera_name', default_value=camera_name,
             description='Name of the camera. Used to remap topics.')
@@ -405,6 +412,7 @@ def launch_setup(context, *args, **kwargs):
         realsense_qos_la,
         camera_launch_delay_la, laserscan_launch_delay_la,
         gravitational_acceleration_la,
+        map_file_la,
     ]
 
     # Launch nodes
@@ -582,6 +590,7 @@ def launch_setup(context, *args, **kwargs):
                             "namespace": f1tenth_namespace,
                             "use_namespace": use_f1tenth_namespace,
                             "camera_name": camera_name,
+                            "map_file": map_file,
                             "launch_sensor_fusion": 'True' if ('ekf' in map(str.lower, [odom_tf_publisher_string, map_tf_publisher_string])) else 'False',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,

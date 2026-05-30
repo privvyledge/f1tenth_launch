@@ -85,7 +85,7 @@ def launch_setup(context, *args, **kwargs):
     launch_map_saver = LaunchConfiguration('launch_map_saver', default=True)   # True: auto-save 2D map during active mapping
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
-    launch_visualization = LaunchConfiguration('launch_visualization', default='False')
+    launch_visualization = LaunchConfiguration('launch_visualization', default='True')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
@@ -483,6 +483,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization_string = launch_localization.perform(context)
     launch_local_localization_string = launch_local_localization.perform(context)
     launch_global_localization_string = launch_global_localization.perform(context)
+    launch_visualization_str = launch_visualization.perform(context)  # rtabmap expects strings
 
     use_composition_string = use_composition.perform(context)
     use_gpu_string = use_gpu.perform(context)
@@ -653,6 +654,86 @@ def launch_setup(context, *args, **kwargs):
     # to see the wrong value.
     gpu_enabled = 'True' if use_gpu_string.lower() == 'true' else 'False'
 
+    # RTABMap parameter profiles.
+    # Offline (use_sim_time=True / rosbag): accuracy — full ICP, bundle adjustment, large buffers.
+    # Online  (use_sim_time=False / live):  speed — trimmed features, BA off, tight time budget.
+    _RTABMAP_COMMON = (
+        # Bug fixes applied to both modes
+        '--RGBD/CreateOccupancyGrid true '           # was false: grid disabled despite Grid/* params; loop corrections never updated the occupancy map
+        '--GFTT/QualityLevel 0.001 '                 # was 0.00001: 100x too permissive; admitted noise keypoints
+        '--Icp/MaxRotation 0.5 '                     # was 1.6 (~91deg): gate too wide; bad ICP solutions passed
+        '--Optimizer/GravitySigma 0.3 '              # was 0 (disabled): gravity constraint from IMU reduces roll/pitch drift
+        # Core settings shared between modes
+        '--RGBD/LoopClosureReextractFeatures true '
+        '--Rtabmap/CreateIntermediateNodes true '
+        '--Vis/MinInliers 15 '
+        '--Vis/EstimationType 0 '
+        '--RGBD/OptimizeFromGraphEnd true '
+        '--Vis/MaxDepth 5 '          # reduced from 6: D435i depth noise increases beyond 5m, cuts ghost points at far edges
+        '--Kp/MaxDepth 5 '
+        '--RGBD/LinearUpdate 0.1 '
+        '--RGBD/AngularUpdate 0.1 '
+        '--Stereo/MinDisparity 0.5 '
+        '--Stereo/MaxDisparity 128.0 '
+        '--Stereo/OpticalFlow true '
+        '--Stereo/DenseStrategy 1 '
+        '--Vis/PnPFlags 0 '
+        '--Vis/CorType 0 '
+        '--Reg/Force3DoF true '
+        '--RGBD/NeighborLinkRefining true '
+        '--RGBD/ProximityBySpace true '
+        '--Reg/Strategy 2 '          # VisIcp: visual features estimate initial transform (handles odometry drift), ICP refines; ICP-only (1) fails loop closure when accumulated drift > MaxCorrespondenceDistance
+        '--Icp/MaxCorrespondenceDistance 0.15 '
+        '--Icp/OutlierRatio 0.75 '
+        '--Icp/CorrespondenceRatio 0.2 '
+        '--Icp/Strategy 1 '
+        '--Icp/PointToPlaneMinComplexity 0.04 '
+        '--Icp/Force4DoF true '
+        '--Rtabmap/DetectionRate 0 '
+        '--Grid/Sensor 0 '          # LiDAR-only for 2D occupancy: more accurate than depth for ground-plane mapping
+        '--Grid/RangeMax 10.0 '
+        '--Grid/RangeMin 0.2 '
+        '--Grid/RayTracing True '
+        '--Optimizer/Strategy 2 '
+        '--Optimizer/Slam2D true '
+        '--Kp/DetectorStrategy 1 '
+        '--Vis/FeatureType 1 '
+        '--Mem/NotLinkedNodesKept false '
+    )
+    _RTABMAP_OFFLINE = _RTABMAP_COMMON + (
+        # Accuracy mode: maximize loop closure reliability and map density; no time budget
+        '--Kp/MaxFeatures 2000 '                     # up from 1000: denser 3D map and more loop closure candidates per node
+        '--Mem/STMSize 100 '                          # up from 50: at 10cm spacing, 50 nodes = 5m; 100 nodes keeps ~10m in working memory for loop closure without LTM retrieval
+        '--RGBD/LocalRadius 8 '                       # up from 5: wider spatial proximity search for loop candidates
+        '--RGBD/ProximityPathMaxNeighbors 20 '        # up from 10: check more path neighbors during proximity detection
+        '--Icp/Iterations 100 '
+        '--Icp/MaxTranslation 1.0 '
+        '--Rtabmap/ImageBufferSize 10000 '            # large buffer safe for bag replay bursts
+        '--Grid/NoiseFilteringMinNeighbors 10 '       # up from 8: stricter occupancy noise filter
+        '--Grid/NoiseFilteringRadius 0.15 '           # up from 0.1
+        '--Vis/BundleAdjustment 1 '
+        '--Rtabmap/TimeThr 0 '                        # no per-iteration time cap offline
+        '--RGBD/OptimizeMaxError 6 '                  # up from 4: accumulated drift over 3 loops can push a valid closure above 4 Mahalanobis; 6 is more tolerant without accepting gross errors
+        '--Rtabmap/LoopThr 0.05 '                     # default 0.11: more aggressive BoW retrieval so marginal visual candidates reach registration rather than being discarded early
+    )
+    _RTABMAP_ONLINE = _RTABMAP_COMMON + (
+        # Speed mode: stay real-time on Jetson; trade accuracy for throughput
+        '--Kp/MaxFeatures 500 '
+        '--Mem/STMSize 30 '
+        '--RGBD/LocalRadius 4 '
+        '--RGBD/ProximityPathMaxNeighbors 5 '
+        '--Icp/Iterations 30 '
+        '--Icp/MaxTranslation 0.5 '
+        '--Rtabmap/ImageBufferSize 20 '               # small buffer: prevent real-time lag
+        '--Grid/NoiseFilteringMinNeighbors 8 '
+        '--Grid/NoiseFilteringRadius 0.1 '
+        '--Vis/BundleAdjustment 0 '                   # disabled: BA too slow online
+        '--Rtabmap/TimeThr 700 '                      # 700ms per-iteration budget
+        '--RGBD/OptimizeMaxError 4 '
+        '--Rtabmap/LoopThr 0.11 '                     # default: standard threshold online
+    )
+    rtabmap_profile = _RTABMAP_OFFLINE if use_sim_time_string.lower() == 'true' else _RTABMAP_ONLINE
+
     mapping_3d_cpu_node = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([f1tenth_launch_bringup_dir, 'mapping', '3d_mapping.launch.py'])
@@ -680,7 +761,7 @@ def launch_setup(context, *args, **kwargs):
                 "camera_info_topic": camera_name_string + 'color/camera_info',  # 'color/camera_info', 'infra1/camera_info'
                 "scan_topic": 'lidar/scan_filtered',
                 "approx_sync": 'true',
-                "rtabmap_viz_view": launch_visualization,
+                "rtabmap_viz_view": launch_visualization_str,
                 "rviz_view": 'false',  # launch_visualization
                 "database_path": rtabmap_database_file,
                 "qos": "1",
@@ -689,77 +770,7 @@ def launch_setup(context, *args, **kwargs):
                 "qos_image": str(realsense_qos_int),
                 "qos_camera_info": str(realsense_qos_int),
                 "qos_imu": str(realsense_qos_int),
-                "rtabmap_args": f'{delete_old_map}'
-                                '--RGBD/LoopClosureReextractFeatures true '
-                                '--Rtabmap/CreateIntermediateNodes true '
-                                # always update the map not only when the robot moves.
-                                # '--map_always_update False'
-                                '--Vis/MinInliers 15 '  # default=20, 15 [tested]
-                                '--Vis/EstimationType 0 '  # 0=more accurate, 1=faster
-                                '--RGBD/OptimizeFromGraphEnd true '  # default=false
-                                '--Vis/MaxDepth 6 '
-                                '--RGBD/LinearUpdate 0.1 '  # 0.001
-                                '--RGBD/AngularUpdate 0.1 '  # 0.001
-                                '--GFTT/QualityLevel 0.00001 '
-                                '--Stereo/MinDisparity 0.5 '
-                                '--Stereo/MaxDisparity 128.0 '  # default=128.0, 64 [tested]
-                                '--Stereo/OpticalFlow true '  # default=false [tested]
-                                '--Stereo/DenseStrategy 1 '  # default=0 [tested] but 1 should be better
-                                # '--Vis/RoiRatios 0,0,0,.2 '
-                                # "--Kp/RoiRatios 0,0,0,.2 "
-                                '--Vis/BundleAdjustment 1 '
-                                #'--Vis/CorNNDR 0.6 '
-                                #'--Vis/CorGuessWinSize 20 '
-                                '--Vis/PnPFlags 0 '
-                                '--Vis/CorType 0 '  # 0=Features Matching, 1=Optical Flow
-                                '--Reg/Force3DoF true '
-                                '--RGBD/NeighborLinkRefining true '  # when using laserscan
-                                '--RGBD/ProximityBySpace true '  # when using laserscan
-                                '--Reg/Strategy 1 '  # when using laserscan. 0=Vis, 1=Icp, 2=VisIcp. Tested with 1 and 2.
-                                #'--Icp/VoxelSize 0.05 '  
-                                '--Icp/MaxCorrespondenceDistance 0.15 '
-                                # set DetectionRate to 0 to use image rate. Default=1
-                                '--Rtabmap/DetectionRate 0 '
-                                '--RGBD/CreateOccupancyGrid false '  # tested with false.
-                                # Grid/Sensor: 0=laser scan, 1=depth image(s), 2=both
-                                '--Grid/Sensor 0 '  # tested with 0.
-                                '--Grid/RangeMax 10.0 '  # 0=inf
-                                # enable ray-tracing to clear out cells and mark as free 
-                                # space in occupancy grid map
-                                '--Grid/RayTracing True '
-                                ##'--Grid/FromDepth False '  # generate 2D map from depth. Warning: do not use as this wrongly transfers its value as a boolean to Grid/Sensor. Use Grid/Sensor instead
-                                '--Optimizer/Strategy 2 '  # 2=gtsam (might be better for localization)
-                                '--Optimizer/Slam2D true '
-                                ##
-                                '--Kp/DetectorStrategy 1 '
-                                '--Kp/MaxFeatures 1000 '
-                                #'--Optimizer/Robust true '
-                                '--RGBD/OptimizeMaxError 4 '
-                                '--RGBD/ProximityPathMaxNeighbors 10 '
-                                '--Vis/FeatureType 1 '
-                                '--Kp/MaxDepth 6 '
-                                '--Icp/Strategy 1 '
-                                '--Icp/OutlierRatio 0.75 '  # 0.85
-                                '--Mem/STMSize 50 '
-                                '--Icp/CorrespondenceRatio 0.2 '
-                                '--RGBD/LocalRadius 5 '
-                                '--Mem/NotLinkedNodesKept false '
-                                '--Icp/PointToPlaneMinComplexity 0.04 '
-                                '--Icp/MaxRotation 1.6 '
-                                '--Icp/MaxTranslation 1.0 '
-                                '--Grid/RangeMin 0.2 '
-                                '--Grid/NoiseFilteringMinNeighbors 8 '
-                                '--Grid/NoiseFilteringRadius 0.1 '
-                                '--Icp/Iterations 100 '
-                                '--Icp/Force4DoF true '
-                                '--Rtabmap/ImageBufferSize 200 '
-                                #'--Vis/CorGuessMatchToProjection False '
-                                ## A 3D occupancy grid is required if you want an OctoMap (3D ray tracing).
-                                # Set to false if you want only a 2D map, the cloud will be projected on xy plane.
-                                # A 2D map can be still generated if checked, but it requires more memory and time to generate it.
-                                # Ignored if laser scan is 2D and Grid/Sensor is 0.
-                                # '--Grid/3D true '
-                                '--Optimizer/GravitySigma 0',
+                "rtabmap_args": f'{delete_old_map}{rtabmap_profile}',
             }.items()
     )
 
