@@ -41,6 +41,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Setup default directories
     nav2_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'nav2_params.yaml')
+    localization_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'localization', 'localizer_amcl.yaml')
     map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
     offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
@@ -72,6 +73,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_controller_server = LaunchConfiguration('launch_controller_server', default=True)
@@ -238,7 +240,7 @@ def launch_setup(context, *args, **kwargs):
             description='Whether to respawn if a node crashes. Applied when composition is disabled.')
 
     declare_log_level_cmd = DeclareLaunchArgument(
-            'log_level', default_value='info',
+            'log_level', default_value='warn',
             description='log level')
 
     launch_joystick_arg = DeclareLaunchArgument('launch_joystick', default_value=launch_joystick,
@@ -263,6 +265,13 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
+            'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
+            description='Attempt to localize Isaac ROS VSLAM in a previously saved map on startup. '
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path. '
+                        'False (default) prevents the intermittent SIGABRT crash caused by GXF '
+                        'heap corruption on localization failure.')
 
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
@@ -561,6 +570,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
@@ -631,22 +641,36 @@ def launch_setup(context, *args, **kwargs):
     _resolved_ns = f1tenth_namespace.perform(context)
     nav2_container_name = f'/{_resolved_ns}/f1tenth_container' if _resolved_ns else 'f1tenth_container'
 
+    # Costmap sub-nodes (e.g. /gosling1/local_costmap/local_costmap) are created
+    # programmatically by controller_server/planner_server and inherit the container's
+    # process-wide params file.  They look for params at gosling1.local_costmap.* — so
+    # the container must carry the namespace-prefixed file, not the raw one.
+    container_nav2_params = ParameterFile(
+        RewrittenYaml(
+            source_file=params_file,
+            root_key=_resolved_ns,
+            param_rewrites={'use_sim_time': use_sim_time},
+            convert_types=True),
+        allow_substs=True) if _resolved_ns else params_file
+
     component_container_node = Node(
             condition=IfCondition(use_composition),
             name='f1tenth_container',  # todo: set as a launch argument
             package='rclcpp_components',
-            # todo: compare 'component_container_isolated' with
-            #  'component_container_mt' and 'component_container_isolated'
             executable='component_container_isolated',
             parameters=[
-                params_file,
+                container_nav2_params,
                 {
                     'autostart': autostart,
                     'use_sim_time': use_sim_time,
                     'yaml_filename': map_file,
+                    'thread_num': os.cpu_count(),
                 }
             ],
-            arguments=['--ros-args', '--log-level', log_level],
+            arguments=[
+                '--use_multi_threaded_executor',
+                '--ros-args', '--log-level', log_level
+            ],
             remappings=remappings,
             output='screen')
 
@@ -736,7 +760,8 @@ def launch_setup(context, *args, **kwargs):
             ),
             condition=LaunchConfigurationEquals('launch_tfs', 'True'),
             launch_arguments={
-                "use_sim_time": use_sim_time
+                'use_sim_time': use_sim_time,
+                'log_level': log_level,
             }.items()
     )
 
@@ -758,6 +783,11 @@ def launch_setup(context, *args, **kwargs):
                                         "use_namespace": use_f1tenth_namespace,
                                         "use_composition": use_composition,
                                         "camera_name": camera_name,
+                                        # Pass the localization param file explicitly. Otherwise the
+                                        # bringup-level 'params_file' (nav2_params.yaml, whose amcl
+                                        # section uses scan_topic: scan) is inherited by the include and
+                                        # AMCL subscribes to the wrong scan topic, never localizing.
+                                        "params_file": localization_params_file_path,
                                         "launch_sensor_fusion": 'True',
                                         "launch_map_server": launch_map_server,
                                         "launch_ekf_odom": launch_local_localization,
@@ -771,7 +801,7 @@ def launch_setup(context, *args, **kwargs):
                                         'launch_stereo_odometry': 'True',
                                         'launch_laserscan_odometry': 'True',
                                         'launch_icp_odometry': 'True',
-                                        'launch_amcl': launch_global_localization,
+                                        'launch_amcl': 'True',  # launch_global_localization,
                                         "map_file": map_file,
                                         "use_sim_time": use_sim_time,
                                         "use_gpu": use_gpu,
@@ -782,6 +812,8 @@ def launch_setup(context, *args, **kwargs):
                                         "qos": realsense_qos,
                                         "qos_imu": realsense_qos,
                                         "gravitational_acceleration": gravitational_acceleration,
+                                        "localize_on_startup": localize_isaac_vslam_on_startup,
+                                        "log_level": log_level,
                                     }.items()
                             )
                         ]
@@ -795,7 +827,7 @@ def launch_setup(context, *args, **kwargs):
             executable='rviz2',
             name='rviz2',
             output='screen',
-            arguments=['-d', rviz_config_file],
+            arguments=['-d', rviz_config_file, '--ros-args', '--log-level', log_level],
             parameters=[{'use_sim_time': use_sim_time}]
     )
 
@@ -836,6 +868,8 @@ def launch_setup(context, *args, **kwargs):
                                                       "online_mapping_2d_param_file": online_mapping_2d_param_file,
                                                       "map_2d_file": map_2d_file,
                                                       "rtabmap_database_file": rtabmap_database_file,
+                                                      "localize_isaac_vslam_on_startup": localize_isaac_vslam_on_startup,
+                                                      "log_level": log_level,
                                                       }.items())
                         ]
                 )
@@ -870,6 +904,7 @@ def launch_setup(context, *args, **kwargs):
                                                       'launch_waypoint_follower': launch_waypoint_follower,
                                                       'launch_velocity_smoother': launch_velocity_smoother,
                                                       'cmd_vel_topic': cmd_vel_topic,
+                                                      'log_level': log_level,
                                                       }.items())
                         ]
                 )
@@ -907,7 +942,6 @@ def launch_setup(context, *args, **kwargs):
 
                 # nodes
                 mapping_launch,
-                localization_launch,
                 nav2_navigation_launch,
             ]
     )
@@ -930,7 +964,14 @@ def launch_setup(context, *args, **kwargs):
             ]
     )  # append F1/10 namespace to all nodes
     ld = launch_args + [
-                nodes_to_launch
+                nodes_to_launch,
+                # localization is placed outside nodes_to_launch for the same reason as teleop:
+                # nav2_bringup_group inherits the f1tenth_namespace push from nodes_to_launch, so
+                # including localization inside it would make every composable node in
+                # localization.launch.py double-namespaced (e.g. gosling1/gosling1/amcl).
+                # AMCL would publish /tf to gosling1/gosling1/tf instead of gosling1/tf and
+                # the map→odom transform would never reach the TF tree.
+                localization_launch,
             ]
     return ld
 

@@ -30,6 +30,7 @@ def launch_setup(context, *args, **kwargs):
     sensor_include_dir = os.path.join(f1tenth_launch_dir, 'launch', 'sensors')
     localization_include_dir = os.path.join(f1tenth_launch_dir, 'launch', 'localization')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
+    localization_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'localization', 'localizer_amcl.yaml')
 
     # Declare launch configuration variables
     use_composition = LaunchConfiguration('use_composition', default='True')  # True
@@ -47,6 +48,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl
@@ -103,6 +105,7 @@ def launch_setup(context, *args, **kwargs):
 
     camera_launch_delay = LaunchConfiguration('camera_launch_delay', default='6.0')
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
+    log_level = LaunchConfiguration('log_level', default='info')
 
     # Declare launch arguments
     declare_use_composition_cmd = DeclareLaunchArgument(
@@ -153,6 +156,13 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
+            'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
+            description='Attempt to localize Isaac ROS VSLAM in a previously saved map on startup. '
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path. '
+                        'False (default) prevents the intermittent SIGABRT crash caused by GXF '
+                        'heap corruption on localization failure.')
 
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
@@ -376,6 +386,10 @@ def launch_setup(context, *args, **kwargs):
                         'Used to avoid USB bandwidth limitations, '
                         'especially startup current draw caused by booting multiple USB devices simultaneously.')
 
+    declare_log_level_cmd = DeclareLaunchArgument(
+            'log_level', default_value='info',
+            description='log level')
+
     launch_args = [
         declare_use_composition_cmd,
         declare_container_name_cmd,
@@ -390,6 +404,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
         odom_tf_publisher_la,
         map_tf_publisher_la,
@@ -413,6 +428,7 @@ def launch_setup(context, *args, **kwargs):
         camera_launch_delay_la, laserscan_launch_delay_la,
         gravitational_acceleration_la,
         map_file_la,
+        declare_log_level_cmd,
     ]
 
     # Launch nodes
@@ -452,31 +468,17 @@ def launch_setup(context, *args, **kwargs):
     component_container_node = LogInfo(msg=f'Not launching container in teleop.launch.py.')
     if use_composition_string.lower() == 'true' and attach_to_shared_component_container_string.lower() == 'false':
         component_container_node = GroupAction(
-                # condition=IfCondition(
-                #         PythonExpression(
-                #                 ["'", use_composition, "' == 'true' and '", attach_to_shared_component_container, "' == 'false'"]
-                #         )),
                 actions=[
-                    # PushRosNamespace(
-                    #         condition=IfCondition(use_f1tenth_namespace),
-                    #         namespace=f1tenth_namespace),
-                    SetRemap(src=['/tf'], dst=['tf']),
-                    SetRemap(src=['/tf_static'], dst=['tf_static']),
-                    SetParameter(name='use_sim_time', value=use_sim_time),
                     SetParameter(name='thread_num', value=os.cpu_count()),  # number of threads to use with component_container_mt
                     Node(
                             condition=IfCondition(use_composition),
                             name=container_name,
                             package='rclcpp_components',
-                            # https://docs.ros.org/en/humble/Concepts/Intermediate/About-Composition.html#componentcontainer
-                            # https://docs.ros.org/en/humble/Tutorials/Intermediate/Composition.html#component-container-types
                             # executables: 'component_container_mt', 'component_container_isolated', 'component_container'
                             executable='component_container_isolated',
-                            remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
                             arguments=[
                                 '--use_multi_threaded_executor',
-                                # launch each component in a separate thread with component_container_isolated
-                                '--ros-args', '--log-level', 'info'
+                                '--ros-args', '--log-level', log_level
                             ],
                             output='screen'),
                 ]
@@ -573,7 +575,11 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(
                     PathJoinSubstitution([vehicle_include_dir, 'static_transformations.launch.py'])
             ),
-            condition=LaunchConfigurationEquals('launch_tfs', 'True')
+            condition=LaunchConfigurationEquals('launch_tfs', 'True'),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'log_level': log_level,
+            }.items()
     )
 
     localization_launch = TimerAction(
@@ -591,6 +597,13 @@ def launch_setup(context, *args, **kwargs):
                             "use_namespace": use_f1tenth_namespace,
                             "camera_name": camera_name,
                             "map_file": map_file,
+                            # Pass the localization param file explicitly. teleop declares no
+                            # params_file of its own, so standalone it works — but when teleop is
+                            # nested under a parent that sets params_file (e.g. bringup->mapping->teleop,
+                            # where params_file=nav2_params.yaml), that value would leak into this
+                            # include and AMCL would get nav2_params.yaml (scan_topic: scan) and never
+                            # localize. Pinning localizer_amcl.yaml here matches the bringup fix.
+                            "params_file": localization_params_file_path,
                             "launch_sensor_fusion": 'True' if ('ekf' in map(str.lower, [odom_tf_publisher_string, map_tf_publisher_string])) else 'False',
                             "launch_ekf_odom": launch_local_localization,
                             "launch_ekf_map": launch_global_localization,
@@ -603,9 +616,10 @@ def launch_setup(context, *args, **kwargs):
                             'launch_stereo_odometry': 'True',
                             'launch_laserscan_odometry': 'True',
                             'launch_icp_odometry': 'True',
-                            'launch_amcl': launch_global_localization,
+                            'launch_amcl': 'True',  # launch_global_localization,
                             'launch_particle_filter': 'False',  # launch_global_localization
                             'launch_map_server': launch_map_server,
+                            'localize_on_startup': localize_isaac_vslam_on_startup,
                             # "map_file": map_file,
                             "use_sim_time": use_sim_time,
                             "use_gpu": use_gpu,
@@ -616,12 +630,21 @@ def launch_setup(context, *args, **kwargs):
                             "qos": realsense_qos,
                             "qos_imu": realsense_qos,
                             "gravitational_acceleration": gravitational_acceleration,
+                            "log_level": log_level,
                         }.items()
                 )
             ]
     )
 
-    visualization_launch = None
+    visualization_launch = Node(
+            condition=IfCondition(launch_visualization),
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            arguments=['-d', rviz_config_file, '--ros-args', '--log-level', log_level],
+            parameters=[{'use_sim_time': use_sim_time}]
+    )
 
     nodes_to_launch = GroupAction(
             actions=[
@@ -638,6 +661,7 @@ def launch_setup(context, *args, **kwargs):
                 ackermann_mux_launch,
                 vehicle_launch,
                 tf_launch,
+                visualization_launch,
             ]
     )  # append F1/10 namespace to all nodes
 

@@ -81,6 +81,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=False)  # False: building a map, not consuming one
     launch_map_saver = LaunchConfiguration('launch_map_saver', default=True)   # True: auto-save 2D map during active mapping
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
@@ -131,6 +132,7 @@ def launch_setup(context, *args, **kwargs):
     laserscan_launch_delay = LaunchConfiguration('laserscan_launch_delay', default='2.0')
 
     publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf', default=True)
+    log_level = LaunchConfiguration('log_level', default='info')
 
     # Declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -212,6 +214,13 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+
+    localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
+            'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
+            description='Attempt to localize Isaac ROS VSLAM in a previously saved map on startup. '
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path. '
+                        'False (default) prevents the intermittent SIGABRT crash caused by GXF '
+                        'heap corruption on localization failure.')
 
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
@@ -438,6 +447,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
         launch_map_saver_la,
         odom_tf_publisher_arg,
@@ -539,8 +549,7 @@ def launch_setup(context, *args, **kwargs):
                         remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
                         arguments=[
                             '--use_multi_threaded_executor',
-                            # launch each component in a separate thread with component_container_isolated
-                            '--ros-args', '--log-level', 'info'
+                            '--ros-args', '--log-level', log_level
                         ],
                         output='screen'),
             ]
@@ -598,6 +607,8 @@ def launch_setup(context, *args, **kwargs):
                 "attach_to_shared_component_container": use_composition,  # this launch file starts a container
                 "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
                 "gravitational_acceleration": gravitational_acceleration,
+                "localize_isaac_vslam_on_startup": localize_isaac_vslam_on_startup,
+                "log_level": log_level,
             }.items()
     )
 

@@ -26,11 +26,17 @@ def generate_launch_description():
 
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
+    log_level = LaunchConfiguration('log_level', default='info')
 
     # Launch Arguments
     use_sim_time_la = DeclareLaunchArgument(
             'use_sim_time', default_value='False',
             description='Use simulation (Gazebo) clock if true')
+    log_level_la = DeclareLaunchArgument(
+            'log_level', default_value='info',
+            description='log level')
+
+    _log_args = ['--ros-args', '--log-level', log_level]
 
     base_link_to_sensor_kit_tf_node = Node(
             package='tf2_ros',
@@ -38,7 +44,7 @@ def generate_launch_description():
             name='static_baselink_to_sensor_kit',
             arguments=['--x', '0.0084836', '--y', '0.0', '--z', '0.0454914',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'sensor_kit_link']
+                       '--frame-id', 'base_link', '--child-frame-id', 'sensor_kit_link'] + _log_args
     )  # rear axle to aluminum plate back edge (centered)
 
     lidar_static_tf_node = Node(
@@ -47,7 +53,7 @@ def generate_launch_description():
             name='static_sensor_kit_to_laser',
             arguments=['--x', '0.0757164', '--y', '0.0', '--z', '0.0886086',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'lidar']
+                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'lidar'] + _log_args
     )  # aluminum plate to YDLidar
 
     # todo: pass base_link to camera_bottom_screw as an argument
@@ -61,6 +67,7 @@ def generate_launch_description():
                 'robot_description': ParameterValue(Command(['xacro ', str(urdf_path), ' ',
                                                              'use_nominal_extrinsics:=False']), value_type=str)
             }],
+            arguments=['--ros-args', '--log-level', log_level],
             output='screen'
     )  # aluminum plate to Realsense
 
@@ -70,7 +77,7 @@ def generate_launch_description():
             name='static_sensor_kit_to_vesc_imu',
             arguments=['--x', '0.1326164', '--y', '0.0', '--z', '-0.01218',
                        '--yaw', '-1.57079633', '--pitch', '0.0', '--roll', '3.14159265',
-                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'imu_link']
+                       '--frame-id', 'sensor_kit_link', '--child-frame-id', 'imu_link'] + _log_args
     )  # aluminum plate to VESC IMU (/sensors/imu/raw)
 
     base_footprint_tf_node = Node(
@@ -79,7 +86,7 @@ def generate_launch_description():
             name='static_sensor_kit_to_basefootprint',
             arguments=['--x', '0.0', '--y', '0.0', '--z', '-0.033',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'base_footprint']
+                       '--frame-id', 'base_link', '--child-frame-id', 'base_footprint'] + _log_args
     )  # rear axle to ground
 
     base_link_to_rear_axle_tf_node = Node(
@@ -88,7 +95,7 @@ def generate_launch_description():
             name='static_baselink_to_rear_axle',
             arguments=['--x', '0.0', '--y', '0.0', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'rear_axle']
+                       '--frame-id', 'base_link', '--child-frame-id', 'rear_axle'] + _log_args
     )  # base_link == rear_axle
 
     rear_axle_to_front_axle_tf_node = Node(
@@ -97,7 +104,7 @@ def generate_launch_description():
             name='static_baselink_to_front_axle',
             arguments=['--x', '0.256', '--y', '0.0', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'front_axle']
+                       '--frame-id', 'base_link', '--child-frame-id', 'front_axle'] + _log_args
     )  # rear axle to front axle
 
     rear_axle_to_right_rear_wheel_tf_node = Node(
@@ -106,7 +113,7 @@ def generate_launch_description():
             name='static_baselink_to_right_rear_wheel',
             arguments=['--x', '0.0', '--y', '-0.1016', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'right_rear_wheel']
+                       '--frame-id', 'base_link', '--child-frame-id', 'right_rear_wheel'] + _log_args
     )  # rear axle to right rear wheel
 
     rear_axle_to_left_rear_wheel_tf_node = Node(
@@ -115,7 +122,7 @@ def generate_launch_description():
             name='static_baselink_to_left_rear_wheel',
             arguments=['--x', '0.0', '--y', '0.1016', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'left_rear_wheel']
+                       '--frame-id', 'base_link', '--child-frame-id', 'left_rear_wheel'] + _log_args
     )  # rear axle to left rear wheel
 
     rear_axle_to_right_front_wheel_tf_node = Node(
@@ -124,7 +131,7 @@ def generate_launch_description():
             name='static_baselink_to_right_front_wheel',
             arguments=['--x', '0.256', '--y', '-0.1016', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'right_front_wheel']
+                       '--frame-id', 'base_link', '--child-frame-id', 'right_front_wheel'] + _log_args
     )  # rear axle to right front wheel
 
     rear_axle_to_left_front_wheel_tf_node = Node(
@@ -133,7 +140,7 @@ def generate_launch_description():
             name='static_baselink_to_left_front_wheel',
             arguments=['--x', '0.256', '--y', '0.1016', '--z', '0.0',
                        '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-                       '--frame-id', 'base_link', '--child-frame-id', 'left_front_wheel']
+                       '--frame-id', 'base_link', '--child-frame-id', 'left_front_wheel'] + _log_args
     )  # rear axle to left front wheel
 
     static_tf_group = GroupAction(
@@ -156,6 +163,7 @@ def generate_launch_description():
 
     ld = LaunchDescription([
         use_sim_time_la,
+        log_level_la,
         static_tf_group
     ])
 

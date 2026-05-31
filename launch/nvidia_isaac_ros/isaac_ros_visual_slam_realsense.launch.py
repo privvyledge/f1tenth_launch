@@ -39,10 +39,14 @@ def launch_setup(context, *args, **kwargs):
     image_qos = LaunchConfiguration('image_qos', default='SENSOR_DATA')
     imu_qos = LaunchConfiguration('imu_qos', default='SENSOR_DATA')
     enable_visualization_topics = LaunchConfiguration('enable_visualization_topics', default=True)
+    localize_on_startup = LaunchConfiguration('localize_on_startup', default=False)
     attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
                                                                default=False)
     component_container_name = LaunchConfiguration('component_container_name', default='visual_slam_launch_container')
-    container_name_full = (namespace, '/', component_container_name)
+    # Use component_container_name directly — callers (localization.launch.py) pre-build the
+    # absolute path (e.g. /gosling1/f1tenth_container).  Concatenating namespace here would
+    # double the namespace and silently miss the target container.
+    container_name_full = component_container_name
 
     # Declare launch arguments
     use_sim_time_la = DeclareLaunchArgument(
@@ -124,6 +128,14 @@ def launch_setup(context, *args, **kwargs):
                                                                         " the frame pointcloud, landmarks, "
                                                                         "all poses from the start, etc.")
 
+    localize_on_startup_arg = DeclareLaunchArgument(
+            'localize_on_startup',
+            default_value=localize_on_startup,
+            description='Attempt to localize in a previously saved VSLAM map on startup. '
+                        'Set False (default) when another node (e.g. AMCL) owns the map TF — '
+                        'the GXF localization-failure cleanup path has a heap corruption bug '
+                        'that causes intermittent SIGABRT when localization fails.')
+
     attach_to_shared_component_container_arg = DeclareLaunchArgument('attach_to_shared_component_container',
                                                                      default_value=attach_to_shared_component_container,
                                                                      description="Whether or not to join a container")
@@ -151,6 +163,7 @@ def launch_setup(context, *args, **kwargs):
         image_qos_arg,
         imu_qos_arg,
         enable_visualization_topics_arg,
+        localize_on_startup_arg,
         attach_to_shared_component_container_arg,
         component_container_name_arg
     ]
@@ -256,7 +269,7 @@ def launch_setup(context, *args, **kwargs):
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'save_map_folder_path': map_path,
                 'load_map_folder_path': map_path,
-                'localize_on_startup': True,
+                'localize_on_startup': localize_on_startup,
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
                         ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),

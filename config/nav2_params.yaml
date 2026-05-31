@@ -4,7 +4,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_frame: odom
-    odom_topic: /odometry/local
+    odom_topic: odometry/local
     bt_loop_duration: 10
     default_server_timeout: 20
     enable_groot_monitoring: true
@@ -87,7 +87,7 @@ controller_server:
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.01  # 0.001
     failure_tolerance: 0.0 # -1.0 makes it infinite, 0 to disable, and any positive value (0.3) for the appropriate timeout
-    odom_topic: "/odometry/local"
+    odom_topic: "odometry/local"
     progress_checker_plugins: "progress_checker" # "progress_checker" for Humble and older, ["progress_checker"] otherwise
     goal_checker_plugins: ["general_goal_checker"] # "stopped_goal_checker", "precise_goal_checker" or "general_goal_checker" for Humble and older, ["general_goal_checker"], ["precise_goal_checker"] otherwise
     controller_plugins: ["FollowPath"]
@@ -339,7 +339,7 @@ local_costmap:
 #          raytrace_range: 4.0 # 30.0. Raytrace range should be higher than obstacle range
 #        scan:
 #          data_type: LaserScan
-#          topic: /lidar/scan_filtered
+#          topic: lidar/scan_filtered
 #          marking: true
 #          min_obstacle_height: 0.0
 #          max_obstacle_height: 2.0
@@ -354,7 +354,7 @@ local_costmap:
 #        footprint_clearing_enabled: true
         combination_method: 1
         scan:
-          topic: /lidar/scan_filtered
+          topic: lidar/scan_filtered
           obstacle_max_range: 10.0 # 30.0
           obstacle_min_range: 0.0
           raytrace_max_range: 12.0 # 30.0. Raytrace range should be higher than obstacle range
@@ -368,7 +368,7 @@ local_costmap:
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
 #          observation_persistence: 0.5
         depth_scan:
-          topic: /scan/from_depth_image
+          topic: scan/from_depth_image
           obstacle_max_range: 3.0
           obstacle_min_range: 0.0
           raytrace_max_range: 4.0 # 30.0. Raytrace range should be higher than obstacle range
@@ -461,7 +461,7 @@ global_costmap:
         max_obstacle_height: 4.0  # 2.0
         combination_method: 1
         scan:
-          topic: /lidar/scan_filtered
+          topic: lidar/scan_filtered
           obstacle_max_range: 10.0 # 30.0
           obstacle_min_range: 0.0
           raytrace_max_range: 12.0 # 30.0. Raytrace range should be higher than obstacle range
@@ -475,7 +475,7 @@ global_costmap:
 #          expected_update_rate: 0.2  # 0.1 (average rate for YDLidar is 8.626 Hz or 0.1159285880s) so give more tolerance
 #          observation_persistence: 0.5
         depth_scan:
-          topic: /scan/from_depth_image
+          topic: scan/from_depth_image
           obstacle_max_range: 3.0
           obstacle_min_range: 0.0
           raytrace_max_range: 4.0 # 30.0. Raytrace range should be higher than obstacle range
@@ -512,7 +512,7 @@ global_costmap:
 #          data_type: "PointCloud2"
 #        scan:
 #          data_type: LaserScan
-#          topic: /lidar/scan_filtered
+#          topic: lidar/scan_filtered
 #          marking: true
 #          min_obstacle_height: 0.0
 #          max_obstacle_height: 2.0
@@ -737,5 +737,5 @@ velocity_smoother:
     velocity_timeout: 1.0  # Time (s) after which if no new velocity commands are received to zero out and stop
     max_accel: [3.0, 0.0, 2.0] # Maximum acceleration, ordered [Ax, Ay, Aw]
     max_decel: [-3.0, 0.0, -2.0]  # Maximum deceleration, ordered [Ax, Ay, Aw]
-    odom_topic: "/odometry/local"  # Topic of odometry to use for estimating current velocities
+    odom_topic: "odometry/local"  # Topic of odometry to use for estimating current velocities
     odom_duration: 0.02  # (0.1) Period of time (s) to sample odometry information in for velocity estimation

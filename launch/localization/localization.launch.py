@@ -80,6 +80,7 @@ def launch_setup(context, *args, **kwargs):
     launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')  # RTABMap ICP; expensive, disabled by default in favour of rf2o
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
+    localize_on_startup = LaunchConfiguration('localize_on_startup', default=False)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
@@ -218,6 +219,13 @@ def launch_setup(context, *args, **kwargs):
             'launch_amcl', default_value=launch_amcl,
             description='Whether to launch AMCL global localizer.')
 
+    localize_on_startup_la = DeclareLaunchArgument(
+            'localize_on_startup', default_value=localize_on_startup,
+            description='Attempt to localize in a previously saved VSLAM map on startup. '
+                        'Forwarded to isaac_ros_visual_slam_realsense.launch.py. '
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path; '
+                        'the GXF failure-cleanup path crashes intermittently when localization fails.')
+
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
             description='Whether to launch the map server. '
@@ -304,6 +312,15 @@ def launch_setup(context, *args, **kwargs):
     use_composition_str = use_composition.perform(context)
     use_gpu_str = use_gpu.perform(context)
     use_sim_time_str = use_sim_time.perform(context)
+    container_name_str = container_name.perform(context)
+
+    # Build the absolute container name for LoadComposableNodes.  A relative name like
+    # 'gosling1/f1tenth_container' silently misses '/gosling1/f1tenth_container' — same
+    # issue that was fixed for nav2 in bringup.launch.py.
+    if namespace_str:
+        vslam_container_name = f'/{namespace_str}/{container_name_str}'
+    else:
+        vslam_container_name = container_name_str
 
     lifecycle_nodes = []
     if launch_map_server_str.lower() == 'true':
@@ -588,7 +605,8 @@ def launch_setup(context, *args, **kwargs):
                     'publish_tf': True if odom_tf_publisher_str.lower() == 'rgbd' else False,
                 }
             ],
-            output='screen',
+            output='log',
+            arguments=['--ros-args', '--log-level', log_level],
             remappings=[
                 ('rgb/image', camera_name_str + 'color/image_raw'),
                 ('rgb/camera_info', camera_name_str + 'color/camera_info'),
@@ -614,7 +632,8 @@ def launch_setup(context, *args, **kwargs):
                     'publish_tf': True if odom_tf_publisher_str.lower() in ['vslam', 'stereo'] else False,
                 }
             ],
-            output='screen',
+            output='log',
+            arguments=['--ros-args', '--log-level', log_level],
             remappings=[
                 ('left/image_rect', camera_name_str + 'infra1/image_rect_raw'),
                 ('left/camera_info', camera_name_str + 'infra1/camera_info'),
@@ -708,7 +727,7 @@ def launch_setup(context, *args, **kwargs):
             respawn=use_respawn,
             respawn_delay=2.0,
             output='log',  # suppress per-iteration console spam; errors still go to ~/.ros/log
-            arguments=['--ros-args', '--log-level', 'rtabmap_icp_odom:=WARN'],
+            arguments=['--ros-args', '--log-level', log_level],
             parameters=[
                 icp_parameters,
                 {
@@ -855,7 +874,6 @@ def launch_setup(context, *args, **kwargs):
             actions=[
                 GroupAction(
                         actions=[
-                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
                             SetRemap(src=['/tf'], dst=['tf']),
                             SetRemap(src=['/tf_static'], dst=['tf_static']),
                             IncludeLaunchDescription(
@@ -867,8 +885,8 @@ def launch_setup(context, *args, **kwargs):
                                     condition=IfCondition(launch_stereo_odometry),
                                     launch_arguments={
                                         'use_sim_time': use_sim_time,
-                                        'namespace': namespace,
-                                        'use_namespace': 'False',  # use_namespace,
+                                        'namespace': namespace_str,
+                                        'use_namespace': 'True' if (use_namespace_str.lower() == 'true' and namespace_str) else 'False',
                                         'camera_name': camera_name,
                                         'two_d_mode': 'True',
                                         'base_frame': base_frame,
@@ -887,8 +905,9 @@ def launch_setup(context, *args, **kwargs):
                                         'image_qos': qos,  # DEFAULT.
                                         'imu_qos': qos_imu,
                                         'enable_visualization_topics': 'True',
+                                        'localize_on_startup': localize_on_startup,
                                         'attach_to_shared_component_container': use_composition,
-                                        'component_container_name': container_name if use_composition_str.lower() == 'true' else 'visual_slam_container',
+                                        'component_container_name': vslam_container_name if use_composition_str.lower() == 'true' else 'visual_slam_container',
                                     }.items()
                             )
                         ]
@@ -1080,6 +1099,7 @@ def launch_setup(context, *args, **kwargs):
         camera_name_la,
         scan_prefix_la,
         gravitational_acceleration_la,
+        localize_on_startup_la,
         launch_particle_filter_la,
         particle_filter_config_la,
         particle_filter_node,
