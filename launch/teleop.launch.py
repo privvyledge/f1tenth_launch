@@ -83,6 +83,9 @@ def launch_setup(context, *args, **kwargs):
     launch_vesc_to_odom_node = LaunchConfiguration('launch_vesc_to_odom_node', default='True')
     launch_throttle_interpolator_node = LaunchConfiguration('launch_throttle_interpolator_node', default='False')
     launch_ackermann_to_twist = LaunchConfiguration('launch_ackermann_to_twist', default='True')
+    launch_command_gate = LaunchConfiguration('launch_command_gate', default=True)
+    command_gate_require_heartbeat = LaunchConfiguration('command_gate_require_heartbeat', default='True')
+    command_gate_require_enable = LaunchConfiguration('command_gate_require_enable', default='False')
 
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration', default='9.80665')
 
@@ -305,6 +308,19 @@ def launch_setup(context, *args, **kwargs):
             'launch_ackermann_to_twist',
             default_value=launch_ackermann_to_twist,
             description='Start ackermann_to_twist converter to republish ackermann_cmd as cmd_vel for EKF use_control.')
+    launch_command_gate_arg = DeclareLaunchArgument(
+            'launch_command_gate',
+            default_value=launch_command_gate,
+            description='Launch the command_gate safety relay between ackermann_mux and ackermann_to_vesc.')
+    command_gate_require_heartbeat_la = DeclareLaunchArgument(
+            'command_gate_require_heartbeat',
+            default_value=command_gate_require_heartbeat,
+            description='Close gate on heartbeat timeout. Set True and publish teleop to activate watchdog.')
+    command_gate_require_enable_la = DeclareLaunchArgument(
+            'command_gate_require_enable',
+            default_value=command_gate_require_enable,
+            description='Gate starts closed; open with: '
+                        'ros2 service call /command_gate/set_enabled std_srvs/srv/SetBool \'{data: true}\'')
 
     gravitational_acceleration_la = DeclareLaunchArgument(
             'gravitational_acceleration', default_value=gravitational_acceleration,
@@ -420,6 +436,7 @@ def launch_setup(context, *args, **kwargs):
         use_accel_ff_la, accel_to_erpm_gain_la, use_cmd_accel_rate_limit_la,
         declare_launch_ackermann_to_vesc_node, declare_launch_vesc_to_odom_node,
         declare_launch_throttle_interpolator_node, declare_launch_ackermann_to_twist,
+        launch_command_gate_arg, command_gate_require_heartbeat_la, command_gate_require_enable_la,
         camera_name_la,
         approx_sync_la, stereo_to_pointcloud_la, depthimage_to_pointcloud_la,
         detect_ground_and_obstacles_la, reset_realsense_la, publish_realsense_pointcloud_la, align_realsense_depth_la,
@@ -507,6 +524,18 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 'use_f1tenth_namespace': use_f1tenth_namespace,
                 'f1tenth_namespace': f1tenth_namespace,
+            }.items()
+    )
+
+    command_gate_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                    PathJoinSubstitution([vehicle_include_dir, 'command_gate.launch.py'])
+            ),
+            condition=IfCondition(launch_command_gate),
+            launch_arguments={
+                'use_composition': use_composition,
+                'command_gate_require_heartbeat': command_gate_require_heartbeat,
+                'command_gate_require_enable': command_gate_require_enable,
             }.items()
     )
 
@@ -659,6 +688,7 @@ def launch_setup(context, *args, **kwargs):
                 component_container_node,
                 joystick_launch,
                 ackermann_mux_launch,
+                command_gate_launch,
                 vehicle_launch,
                 tf_launch,
                 visualization_launch,

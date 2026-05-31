@@ -1,0 +1,14 @@
+command_gate:
+  ros__parameters:
+    num_channels: 1
+    require_heartbeat: false
+    heartbeat_timeout: 1.0
+    heartbeat_topic: teleop
+    heartbeat_type: ackermann_msgs/msg/AckermannDriveStamped
+    require_enable: false
+    enable_topic: ~/enable
+    channel_0:
+      input_topic: ackermann_drive
+      output_topic: vehicle/ackermann_cmd
+      message_type: ackermann_msgs/msg/AckermannDriveStamped
+      fallback_topic: ""

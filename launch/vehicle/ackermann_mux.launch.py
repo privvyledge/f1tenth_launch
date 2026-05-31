@@ -29,8 +29,7 @@ def launch_setup(context, *args, **kwargs):
             executable='ackermann_mux',
             name='ackermann_mux',
             parameters=[mux_config],
-            remappings=[('ackermann_cmd_out', 'ackermann_drive'),
-                        ('ackermann_cmd', 'vehicle/ackermann_cmd'),
+            remappings=[('ackermann_cmd', 'ackermann_drive'),
                         ('/tf', 'tf'),
                         ('/tf_static', 'tf_static')]
     )
