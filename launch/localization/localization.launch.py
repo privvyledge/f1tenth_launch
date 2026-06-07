@@ -54,8 +54,8 @@ def launch_setup(context, *args, **kwargs):
     use_namespace = LaunchConfiguration('use_namespace', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default=False)
     use_composition = LaunchConfiguration('use_composition', default=True)
-    container_name = LaunchConfiguration('container_name', default='f1tenth_container')
-    container_name_full = (namespace, '/', container_name)
+    container_name = LaunchConfiguration('container_name', default='localization_container')
+    attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container', default='False')
     autostart = LaunchConfiguration('autostart', default=True)
     use_respawn = LaunchConfiguration('use_respawn', default=False)
     params_file = LaunchConfiguration('params_file')
@@ -174,6 +174,9 @@ def launch_setup(context, *args, **kwargs):
     declare_container_name_cmd = DeclareLaunchArgument(
             'container_name', default_value=container_name,
             description='the name of conatiner that nodes will load in if use composition')
+    declare_attach_to_shared_component_container_cmd = DeclareLaunchArgument(
+            'attach_to_shared_component_container', default_value=attach_to_shared_component_container,
+            description='Whether to attach to a shared component container or launch a new one.')
 
     declare_autostart_cmd = DeclareLaunchArgument(
             'autostart', default_value=autostart,
@@ -312,14 +315,18 @@ def launch_setup(context, *args, **kwargs):
     use_gpu_str = use_gpu.perform(context)
     use_sim_time_str = use_sim_time.perform(context)
     container_name_str = container_name.perform(context)
+    attach_to_shared_component_container_str = attach_to_shared_component_container.perform(context)
 
     # Build the absolute container name for LoadComposableNodes.  A relative name like
     # 'gosling1/f1tenth_container' silently misses '/gosling1/f1tenth_container' — same
     # issue that was fixed for nav2 in bringup.launch.py.
-    if namespace_str:
-        vslam_container_name = f'/{namespace_str}/{container_name_str}'
+    # Update: now we will let VSLAM have its own container separate from the rest of the localization stack
+    if use_namespace_str.lower() == 'true' and namespace_str:
+        absolute_container_name = f'/{namespace_str}/{container_name_str}'
+        vslam_container_name = f'/{namespace_str}/realsense_d435i_container'
     else:
-        vslam_container_name = container_name_str
+        absolute_container_name = f'/{container_name_str}'
+        vslam_container_name = f'/realsense_d435i_container'
 
     lifecycle_nodes = []
     if launch_map_server_str.lower() == 'true':
@@ -394,7 +401,7 @@ def launch_setup(context, *args, **kwargs):
             #         )
             # ),
             condition=IfCondition(PythonExpression([use_composition, ' and ', launch_amcl])),  # equivalent to the above
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 ComposableNode(
                         package='nav2_amcl',
@@ -415,7 +422,7 @@ def launch_setup(context, *args, **kwargs):
 
     load_composable_map_server = LoadComposableNodes(
             condition=IfCondition(PythonExpression([use_composition, ' and ', launch_map_server])),
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 ComposableNode(
                         package='nav2_map_server',
@@ -434,7 +441,7 @@ def launch_setup(context, *args, **kwargs):
 
     load_composable_lifecycle_manager = LoadComposableNodes(
             condition=IfCondition(use_composition),
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 ComposableNode(
                         package='nav2_lifecycle_manager',
@@ -790,7 +797,7 @@ def launch_setup(context, *args, **kwargs):
 
     load_rf2o_composable_node = LoadComposableNodes(
             condition=IfCondition(PythonExpression([use_composition, ' and ', launch_laserscan_odometry])),
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 ComposableNode(
                         package='rf2o_laser_odometry',
@@ -904,7 +911,7 @@ def launch_setup(context, *args, **kwargs):
                                         'imu_qos': qos_imu,
                                         'enable_visualization_topics': 'True',
                                         'localize_on_startup': localize_on_startup,
-                                        'attach_to_shared_component_container': use_composition,
+                                        'attach_to_shared_component_container': 'False',  # use_composition, we now want vslam to be isolated from the rest
                                         'component_container_name': vslam_container_name if use_composition_str.lower() == 'true' else 'visual_slam_container',
                                     }.items()
                             )
@@ -934,7 +941,7 @@ def launch_setup(context, *args, **kwargs):
             #         )
             # ),
             condition=IfCondition(PythonExpression([use_composition, ' and ', launch_amcl])),  # equivalent to the above
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 ComposableNode(
                         package='isaac_ros_occupancy_grid_localizer',
@@ -955,28 +962,17 @@ def launch_setup(context, *args, **kwargs):
             ],
     )
 
-    occupancy_grid_localizer_container = GroupAction(
-            actions=[
-                PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
-                SetRemap(src=['/tf'], dst=['tf']),
-                SetRemap(src=['/tf_static'], dst=['tf_static']),
-                Node(
-                        name=container_name,  # 'occupancy_grid_localizer_container', container_name_full
-                        namespace='',  # namespace
-                        package='rclcpp_components',
-                        executable='component_container_mt',
-                        output='screen',
-                        condition=UnlessCondition(use_composition),
-                        # composable_node_descriptions=[
-                        #     occupancy_grid_localizer_node,
-                        #     laserscan_to_flatscan_node
-                        # ],
-                )
-            ]
+    localization_container_node = Node(
+            name=container_name,
+            package='rclcpp_components',
+            executable='component_container_mt',
+            namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
+            output=log_level,
+            condition=IfCondition(PythonExpression([use_composition, ' and not ', attach_to_shared_component_container])),
     )
 
     load_gpu_laser_composable_node = LoadComposableNodes(
-            target_container=container_name_full,
+            target_container=absolute_container_name,
             composable_node_descriptions=[
                 laserscan_to_flatscan_node
             ]
@@ -985,7 +981,7 @@ def launch_setup(context, *args, **kwargs):
     occupancy_grid_localizer_group = GroupAction(
             actions=[
                 # PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
-                occupancy_grid_localizer_container,
+                localization_container_node,
                 load_gpu_laser_composable_node,
                 occupancy_grid_localizer_node,
                 # SetRemap(src=['/tf'], dst=['tf']),
@@ -1023,7 +1019,8 @@ def launch_setup(context, *args, **kwargs):
                 condition=IfCondition(launch_particle_filter),
                 package='particle_filter',
                 executable='particle_filter',
-                name='particle_filter',                output='log',  # suppress per-iteration MCL console spam; errors still go to ~/.ros/log
+                name='particle_filter',
+                output='log',  # suppress per-iteration MCL console spam; errors still go to ~/.ros/log
                 namespace=namespace_str,
                 respawn=use_respawn,
                 respawn_delay=2.0,
@@ -1081,9 +1078,11 @@ def launch_setup(context, *args, **kwargs):
         launch_rtabmap_localizer_la,
         declare_use_composition_cmd,
         declare_container_name_cmd,
+        declare_attach_to_shared_component_container_cmd,
         declare_autostart_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
+        localization_container_node,
         load_nodes,
         load_composed_amcl_node,
         load_composable_map_server,

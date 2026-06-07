@@ -48,7 +48,7 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl

@@ -225,7 +225,7 @@ def launch_setup(context, *args, **kwargs):
             namespace=namespace if use_namespace_string.lower() == 'true' else '',
             package='isaac_ros_visual_slam',
             plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
-            # extra_arguments=[{"use_intra_process_comms": True}],  # todo: test
+            extra_arguments=[{"use_intra_process_comms": False}],
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'num_cameras': 2,  # two for a single stereo camera
@@ -276,6 +276,7 @@ def launch_setup(context, *args, **kwargs):
                         ('visual_slam/image_1', right_image_topic),
                         ('visual_slam/camera_info_1', camera_name_string + 'infra2/camera_info'),
                         ('visual_slam/imu', imu_topic),
+                        ('visual_slam/initial_pose', 'initialpose'),  # remap to RViz2 topic
                         ('/tf', 'tf'),
                         ('/tf_static', 'tf_static')]
     )
@@ -363,7 +364,11 @@ def launch_setup(context, *args, **kwargs):
             executable='component_container_mt',  # use component_container_mt for multithreading support
             condition=UnlessCondition(attach_to_shared_component_container),
             composable_node_descriptions=[visual_slam_node],  # if using this, disable load_composable_nodes
-            output='screen'
+            #parameters=[{'thread_num': 4, 'use_sim_time': use_sim_time}],
+            output='screen',
+            #arguments=[
+            #    '--use_multi_threaded_executor',
+            #],
     )
 
     load_composable_nodes = LoadComposableNodes(

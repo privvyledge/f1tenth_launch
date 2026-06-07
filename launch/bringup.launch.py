@@ -72,8 +72,8 @@ def launch_setup(context, *args, **kwargs):
     launch_tfs = LaunchConfiguration('launch_tfs', default=True)
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
-    launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
-    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
+    launch_global_localization = LaunchConfiguration('launch_global_localization', default=True)
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_controller_server = LaunchConfiguration('launch_controller_server', default=True)
@@ -85,7 +85,7 @@ def launch_setup(context, *args, **kwargs):
     launch_velocity_smoother = LaunchConfiguration('launch_velocity_smoother', default=True)
     cmd_vel_topic = LaunchConfiguration('cmd_vel_topic', default='cmd_vel')
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
-    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
+    map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='ekf')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_pointcloud_map = LaunchConfiguration('launch_pointcloud_map', default=False)
@@ -873,7 +873,7 @@ def launch_setup(context, *args, **kwargs):
                                         'launch_stereo_odometry': 'True',
                                         'launch_laserscan_odometry': 'True',
                                         'launch_icp_odometry': 'True',
-                                        'launch_amcl': 'True',  # launch_global_localization,
+                                        'launch_amcl': launch_global_localization,
                                         "map_file": map_file,
                                         "use_sim_time": use_sim_time,
                                         "use_gpu": use_gpu,
