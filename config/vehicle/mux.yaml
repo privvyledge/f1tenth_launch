@@ -15,10 +15,6 @@
         topic   : drive  # autonomous commands
         timeout : 0.2
         priority: 10
-      nav_block:
-        topic   : nav_block  # startup lock — blocks drive until joystick connects (see ackermann_mux.launch.py)
-        timeout : 0.5
-        priority: 15
       joystick:
         topic   : teleop  # human driver
         timeout : 0.1

@@ -80,7 +80,7 @@ def launch_setup(context, *args, **kwargs):
     launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')  # RTABMap ICP; expensive, disabled by default in favour of rf2o
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
-    localize_on_startup = LaunchConfiguration('localize_on_startup', default=False)
+    localize_on_startup = LaunchConfiguration('localize_on_startup', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
@@ -223,8 +223,7 @@ def launch_setup(context, *args, **kwargs):
             'localize_on_startup', default_value=localize_on_startup,
             description='Attempt to localize in a previously saved VSLAM map on startup. '
                         'Forwarded to isaac_ros_visual_slam_realsense.launch.py. '
-                        'Set True only when a valid VSLAM map exists at visual_slam_map_path; '
-                        'the GXF failure-cleanup path crashes intermittently when localization fails.')
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path')
 
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
@@ -882,7 +881,6 @@ def launch_setup(context, *args, **kwargs):
                                                     [nvidia_isaac_launch_dir,
                                                      'isaac_ros_visual_slam_realsense.launch.py'])
                                     ),
-                                    condition=IfCondition(launch_stereo_odometry),
                                     launch_arguments={
                                         'use_sim_time': use_sim_time,
                                         'namespace': namespace_str,
@@ -893,8 +891,8 @@ def launch_setup(context, *args, **kwargs):
                                         'publish_map_to_odom_tf': 'True' if map_tf_publisher_str.lower() == 'vslam' else 'False',
                                         'publish_odom_to_baselink_tf': 'True' if odom_tf_publisher_str.lower() in [
                                             'vslam', 'stereo'] else 'False',
-                                        'save_map': 'False',
-                                        'load_map': 'False',
+                                        'save_map': 'False',  # todo: set to True (could save on an interval when we are in mapping mode, else False. Could be an argument)
+                                        'load_map': 'False',  # todo: set to True (remap the rviz initial_pose to this). I should probably create an argument for init_pose guess
                                         'map_path': visual_slam_map_path,
                                         'launch_realsense_driver': 'False',
                                         'left_image_topic': camera_name_str + 'infra1/image_rect_raw',
@@ -1005,7 +1003,16 @@ def launch_setup(context, *args, **kwargs):
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
 
                 # add nodes
-                visual_slam_launch_include,
+                # Guard the timer so it is never scheduled when stereo odometry is disabled.
+                # The IfCondition inside the IncludeLaunchDescription fires inside TimerAction
+                # callbacks where the launch context may not carry the runtime value of
+                # launch_stereo_odometry (falls back to default 'True').  Wrapping with a
+                # GroupAction whose condition is evaluated synchronously before the timer is
+                # even queued avoids that race.
+                GroupAction(
+                        condition=IfCondition(launch_stereo_odometry),
+                        actions=[visual_slam_launch_include]
+                ),
                 # occupancy_grid_localizer_group,  # todo: enable later after testing other components
             ]
     )
@@ -1025,8 +1032,8 @@ def launch_setup(context, *args, **kwargs):
                     {
                         # --- Runtime-computed overrides (cannot live in YAML) ---
                         'use_sim_time': use_sim_time,
-                        # scan_qos_reliability: switch to 'reliable' when replaying bags
-                        'scan_qos_reliability': 'reliable' if use_sim_time_str.lower() == 'true' else 'best_effort',
+                        'scan_qos_reliability': 'best_effort',
+                        'odom_qos_reliability': 'best_effort',
                         # Ray backend: rmgpu requires range_libc CUDA build; fall back to pcddt on CPU
                         'range_method': 'rmgpu' if use_gpu_str.lower() == 'true' else 'pcddt',
                         'rangelib_variant': 2 if use_gpu_str.lower() == 'true' else 4,

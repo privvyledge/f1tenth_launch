@@ -88,6 +88,9 @@ def launch_setup(context, *args, **kwargs):
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
+    launch_pointcloud_map = LaunchConfiguration('launch_pointcloud_map', default=False)
+    pointcloud_map_file = LaunchConfiguration('pointcloud_map_file', default=os.path.join(
+            f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'raslab', 'cloud.pcd'))
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
     life_long_mapping = LaunchConfiguration('life_long_mapping', default=False)
@@ -327,6 +330,14 @@ def launch_setup(context, *args, **kwargs):
     rviz_config_arg = DeclareLaunchArgument('rviz_config_file',
                                             default_value=rviz_config_file,
                                             description="The path to the rviz configuration file.")
+
+    launch_pointcloud_map_arg = DeclareLaunchArgument(
+            'launch_pointcloud_map', default_value=launch_pointcloud_map,
+            description='Publish a static RTABMap-exported point cloud (.pcd) on map/pointcloud '
+                        'for RViz visualization only. Not used for localization or planning.')
+    pointcloud_map_file_arg = DeclareLaunchArgument(
+            'pointcloud_map_file', default_value=pointcloud_map_file,
+            description='Path to the .pcd point cloud map published when launch_pointcloud_map:=True.')
 
     launch_2d_mapping_arg = DeclareLaunchArgument('launch_2d_mapping',
                                                   default_value=launch_2d_mapping,
@@ -596,6 +607,7 @@ def launch_setup(context, *args, **kwargs):
         launch_velocity_smoother_la, cmd_vel_topic_la,
         launch_visualization_arg,
         rviz_config_arg,
+        launch_pointcloud_map_arg, pointcloud_map_file_arg,
         launch_2d_mapping_arg,
         launch_3d_mapping_arg,
         life_long_mapping_arg,
@@ -658,17 +670,34 @@ def launch_setup(context, *args, **kwargs):
     _resolved_ns = f1tenth_namespace.perform(context)
     nav2_container_name = f'/{_resolved_ns}/f1tenth_container' if _resolved_ns else 'f1tenth_container'
 
+    # Costmap observation-source topics use a <ns_prefix> placeholder (e.g.
+    # <ns_prefix>lidar/scan_filtered) that must be resolved to an absolute path before the
+    # parameter file reaches any node.  A bare relative topic like lidar/scan_filtered is
+    # resolved from each costmap sub-node's own namespace
+    # (/gosling1/local_costmap or /gosling1/global_costmap), which would produce
+    # gosling1/local_costmap/lidar/scan_filtered instead of gosling1/lidar/scan_filtered.
+    # Costmap sub-nodes are spawned internally by controller_server/planner_server and read
+    # params from the container's process-wide parameter server (not from LoadComposableNodes),
+    # so ReplaceString must be applied here — to the container's params file — not only in
+    # nav2_navigation.launch.py.
+    _ns_prefix = f'/{_resolved_ns}/' if _resolved_ns else '/'
+    _params_file_with_prefix = ReplaceString(
+        source_file=params_file,
+        replacements={'<ns_prefix>': _ns_prefix})
+
     # Costmap sub-nodes (e.g. /gosling1/local_costmap/local_costmap) are created
     # programmatically by controller_server/planner_server and inherit the container's
     # process-wide params file.  They look for params at gosling1.local_costmap.* — so
     # the container must carry the namespace-prefixed file, not the raw one.
     container_nav2_params = ParameterFile(
         RewrittenYaml(
-            source_file=params_file,
+            source_file=_params_file_with_prefix,
             root_key=_resolved_ns,
             param_rewrites={'use_sim_time': use_sim_time},
             convert_types=True),
-        allow_substs=True) if _resolved_ns else params_file
+        allow_substs=True) if _resolved_ns else ParameterFile(
+        _params_file_with_prefix,
+        allow_substs=True)
 
     component_container_node = Node(
             condition=IfCondition(use_composition),
@@ -724,6 +753,20 @@ def launch_setup(context, *args, **kwargs):
                 'command_gate_require_enable': command_gate_require_enable,
             }.items()
     )
+
+    # command_gate is the SOLE publisher of vehicle/ackermann_cmd. With it disabled the
+    # ackermann_mux has no path to ackermann_to_vesc, so the vehicle will not move unless
+    # something else publishes vehicle/ackermann_cmd. Warn loudly instead of failing — a
+    # custom controller/MPC publishing that topic directly is a valid reason to disable it.
+    # (ROS 2 launch has no LogWarn action; LogInfo with a WARNING prefix is the idiom.)
+    command_gate_disabled_warning = LogInfo(
+            condition=UnlessCondition(launch_command_gate),
+            msg='WARNING: launch_command_gate:=False — command_gate is the only publisher of '
+                'vehicle/ackermann_cmd, so the ackermann_mux now has NO path to the VESC and the '
+                'vehicle will not respond to drive/teleop commands. Publish vehicle/ackermann_cmd '
+                'from your own controller, or for a transparent passthrough keep '
+                'launch_command_gate:=True with command_gate_require_heartbeat:=False and '
+                'command_gate_require_enable:=False.')
 
     sensors_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -857,7 +900,29 @@ def launch_setup(context, *args, **kwargs):
             name='rviz2',
             output='screen',
             arguments=['-d', rviz_config_file, '--ros-args', '--log-level', log_level],
-            parameters=[{'use_sim_time': use_sim_time}]
+            parameters=[{'use_sim_time': use_sim_time}],
+            remappings=[
+                ('/goal_pose', 'goal_pose'),
+                ('/initialpose', 'initialpose'),
+                ('/clicked_point', 'clicked_point'),
+            ]
+    )
+
+    # Visualization-only: republish a static RTABMap-exported .pcd as a latched PointCloud2.
+    # Decoupled from localization/planning — purely for an aesthetic 3D map overlay in RViz.
+    pointcloud_map_launch = Node(
+            condition=IfCondition(launch_pointcloud_map),
+            package='pcl_ros',
+            executable='pcd_to_pointcloud',
+            name='pointcloud_map_publisher',
+            output='screen',
+            parameters=[{
+                'file_name': pointcloud_map_file,
+                'tf_frame': 'map',
+                'publishing_period_ms': 3000,
+            }],
+            remappings=[('cloud_pcd', 'map/pointcloud')],
+            arguments=['--ros-args', '--log-level', log_level],
     )
 
     mapping_launch = TimerAction(
@@ -953,6 +1018,7 @@ def launch_setup(context, *args, **kwargs):
                 joystick_launch,
                 ackermann_mux_launch,
                 command_gate_launch,
+                command_gate_disabled_warning,
                 sensors_launch,
                 vehicle_launch,
                 tf_launch
@@ -989,6 +1055,7 @@ def launch_setup(context, *args, **kwargs):
                 # nodes
                 component_container_node,
                 visualization_launch,
+                pointcloud_map_launch,
                 vehicle_bringup_group,
                 nav2_bringup_group,
             ]

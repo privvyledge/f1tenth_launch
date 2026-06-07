@@ -21,15 +21,17 @@
     scan_topic: scan
     odometry_topic: odom
 
-    # Scan QoS: 'best_effort' for real hardware, 'reliable' for simulation
+    # Scan/odom QoS: 'best_effort' for real hardware, 'reliable' for simulation
     scan_qos_reliability: best_effort
+    odom_qos_reliability: best_effort
 
     # ---------------------------------------------------------------------------
     # Scan preprocessing
-    # YDLIDAR X4: ~625 beams/rev; angle_step=18 → ~35 beams per MCL cycle.
-    # Fewer beams = faster ray casting; ~35 is sufficient for corridor-scale maps.
+    # YDLIDAR X4: ~625 beams/rev; angle_step=10 → ~62 beams per MCL cycle.
+    # Was 18 (~35 beams); more beams → sharper yaw constraint.
+    # Watch MCL iters/s on Jetson; 12 (~52) is a lighter middle ground.
     # ---------------------------------------------------------------------------
-    angle_step: 18
+    angle_step: 10
     max_range: 10.0  # YDLIDAR X4 maximum range (metres)
 
     # ---------------------------------------------------------------------------
@@ -37,19 +39,29 @@
     # mcl_hz is decoupled from the odometry topic rate — the filter runs at a
     # fixed rate and integrates whatever odometry has arrived since last cycle.
     # scan_max_age: skip a cycle if the most recent scan is older than this (s).
+    # odom_max_age: skip a cycle if odometry is older than this (s).
     # ---------------------------------------------------------------------------
     mcl_hz: 40.0
     scan_max_age: 0.5
+    odom_max_age: 0.5
+
+    # ---------------------------------------------------------------------------
+    # Motion gate (AMCL update_min_d/_a): skip resample+noise below these so a
+    # stationary robot does not random-walk from per-tick noise. 0.0 = every tick.
+    # ---------------------------------------------------------------------------
+    update_min_d: 0.02   # metres of accumulated translation before an MCL update
+    update_min_a: 0.01   # radians of accumulated rotation before an MCL update
 
     # ---------------------------------------------------------------------------
     # Particle filter
     # max_particles: 2000 halves the O(N) work vs the 4000 upstream default.
     # Benchmark: 1500 (Autoware MIT), 3000 (ForzaETH) — 2000 is a good balance
     # for the Jetson Orin at 40 Hz.
+    # squash_factor: 1.0 = no flattening (exponent 1/squash); was 2.2.
     # seed: -1 = random RNG each run; set >=0 for reproducible divergence tests.
     # ---------------------------------------------------------------------------
     max_particles: 2000
-    squash_factor: 2.2
+    squash_factor: 1.0
     seed: -1
 
     # ---------------------------------------------------------------------------
@@ -68,24 +80,23 @@
     # ---------------------------------------------------------------------------
     # Sensor model — YDLIDAR X4 tuned values (Thrun beam model)
     # Weights must sum to ≈1.0: z_hit + z_rand + z_short + z_max = 0.95
-    # sigma_hit is in pixels (map resolution × metres); X4 ±2% at 5 m ≈ 10 cm
-    # ≈ 2 px at 0.05 m/px — 4.0 px is a conservative starting point.
+    # sigma_hit in pixels (map resolution × metres); X4 ±2% at 5 m ≈ 10 cm
+    # ≈ 2 px at 0.05 m/px — sharpened from 4.0 for stronger yaw constraint.
     # ---------------------------------------------------------------------------
     z_hit: 0.75       # probability of hitting the intended obstacle
     z_rand: 0.12      # uniform random noise returns
     z_short: 0.01     # low glass / crosstalk return probability
     z_max: 0.07       # occasional max-range misses
-    sigma_hit: 4.0    # beam std dev (pixels)
+    sigma_hit: 2.0    # beam std dev (pixels); was 4.0
     lambda_short: 0.05  # rate parameter for the z_short exponential component
 
     # ---------------------------------------------------------------------------
     # Motion model dispersion
     # These scale noise injected per MCL step based on observed wheel odometry.
-    # motion_dispersion_theta: 0.20 (f1tenth_gym JAX); 0.25 is the tuned value.
     # ---------------------------------------------------------------------------
-    motion_dispersion_x: 0.05
-    motion_dispersion_y: 0.025
-    motion_dispersion_theta: 0.25
+    motion_dispersion_x: 0.02
+    motion_dispersion_y: 0.02
+    motion_dispersion_theta: 0.05
 
     # ---------------------------------------------------------------------------
     # Visualization
@@ -105,7 +116,7 @@
     publish_odom: 1
 
     # ---------------------------------------------------------------------------
-    # Hybrid / global localization (Task 9)
+    # Hybrid / global localization
     # Triggered either by a /initialpose message or automatically after
     # global_loc_timeout seconds if no pose estimate has been received.
     # Resolution is doubled automatically if candidate count exceeds
@@ -134,3 +145,8 @@
     tf_broadcast: false
     publish_map_to_odom_tf: true
     project_to_baselink: true
+
+map_server:
+  ros__parameters:
+    # particle_filter package's own map server (standalone use only)
+    map: levine

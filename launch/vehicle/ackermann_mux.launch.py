@@ -19,10 +19,8 @@ def launch_setup(context, *args, **kwargs):
     # namespaced topic to match what ackermann_mux subscribes to.
     if use_f1tenth_namespace_string.lower() == 'true' and f1tenth_namespace_string:
         safety_topic = f'/{f1tenth_namespace_string}/safety'
-        nav_block_topic = f'/{f1tenth_namespace_string}/nav_block'
     else:
         safety_topic = 'safety'
-        nav_block_topic = 'nav_block'
 
     ackermann_mux_node = Node(
             package='ackermann_mux',
@@ -48,28 +46,13 @@ def launch_setup(context, *args, **kwargs):
             output='log'
     )
 
-    # Startup lock: publishes zero speed to nav_block (priority 15) for 15 seconds.
-    # Prevents a pre-existing /drive publisher (priority 10) from commanding motion before
-    # the joystick connects and teleop (priority 100) takes over. After 600 messages the
-    # publisher exits; the nav_block topic times out in 0.5 s and drops out of contention.
-    # Note: this is purely a temporary stop gap and does not actually prevent pre-existing drive topics from passing through the mux.
-    # Instead, it reduces the duration of the drive bleeding from about 5-10s to less than 1.5 seconds.
-    # Will be removed when I set up:
-    #   (1) a fast starting node that sits in-between the mux and the actuator (vesc_driver):
-    #       i. this node starts disabled and as such will never let any command through unless either a constant heartbeat bool is continuously sent or an engage service is called.
-    #       ii. a composable node that just passes through messages but filtered through the enable feedback mechanism above
-    #   (2) lifecycle controllers, e.g MPC that only send commands when a supervisor, e.g mux sends a signal
-    startup_nav_block_publisher = ExecuteProcess(
-            cmd=[
-                'ros2', 'topic', 'pub', '--times', '600', '--rate', '40',
-                nav_block_topic,
-                'ackermann_msgs/msg/AckermannDriveStamped',
-                '{drive: {speed: 0.0, steering_angle: 0.0}}'
-            ],
-            output='log'
-    )
+    # Startup motion protection is now handled downstream by command_gate
+    # (vehicle/command_gate.launch.py), which starts with its gate closed under
+    # require_heartbeat and only opens once the joystick heartbeat (teleop) arrives.
+    # That supersedes the former nav_block startup lock, so the temporary nav_block
+    # zero-speed publisher has been removed.
 
-    return [ackermann_mux_node, safety_zero_speed_publisher, startup_nav_block_publisher]
+    return [ackermann_mux_node, safety_zero_speed_publisher]
 
 
 def generate_launch_description():

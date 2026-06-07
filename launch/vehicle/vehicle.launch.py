@@ -315,10 +315,12 @@ def generate_launch_description():
             name='ackermann_to_twist',
             parameters=[{
                 'ackermann_topic': 'vehicle/ackermann_cmd',
+                'frame_id': 'base_link',
+                'override_header': False,
                 'twist_topic': 'cmd_vel',
                 'wheelbase': 0.256,
                 'use_stamped_subscriber': True,
-                'use_stamped_publisher': False
+                'use_stamped_publisher': True
             }]
     )
 

@@ -27,8 +27,8 @@
     base_link_frame: base_link
     world_frame: map
 
-    # Pose topics: AMCL, RTABMap,
-    pose0: amcl_pose
+    # Pose topics: AMCL, PF, Slam toolbox (slam_toolbox/pose)
+    pose0: amcl_pose   # replace with pf topic when that is working or could wire from localization.launch.py
     pose0_config: [ true,  true,  false,
                     false, false, true,
                     false, false, false,
@@ -40,40 +40,18 @@
     pose0_rejection_threshold: 2.0
     pose0_nodelay: false
 
-    pose1: localization_pose  # /rtabmap/localization_pose
-    pose1_config: [ true,  true,  true,
-                    true, true, true,
+    pose1: rtabmap/localization_pose
+    pose1_config: [ true,  true,  false,
+                    false, false, true,
                     false, false, false,
                     false, false, false,
                     false, false, false ]
     pose1_differential: true
     pose1_relative: false
-    pose1_queue_size: 1
+    pose1_queue_size: 2
     pose1_rejection_threshold: 2.0
     pose1_nodelay: false
 
-    pose2: slam_toolbox/pose
-    pose2_config: [ true,  true,  false,
-                    false, false, true,
-                    false, false, false,
-                    false, false, false,
-                    false, false, false ]
-    pose2_differential: true
-    pose2_relative: false
-    pose2_queue_size: 2
-    pose2_rejection_threshold: 2.0
-    pose2_nodelay: false
-
-#      twist0: example/twist
-#      twist0_config: [ false, false, false,
-#                       false, false, false,
-#                       true,  true,  true,
-#                       false, false, false,
-#                       false, false, false ]
-#      twist0_queue_size: 3
-#      twist0_rejection_threshold: 2.0
-#      twist0_nodelay: false
-#
     odom0: vehicle/vesc_odom
     odom0_config: [ false, false, false,  # false, false,
                     false, false, false,  # , , true
@@ -85,19 +63,31 @@
     odom0_differential: false
     odom0_relative: true
 
-    odom1: visual_slam/tracking/odometry  # /odom/rtabmap_icp, /odom/rf2o
-    odom1_config: [true,  true,  true,  # true, true,
-                   true, true, true,
+    odom1: visual_slam/vis/slam_odometry  # global/map odometry
+    odom1_config: [true,  true,  false,  # true, true,
+                   false, false, true,
                    false, false, false,
                    false, false, false,
                    false, false, false ]
-    odom1_queue_size: 2
-    odom1_differential: true
+    odom1_queue_size: 5
+    odom1_differential: false
     odom1_relative: false
     odom1_pose_rejection_threshold: 2.0
     #odom1_twist_rejection_threshold: 0.5
 
-    imu0: vehicle/sensors/imu/raw  # /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
+    odom2: visual_slam/tracking/odometry  # vo odometry.
+    odom2_config: [ true,  true,  false,  # true, true,
+                    false, false, true,
+                    false, false, false,
+                    false, false, false,
+                    false, false, false ]
+    odom2_queue_size: 5
+    odom2_differential: true
+    odom2_relative: false
+    odom2_pose_rejection_threshold: 2.0
+    #odom2_twist_rejection_threshold: 0.5
+
+    #imu0: vehicle/sensors/imu/raw  # /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
     imu0_config: [false, false, false,
                   true,  true,  true,  # false x3
                   false, false, false,
@@ -109,7 +99,7 @@
     imu0_queue_size: 10
     imu0_remove_gravitational_acceleration: true
 
-    imu1: camera/imu/filtered
+    #imu1: camera/imu/filtered
     imu1_config: [ false, false, false,
                    false,  false,  false,  # false, false, true
                    false, false, false,

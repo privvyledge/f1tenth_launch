@@ -1,7 +1,7 @@
-command_gate:
+/**:
   ros__parameters:
     num_channels: 1
-    require_heartbeat: false
+    require_heartbeat: true
     heartbeat_timeout: 1.0
     heartbeat_topic: teleop
     heartbeat_type: ackermann_msgs/msg/AckermannDriveStamped

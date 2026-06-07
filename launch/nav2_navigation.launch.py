@@ -27,7 +27,7 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import LoadComposableNodes, SetParameter
 from launch_ros.actions import Node
 from launch_ros.descriptions import ComposableNode, ParameterFile
-from nav2_common.launch import RewrittenYaml
+from nav2_common.launch import RewrittenYaml, ReplaceString
 
 
 def launch_setup(context, *args, **kwargs):
@@ -72,9 +72,19 @@ def launch_setup(context, *args, **kwargs):
     node_ns = f'/{_ns_str}' if _ns_str else ''
     cmd_vel_topic_str = cmd_vel_topic.perform(context)
 
+    # Costmap observation-source topics (e.g. lidar/scan_filtered) are resolved relative to
+    # each costmap sub-node's namespace (/gosling1/local_costmap, /gosling1/global_costmap).
+    # A bare relative name would become gosling1/local_costmap/lidar/scan_filtered — wrong.
+    # We substitute <ns_prefix> with the absolute robot-namespace prefix so the topic resolves
+    # correctly regardless of the costmap sub-node's own namespace depth:
+    #   with namespace:    <ns_prefix>lidar/scan_filtered → /gosling1/lidar/scan_filtered
+    #   without namespace: <ns_prefix>lidar/scan_filtered → /lidar/scan_filtered
+    _ns_prefix = f'/{_ns_str}/' if _ns_str else '/'
     configured_params = ParameterFile(
             RewrittenYaml(
-                    source_file=params_file,
+                    source_file=ReplaceString(
+                            source_file=params_file,
+                            replacements={'<ns_prefix>': _ns_prefix}),
                     root_key=namespace,
                     param_rewrites={
                         'use_sim_time': use_sim_time,
