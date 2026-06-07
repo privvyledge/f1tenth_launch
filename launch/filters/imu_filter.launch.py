@@ -178,7 +178,11 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=imu_corrector_output_topic),
                 SetRemap(src='imu/data', dst=output_topic),
-                SetRemap(src='imu/mag', dst=mag_topic),
+                SetRemap(
+                        src='imu/mag',
+                        dst=mag_topic,
+                        condition=LaunchConfigurationNotEquals('mag_topic', '')
+                ),
                 SetRemap(src=['/tf'], dst=['tf']),
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
 
@@ -276,7 +280,11 @@ def generate_launch_description():
                 # SetParametersFromFile(imu_filter_param_file),
                 SetRemap(src='imu/data_raw', dst=input_topic),
                 SetRemap(src='imu/data', dst=output_topic),
-                SetRemap(src='imu/mag', dst=mag_topic),
+                SetRemap(
+                        src='imu/mag',
+                        dst=mag_topic,
+                        condition=LaunchConfigurationNotEquals('mag_topic', '')
+                ),
                 SetRemap(src=['/tf'], dst=['tf']),
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
                 Node(

@@ -323,10 +323,10 @@ def launch_setup(context, *args, **kwargs):
     # Update: now we will let VSLAM have its own container separate from the rest of the localization stack
     if use_namespace_str.lower() == 'true' and namespace_str:
         absolute_container_name = f'/{namespace_str}/{container_name_str}'
-        vslam_container_name = f'/{namespace_str}/realsense_d435i_container'
+        vslam_container_name = f'/{namespace_str}/sensing_container'
     else:
         absolute_container_name = f'/{container_name_str}'
-        vslam_container_name = f'/realsense_d435i_container'
+        vslam_container_name = f'/sensing_container'
 
     lifecycle_nodes = []
     if launch_map_server_str.lower() == 'true':
@@ -967,7 +967,7 @@ def launch_setup(context, *args, **kwargs):
             package='rclcpp_components',
             executable='component_container_mt',
             namespace=namespace if (use_namespace_str.lower() == 'true' and namespace_str) else '',
-            output=log_level,
+            output='screen',
             condition=IfCondition(PythonExpression([use_composition, ' and not ', attach_to_shared_component_container])),
     )
 

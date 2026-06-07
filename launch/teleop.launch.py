@@ -589,7 +589,7 @@ def launch_setup(context, *args, **kwargs):
                 "qos": realsense_qos,
                 "use_composition": use_composition,
                 "attach_to_shared_component_container": 'True' if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'False',  # this launch file starts a container
-                "component_container_name": container_name if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'sensing_container',
+                "component_container_name": 'sensing_container', # # hardcode so its separate from the others # container_name if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'sensing_container',
                 "intra_process_comms": 'True',
             }.items()
     )

@@ -790,7 +790,12 @@ def launch_setup(context, *args, **kwargs):
                 "launch_realsense_splitter_node": launch_realsense_splitter_node,
                 "camera_launch_delay": camera_launch_delay,
                 "laserscan_launch_delay": laserscan_launch_delay,
-                "qos": realsense_qos
+                "qos": realsense_qos,
+                # "attach_to_shared_component_container": 'True',
+                # # this launch file starts a container
+                # "component_container_name": 'realsense_d435i_container',
+                # # # hardcode so its separate from the others # container_name if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'sensing_container',
+                # "intra_process_comms": 'True',
             }.items()
     )
 
@@ -1019,7 +1024,6 @@ def launch_setup(context, *args, **kwargs):
                 ackermann_mux_launch,
                 command_gate_launch,
                 command_gate_disabled_warning,
-                sensors_launch,
                 vehicle_launch,
                 tf_launch
             ]
@@ -1068,6 +1072,7 @@ def launch_setup(context, *args, **kwargs):
                 # localization.launch.py double-namespaced (e.g. gosling1/gosling1/amcl).
                 # AMCL would publish /tf to gosling1/gosling1/tf instead of gosling1/tf and
                 # the map→odom transform would never reach the TF tree.
+                sensors_launch,
                 localization_launch,
             ]
     return ld

@@ -83,6 +83,9 @@
     -f /mnt/shared_dir/maps/05292026/rtabmap/raslab \
     --ros-args -p map_subscribe_transient_local:=true
 
+  # --- Isaac ROS VSLAM ---
+  ros2 service call /gosling1/visual_slam/save_map isaac_ros_visual_slam_interfaces/srv/FilePath "{file_path: /mnt/shared_dir/maps/05292026/vslam}" 
+
   # Export assembled 3D pointcloud from database (run after mapping, not during)
 
   # PREFERRED: rtabmap-databaseViewer GUI — confirmed to write a real .pcd with
