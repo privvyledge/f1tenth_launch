@@ -65,7 +65,8 @@
 #    tf_publish_rate: 200.0
     clip_distance: 6.0  # meters
 
-#    # Enable post-processing filters
+#    # Enable post-processing filters (CPU bound. Does not use GPU. Increases CPU usage.)
+#    # If CPU usage is not a factor, enable spatial, disparity and disparity_to_depth filters
 #    decimation_filter:
 #      enable: true  # halves depth resolution before publishing; downstream uses same depth at half the pixels
 #      filter_magnitude: 2
@@ -75,6 +76,8 @@
 #      enable: false
 #    disparity_filter:
 #      enable: false
+#    disparity_to_depth:
+#      enable: false  # needs to be turned on to convert the disparity back to depth. Should match disparity_filter.enable
 #    hole_filling_filter:
 #      enable: false
 

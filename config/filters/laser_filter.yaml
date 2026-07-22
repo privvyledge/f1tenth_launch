@@ -1,5 +1,5 @@
-#/**:
-#  ros__parameters:
+/**:
+  ros__parameters:
     # Intensity filter: removes low-quality returns caused by poor triangulation (multipath,
     # near-range scatter, dark/reflective surfaces). Requires intensity: true in ydlidar_X4.yaml.
     #
@@ -52,3 +52,62 @@
 #    filter4:
 #      name: interpolation
 #      type: laser_filters/InterpolationFilter
+
+    # Speckle filter: removes isolated single-beam fliers (points with no real neighbor).
+    # filter_type: 1 = RadiusOutlier (Euclidean neighbor search) — matches the intent of
+    # dropping lone outliers anywhere in the scan, complementing the shadow filter (which
+    # handles edge/discontinuity artifacts). A real obstacle spans many beams and is kept.
+    #
+    # Parameter semantics (from laser_filters source — NOT the same as the Distance type):
+    #   max_range            — far cutoff: points with range > max_range are ALWAYS kept
+    #                          (filtering only applies within this distance). NOT a radius.
+    #   max_range_difference — neighbor search RADIUS in metres (Euclidean) for type 1.
+    #   filter_window        — for type 1, doubles as the search window (±N beams) AND the
+    #                          number of neighbors required; below it, the point → NaN.
+    #
+    # Values tuned from X4 geometry:
+    #   X4 resolution ~625 samples/rev = 0.576 deg/beam = 0.01005 rad/beam. Adjacent-beam
+    #   Euclidean gap on a continuous surface at range r is ~r * 0.01005 (5 cm @ 5 m,
+    #   10 cm @ 10 m, 15 cm @ 14.9 m).
+    #   - max_range_difference 0.15 keeps continuous surfaces out to ~14.9 m, safely past
+    #     range_max (10 m) — real walls are never dropped. (0.10 would start eating returns
+    #     near 10 m.)
+    #   - max_range 10.0 (= range_max; invalid_range_is_inf makes nothing real exceed it) so
+    #     the WHOLE range is despeckled. 2.0 would force-keep every flier beyond 2 m.
+    #   - filter_window 1 removes only truly isolated single beams; any 2+-beam object
+    #     (e.g. a ~15 cm cone, ~3 beams at 5 m) survives. Raise to 2 only if fliers arrive
+    #     in adjacent pairs (more aggressive; risks thin/distant objects).
+    filter1:
+      name: speckle_filter
+      type: laser_filters/LaserScanSpeckleFilter
+      params:
+        # Select which filter type to use.
+        # 0: Range based filtering (distance between consecutive points)
+        # 1: Euclidean filtering based on radius outlier search
+        filter_type: 1
+        max_range: 10.0            # check the full X4 spec range; matches range_max
+        max_range_difference: 0.15 # neighbor radius: drop a point with no return within 15 cm
+        filter_window: 1           # require >= 1 neighbor within radius, else invalidate
+
+    # Scan shadow filter: removes grazing-angle phantom returns at object edges.
+    # min_angle: 10 deg — only removes beams where the angle to the surface is < 10°
+    # (very shallow grazing hits); conservative enough to preserve corner returns.
+    # neighbors: 2 — when a shadow is detected, also delete up to 2 farther beams on each side.
+    # window: 1 — compare each beam against its immediate ±1 neighbors to detect the shadow.
+    #   NOTE: 'window' is REQUIRED — omitting it makes ScanShadowsFilter.configure() fail,
+    #   which silently breaks the whole chain.
+    # Scan shadow filter: DISABLED. With neighbors: 2 it deleted real corner/edge returns
+    # (verified in RViz — wall endpoints and the L-junction were being removed), which costs
+    # more in scan-matching features than the isolated veiling points it caught. The speckle
+    # filter above already removes isolated mixed-pixel returns.
+    # Re-enable only if 2-3 point veiling STREAKS appear between object edges and the wall
+    # behind them (speckle keeps those since they are not isolated singles). If so, use
+    # neighbors: 0 and min_angle: 5.0 / max_angle: 175.0 to flag only very grazing hits.
+#    filter2:
+#      name: scan_shadow_filter
+#      type: laser_filters/ScanShadowsFilter
+#      params:
+#        min_angle: 5.0
+#        max_angle: 175.0
+#        neighbors: 0
+#        window: 1
