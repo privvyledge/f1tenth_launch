@@ -963,6 +963,17 @@ def launch_setup(context, *args, **kwargs):
                                                       "launch_sensors": 'False',
                                                       "launch_vehicle": 'False',
                                                       "launch_tfs": 'False',
+                                                      # bringup launches command_gate itself (see
+                                                      # command_gate_launch above), and mapping.launch.py
+                                                      # delegates to teleop.launch.py which launches one
+                                                      # too. Without this suppression slam:=True produced
+                                                      # TWO /command_gate nodes — and unlike the other
+                                                      # bug-007 duplicates, which land inert at root '/',
+                                                      # both of these land at /<namespace> and both publish
+                                                      # vehicle/ackermann_cmd. Two independent heartbeat
+                                                      # watchdogs on the actuation topic is a safety
+                                                      # hazard once the VESC is powered (bug-016).
+                                                      "launch_command_gate": 'False',
                                                       "launch_localization": 'False',
                                                       "launch_local_localization": 'False',
                                                       # "odom_tf_publisher": odom_tf_publisher,

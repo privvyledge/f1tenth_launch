@@ -588,8 +588,16 @@ def launch_setup(context, *args, **kwargs):
                 "laserscan_launch_delay": laserscan_launch_delay,
                 "qos": realsense_qos,
                 "use_composition": use_composition,
-                "attach_to_shared_component_container": 'True' if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'False',  # this launch file starts a container
-                "component_container_name": 'sensing_container', # # hardcode so its separate from the others # container_name if ('true' in map(str.lower, [use_composition_string, attach_to_shared_component_container_string])) else 'sensing_container',
+                # 'sensing_container' is owned and created by realsense_d435i.launch.py, so never
+                # ask the sensors include to attach to it. Passing 'True' here (the old behaviour
+                # whenever use_composition was set) told every creator to stand down: teleop only
+                # ever creates `container_name` ('f1tenth_container'), so nothing created
+                # 'sensing_container' and LoadComposableNodes waited forever on a service that
+                # never appeared — silently, with no error. The camera and the stereo/depth
+                # pipeline simply never loaded (bug-015). bringup.launch.py leaves these two
+                # arguments unset for the same reason; keep the two entry points identical.
+                "attach_to_shared_component_container": 'False',
+                "component_container_name": 'sensing_container',  # hardcoded so it stays separate from the others
                 "intra_process_comms": 'True',
             }.items()
     )
@@ -648,6 +656,15 @@ def launch_setup(context, *args, **kwargs):
                         launch_arguments={
                             "use_composition": use_composition,
                             "container_name": container_name if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'localization_container',
+                            # This launch file already creates `container_name` (see the
+                            # component_container_node above), so localization must ATTACH to it
+                            # rather than create a second container under the same name.
+                            # localization.launch.py creates one under
+                            # `IfCondition(use_composition and not attach_to_shared_component_container)`,
+                            # and this argument used to be inherited rather than passed — it only
+                            # happened to be 'True' because the sensors include, visited earlier in
+                            # `ld`, leaked it sideways. Pass it explicitly (bug-013's lesson).
+                            "attach_to_shared_component_container": 'True' if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'False',
                             "namespace": f1tenth_namespace,
                             "use_namespace": use_f1tenth_namespace,
                             "camera_name": camera_name,
