@@ -317,7 +317,14 @@ def launch_setup(context, *args, **kwargs):
                 'rtabmap_voxel_size': '0.1',  # 0.0 means no filtering
                 'qos': str(qos_int),
                 'use_system_default_qos': 'True' if qos_str == 'SYSTEM_DEFAULT' else 'False',
-                'attach_to_shared_component_container': attach_to_shared_component_container,
+                # ATTACH, never create: realsense_d435i.launch.py (included above) already creates
+                # the container under this same name. Both files create it with
+                # `condition=UnlessCondition(attach_to_shared_component_container)`, so leaving
+                # this False produced two containers called 'sensing_container' — an ambiguous
+                # LoadComposableNodes target, which is half of bug-006. Attaching also keeps the
+                # intra-process zero-copy path with the RealSense driver, which is the point of
+                # sharing a container with the image pipeline.
+                'attach_to_shared_component_container': 'True',
                 'component_container_name': component_container_name,
             }.items()
     )

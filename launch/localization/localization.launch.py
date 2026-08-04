@@ -321,12 +321,19 @@ def launch_setup(context, *args, **kwargs):
     # 'gosling1/f1tenth_container' silently misses '/gosling1/f1tenth_container' — same
     # issue that was fixed for nav2 in bringup.launch.py.
     # Update: now we will let VSLAM have its own container separate from the rest of the localization stack
+    # NOTE: vslam_container_name must NOT be 'sensing_container'. That name is already created by
+    # realsense_d435i.launch.py, and LoadComposableNodes resolves its target BY NAME — pointing
+    # VSLAM at it made three independent creators share one name, so the RealSense driver was
+    # loaded more than once, two /camera nodes fought over the same D435i
+    # ('failed to claim usb interface ... RS2_USB_STATUS_BUSY') and the camera never started.
+    # A dedicated container is also the b47d45d intent ('isolate VSLAM'), and matches the
+    # non-composed branch below, which already used 'visual_slam_container'.
     if use_namespace_str.lower() == 'true' and namespace_str:
         absolute_container_name = f'/{namespace_str}/{container_name_str}'
-        vslam_container_name = f'/{namespace_str}/sensing_container'
+        vslam_container_name = f'/{namespace_str}/visual_slam_container'
     else:
         absolute_container_name = f'/{container_name_str}'
-        vslam_container_name = f'/sensing_container'
+        vslam_container_name = f'/visual_slam_container'
 
     lifecycle_nodes = []
     if launch_map_server_str.lower() == 'true':

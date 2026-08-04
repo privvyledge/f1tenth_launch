@@ -847,7 +847,14 @@ def launch_setup(context, *args, **kwargs):
             actions=[
                 GroupAction(
                         [
-                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            # NO PushRosNamespace here: localization.launch.py namespaces itself
+                            # (its own PushRosNamespace + explicit namespace= on nodes), so pushing
+                            # again yields /gosling1/gosling1/*. This push was gated on the legacy
+                            # 'use_namespace' arg, which defaults False — but sensors_launch is
+                            # visited BEFORE this action and passes use_namespace/namespace as
+                            # launch_arguments, which leak into the shared context and silently
+                            # flip this condition to True. Result: with launch_sensors:=True every
+                            # localization node was double-namespaced and received no data.
                             SetRemap(src=['/tf'], dst=['tf']),
                             SetRemap(src=['/tf_static'], dst=['tf_static']),
                             IncludeLaunchDescription(
@@ -935,7 +942,10 @@ def launch_setup(context, *args, **kwargs):
             actions=[
                 GroupAction(
                         actions=[
-                            PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
+                            # NO PushRosNamespace here — same reason as the localization include
+                            # above: mapping.launch.py already pushes f1tenth_namespace in its own
+                            # nodes_to_launch group, and the legacy 'use_namespace' condition is
+                            # flipped True by config leaked from sensors_launch.
                             SetRemap(src=['/tf'], dst=['tf']),
                             SetRemap(src=['/tf_static'], dst=['tf_static']),
                             IncludeLaunchDescription(
