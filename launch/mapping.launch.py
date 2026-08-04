@@ -73,6 +73,10 @@ def launch_setup(context, *args, **kwargs):
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
     container_name = LaunchConfiguration('container_name', default='f1tenth_container')
+    # When a parent (bringup.launch.py) has already created `container_name`, it must pass this as
+    # 'True' so this file ATTACHES instead of creating a second container with the same name.
+    attach_to_shared_component_container = LaunchConfiguration('attach_to_shared_component_container',
+                                                               default='False')
     use_respawn = LaunchConfiguration('use_respawn', default='False')
     launch_joystick = LaunchConfiguration('launch_joystick', default=False)
     launch_sensors = LaunchConfiguration('launch_sensors', default=False)
@@ -187,6 +191,11 @@ def launch_setup(context, *args, **kwargs):
     declare_container_name_cmd = DeclareLaunchArgument(
             'container_name', default_value=container_name,
             description='Name of the container node used for composition.')
+
+    declare_attach_to_shared_component_container_cmd = DeclareLaunchArgument(
+            'attach_to_shared_component_container', default_value=attach_to_shared_component_container,
+            description='Whether `container_name` is created by a parent launch file. True means attach '
+                        'to the existing container instead of creating one.')
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
             'use_respawn', default_value=use_respawn,
@@ -461,6 +470,7 @@ def launch_setup(context, *args, **kwargs):
         declare_autostart_cmd,
         declare_use_composition_cmd,
         declare_container_name_cmd,
+        declare_attach_to_shared_component_container_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         launch_joystick_arg,
@@ -521,6 +531,7 @@ def launch_setup(context, *args, **kwargs):
     launch_visualization_str = launch_visualization.perform(context)  # rtabmap expects strings
 
     use_composition_string = use_composition.perform(context)
+    attach_to_shared_component_container_string = attach_to_shared_component_container.perform(context)
     use_gpu_string = use_gpu.perform(context)
     use_gpu_for_localization_string = use_gpu_for_localization.perform(context)
 
@@ -562,8 +573,17 @@ def launch_setup(context, *args, **kwargs):
                         'If you do not want to use a namespace, do not set the launch argument "use_f1tenth_namespace".'
                 )
 
+    # bug-022: this file must only CREATE `container_name` when nobody upstream already did.
+    # bringup.launch.py:712 creates 'f1tenth_container' itself and then includes this file with
+    # use_composition:=True, so guarding on use_composition alone produced two
+    # `component_container_isolated` processes with byte-identical args at the same namespace.
+    # Same class as bug-018: two independent creators agreeing on one container name.
+    creates_own_container = 'True' if (use_composition_string.lower() == 'true'
+                                       and attach_to_shared_component_container_string.lower() == 'false') \
+        else 'False'
+
     component_container_node = GroupAction(
-            condition=IfCondition(use_composition),
+            condition=IfCondition(creates_own_container),
             actions=[
                 # PushRosNamespace(
                 #         condition=IfCondition(use_f1tenth_namespace),
@@ -574,7 +594,7 @@ def launch_setup(context, *args, **kwargs):
                 SetParameter(name='thread_num', value=os.cpu_count()),
                 # number of threads to use with component_container_mt
                 Node(
-                        condition=IfCondition(use_composition),
+                        condition=IfCondition(creates_own_container),
                         name=container_name,
                         package='rclcpp_components',
                         # https://docs.ros.org/en/humble/Concepts/Intermediate/About-Composition.html#componentcontainer
@@ -639,7 +659,10 @@ def launch_setup(context, *args, **kwargs):
                 "laserscan_launch_delay": laserscan_launch_delay,
                 "realsense_qos": realsense_qos,
                 "use_composition": use_composition,
-                "attach_to_shared_component_container": use_composition,  # this launch file starts a container
+                # Attach whenever composition is on: `container_name` is created either here
+                # (standalone) or by the parent that set attach_to_shared_component_container (bringup).
+                # Either way teleop must never create a third copy of it (bug-018/bug-022).
+                "attach_to_shared_component_container": use_composition,
                 "component_container_name": container_name if use_composition_string.lower() == 'true' else 'teleop_container',
                 "gravitational_acceleration": gravitational_acceleration,
                 "localize_isaac_vslam_on_startup": localize_isaac_vslam_on_startup,

@@ -968,6 +968,14 @@ def launch_setup(context, *args, **kwargs):
                                                       'use_gpu': use_gpu,
                                                       'autostart': autostart,
                                                       'use_composition': use_composition,
+                                                      # bringup already created 'f1tenth_container'
+                                                      # (component_container_node above). Without
+                                                      # this, mapping.launch.py creates a SECOND
+                                                      # container with the same name, namespace and
+                                                      # argv, and LoadComposableNodes targets are
+                                                      # then ambiguous (bug-022, class of bug-018).
+                                                      'attach_to_shared_component_container': use_composition,
+                                                      'container_name': 'f1tenth_container',
                                                       'use_respawn': use_respawn,
                                                       "launch_joystick": 'False',
                                                       "launch_sensors": 'False',

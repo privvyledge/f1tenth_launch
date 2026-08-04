@@ -990,3 +990,93 @@ Same hazard already documented for Nav2, now shown to apply to localization too.
    abort ever produces a stack, check whether it shares that signature before assuming they differ.
 8. **Two CLAUDE.md errors found** (see BUG-027): `launch_global_localization` defaults **True**, not
    False; and `localizer_amcl.yaml` has `tf_broadcast: true`, not false. Not yet corrected.
+
+---
+
+## RUN LOG — 2026-08-04 (Session E: BUG-022 root-cause + fix)
+
+Scope: BUG-022 only. Robot gosling1, container `f1tenth_claude_test`, `ROS_DOMAIN_ID=77`, namespaced
+(`/gosling1`), `use_gpu:=False`, VESC **unpowered** (so `vehicle/vesc_odom` and
+`vehicle/sensors/imu/raw` had no data; `ekf_odom` ran on `odom/rf2o` + the two IMUs).
+
+Command used for BOTH the before and after run:
+```
+ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_3d_mapping:=True \
+  launch_2d_mapping:=False use_composition:=True use_f1tenth_namespace:=True \
+  use_gpu:=False reset_realsense:=True
+```
+
+### The duplicate was real, and it was two entire nav2 stacks
+BEFORE (HEAD `f7d9967` launch files redeployed, so the baseline was *measured*, not inferred):
+
+| evidence | result |
+|---|---|
+| `ps -eo args \| grep component_container` | **2** × `component_container_isolated` named `f1tenth_container` at `__ns:=/gosling1` (pids 80884, 81226) |
+| `/proc/80884/maps`, `/proc/81226/maps` | full `libnav2_*.so` set (~60 libs) mapped in **BOTH** |
+| `ros2 topic info /gosling1/local_costmap/costmap` | Publisher count **2** |
+| `ros2 topic info /gosling1/global_costmap/costmap` | Publisher count **2** |
+| `ros2 node list` / `ros2 component list` | showed only **ONE** container — both dedupe by name |
+
+`LoadComposableNodes` resolves its target by **service name**; with two nodes offering
+`/gosling1/f1tenth_container/_container/load_node`, both served the load request. So the system was
+running two `controller_server`s, two `planner_server`s, two `bt_navigator`s and two lifecycle
+managers. **BUG-019's lesson held: the duplicate was not inert.**
+
+The original report's "byte-identical args" is wrong and worth correcting, because the difference is
+the diagnostic: bringup's container carries two `--params-file` entries (nav2 params), mapping's
+carries `-p thread_num:=6`.
+
+### Root cause
+`bringup.launch.py:712` creates `f1tenth_container`. Under `slam:=True` it includes
+`mapping.launch.py` with `use_composition:=True`, and `mapping.launch.py:565` created its own
+container named `container_name` (default `f1tenth_container`) guarded **only** by
+`IfCondition(use_composition)`. The file had **no** `attach_to_shared_component_container` argument,
+so no parent could tell it "I already made this". Both live in a `nodes_to_launch` group that pushes
+the namespace, so both land at `/gosling1/f1tenth_container`.
+
+Note what this was **not**: not `teleop.launch.py` (the suspected asymmetry in the handoff) and not a
+consequence of BUG-007. This is the `cb3b567` pattern called out in the git-archaeology notes — a fix
+applied to one composition path (`teleop.launch.py` got the attach guard in BUG-018) and never
+carried to the sibling.
+
+### Fix
+1. `mapping.launch.py` — added `attach_to_shared_component_container` (default `'False'`, declared,
+   registered in `launch_args`, performed to a string) and gated creation on a computed
+   `creates_own_container = use_composition AND NOT attach_…`, applied to both the `GroupAction` and
+   the inner `Node`. Same pattern `teleop.launch.py` has used since BUG-018. Standalone behaviour is
+   unchanged.
+2. `bringup.launch.py` — the mapping include now passes `attach_to_shared_component_container` **and**
+   `container_name` explicitly, per the anti-leak rule (never rely on a child default for a generic
+   arg name).
+
+`mapping.launch.py`'s own teleop include still passes `attach_to_shared_component_container:
+use_composition`, which is correct in both branches — `container_name` is created either by mapping
+(standalone) or by bringup (attached). Only the stale comment there changed.
+
+### AFTER — verified on-robot
+- exactly **ONE** `f1tenth_container`; four uniquely-named containers, one process each
+  (`f1tenth_container`, `command_gate_container`, `sensing_container`, `localization_container`)
+- all **8** nav2 components loaded into the single container
+- `local_costmap/costmap` and `global_costmap/costmap` Publisher count **2 → 1**
+- `controller_server FollowPath.desired_linear_vel` = `0.5`, matching `nav2_params.yaml:130` — params
+  still reach the servers
+- `0` × `Caught exception in launch`, `0` × `process has died`
+- `odometry/local` **30.020 Hz**; `/gosling1/map` publishing, Publisher count **1**
+
+Two honest limits, stated rather than smoothed over:
+1. `/gosling1/map` measured **~0.14 Hz** vs session D's 0.443 Hz. The robot was **stationary** —
+   RTABMap only updates the grid as it adds signatures. Publisher count is correct and `rtabmap` is
+   running with `-d`. Not a regression, but not an equal-conditions comparison either.
+2. `/gosling1/rtabmap/odom` had **no data**. This is **expected** post-BUG-026: bringup passes
+   `external_odometry:=True`, so no `rgbd_odometry` node is started at all (confirmed by `ps`) and the
+   EKF owns `odom→base_link`. Session D's 2.90 Hz figure was measured under different wiring.
+
+### Incidental observations (not acted on — out of scope)
+- **BUG-009 lead:** two `planner_server`s planning against two `global_costmap`s is a far better
+  explanation for the original 94% CPU than the BUG-010 EKF hypothesis. Re-measure BUG-009 first.
+- **BUG-007 unchanged:** `ps` still shows `rtabmap_stereo_odom` and `rtabmap_icp_odom` at `__ns:=/`
+  alongside the `/gosling1` pair. Untouched — that is TASK 2.
+- **BUG-012 again:** `ros2 component list` returned empty on the first attempt of *both* runs and
+  worked on retry. Retry before believing empty output.
+- `/gosling1/cmd_vel` reported **Publisher count 14** with a mixed type list
+  (`geometry_msgs/msg/Twist` *and* `TwistStamped`). Not investigated; flagged for a future session.
