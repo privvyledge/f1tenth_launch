@@ -211,6 +211,14 @@ def launch_setup(context, *args, **kwargs):
             actions=non_composable_actions)
 
     # ── Composable path ──────────────────────────────────────────────────────────────────────
+    # Use node_ns (absolute, '/gosling1'), not namespace (relative, 'gosling1'), exactly as the
+    # non-composable Node entries above do. bringup.launch.py wraps this include in a
+    # PushRosNamespace *and* passes namespace= down; a relative namespace gets the push prepended
+    # to it, yielding /<ns>/<ns>/controller_server. The doubled name means nav2_params.yaml no
+    # longer matches the node, controller_server configures with no critics ("No critics defined
+    # for FollowPath"), throws in on_configure, and lifecycle_manager aborts the entire nav2
+    # bringup. An absolute namespace is immune to PushRosNamespace, so this stays correct whether
+    # nav2 is launched standalone or from a namespacing parent.
     composable_node_descriptions = []
 
     if launch_controller_server.perform(context).lower() == 'true':
@@ -219,7 +227,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_controller',
                     plugin='nav2_controller::ControllerServer',
                     name='controller_server',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings + [('cmd_vel', 'cmd_vel_nav')]))
 
@@ -229,7 +237,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_smoother',
                     plugin='nav2_smoother::SmootherServer',
                     name='smoother_server',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings))
 
@@ -239,7 +247,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_planner',
                     plugin='nav2_planner::PlannerServer',
                     name='planner_server',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings))
 
@@ -249,7 +257,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_behaviors',
                     plugin='behavior_server::BehaviorServer',
                     name='behavior_server',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings))
 
@@ -259,7 +267,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_bt_navigator',
                     plugin='nav2_bt_navigator::BtNavigator',
                     name='bt_navigator',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings))
 
@@ -269,7 +277,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_waypoint_follower',
                     plugin='nav2_waypoint_follower::WaypointFollower',
                     name='waypoint_follower',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings))
 
@@ -279,7 +287,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_velocity_smoother',
                     plugin='nav2_velocity_smoother::VelocitySmoother',
                     name='velocity_smoother',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[configured_params],
                     remappings=remappings + [
                         ('cmd_vel', 'cmd_vel_nav'),
@@ -292,7 +300,7 @@ def launch_setup(context, *args, **kwargs):
                     package='nav2_lifecycle_manager',
                     plugin='nav2_lifecycle_manager::LifecycleManager',
                     name='lifecycle_manager_navigation',
-                    namespace=namespace,
+                    namespace=node_ns,
                     parameters=[{'autostart': autostart, 'node_names': lifecycle_nodes}]))
 
     load_composable_nodes = GroupAction(

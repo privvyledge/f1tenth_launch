@@ -727,3 +727,155 @@ slam:=False regression: 1 'Loaded node' line | 1 container process | Publisher c
 4. Checklist §1–3 (VESC actuation, joystick, safety mux) — need motor power + joystick.
 5. Still open, no fix attempted: BUG-007, BUG-008, BUG-010, BUG-012.
 6. VSLAM `SIGABRT` seen once under load — re-check with the VESC powered.
+
+---
+
+## RUN LOG — 2026-08-04 (Session C composed + RTABMap, agent-driven, gosling1)
+
+Addresses items 1 and 2 of the previous block: Session C/D on the composed path, and the first
+composed test of RTABMap — the primary mapper.
+
+Conditions: container `f1tenth_claude_test`, `ROS_DOMAIN_ID=77`, `docker restart` between runs.
+**VESC still unpowered** (`vehicle/vesc_odom`, `vehicle/sensors/imu/raw` NO DATA throughout);
+robot stationary; `reset_realsense:=True` on every run. All runs
+`use_f1tenth_namespace:=True use_composition:=True`.
+
+Container repo note: the container's `launch/` tree was byte-identical to `051bf31` but sitting on
+`03faef3` with an uncommitted worktree, and `051bf31` is **docs-only** — so the code under test was
+already current and no `git pull` was required. Two attempted git cleanups (`git checkout --`,
+`git stash`) were blocked by the permission classifier and deliberately not worked around.
+
+### Session C — nav2, composed + namespaced: FAILED, root-caused, FIXED, re-verified
+
+```bash
+ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=True \
+  launch_global_localization:=True use_f1tenth_namespace:=True use_composition:=True reset_realsense:=True
+```
+
+First run: nav2 loaded into the right container but under a **doubled namespace**, and the whole
+nav2 lifecycle bringup aborted (see BUG-020). The tell was in `ros2 component list`:
+
+```
+/gosling1/f1tenth_container
+  1  /gosling1/gosling1/controller_server      <- doubled
+  ...
+  8  /gosling1/gosling1/lifecycle_manager_navigation
+```
+
+```
+[gosling1.gosling1.controller_server]: Couldn't load critics! ... No critics defined for FollowPath
+[gosling1.gosling1.controller_server]: Caught exception in callback for transition 10
+[gosling1.gosling1.lifecycle_manager_navigation]: Failed to change state for node: controller_server
+[gosling1.gosling1.lifecycle_manager_navigation]: Failed to bring up all requested nodes. Aborting bringup.
+```
+
+All 7 servers `unconfigured`; `local_costmap` had `costmap`/`costmap_raw` but `global_costmap` had
+**only** `transition_event` — and it would have been subscribed to `/gosling1/gosling1/map`, which
+nothing publishes. Sensors and localization were unaffected (`lidar/scan` 8.783 Hz,
+`scan_filtered` 8.782 Hz, `odometry/local` 30.005 Hz).
+
+Root cause and fix in BUG-020. One-line version: **a parent that pushes a namespace requires its
+children to use absolute namespaces; a relative one silently doubles.** The non-composable path
+used absolute `node_ns` and was always immune — only the composable path was broken, which is
+precisely why C1 passed at `use_composition:=False` last session.
+
+After the fix (`namespace=namespace` → `namespace=node_ns`, 8 `ComposableNode` entries):
+
+| Check | Before | After |
+|---|---|---|
+| nav2 node names | `/gosling1/gosling1/*` | `/gosling1/*` |
+| lifecycle states | all 7 `unconfigured` | **all 7 `active [3]`** |
+| `/gosling1/gosling1/*` topics | 15 | **0** |
+| `global_costmap/costmap` | absent | **present** |
+| container placement | `/gosling1/f1tenth_container` | `/gosling1/f1tenth_container` |
+
+**C1 — PASS.** All 8 nav2 components verified *inside* `/gosling1/f1tenth_container` via both
+`Loaded node ... in container ...` log lines and `ros2 component list` — placement, not merely
+liveness, as the previous run log asked for. The BUG-017 failure mode (nav2 targeting a
+`nav2_container` nothing creates) did **not** occur: bringup's `use_composition` /
+`container_name` overrides reach the child correctly.
+
+**C3 — inconclusive; BUG-009 did not reproduce.** Quiet host (load 2.15), nav2 fully active, and
+nothing close to the original 94.1% of a core. But **per-node CPU is no longer measurable with
+`ps`/`top` on the composed path** — all seven servers share one process (container total 48.6%).
+Needs a different instrument, and still needs the VESC powered to test the BUG-010 hypothesis.
+
+`ros2 lifecycle get /gosling1/controller_server` returned `Node not found` on the first attempt and
+`active` on the next three — BUG-012 again, retry-fixes-it as always.
+
+**C2 (nav goal) not run** — needs motion and RViz; left for the live session. Session C was left
+running on the robot for exactly that.
+
+### RTABMap, composed + namespaced: FAILED — no map in 88 minutes (BUG-021)
+
+```bash
+ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_3d_mapping:=True \
+  launch_2d_mapping:=False launch_navigation:=False use_gpu:=False \
+  use_f1tenth_namespace:=True use_composition:=True reset_realsense:=True
+```
+
+`/gosling1/map` **NO DATA** for the entire run; `rtabmap: Did not receive data since 5 seconds!`
+logged **1055 times, continuously from startup**. Root cause is a QoS reliability mismatch on
+RTABMap's odometry input, confirmed twice:
+
+```
+ros2 topic info -v /gosling1/rtabmap/odom
+  Publisher  : rgbd_odometry           Reliability: BEST_EFFORT
+  Subscribers: rtabmap, rtabmap_viz    Reliability: RELIABLE
+-> "New publisher discovered on topic '/gosling1/rtabmap/odom', offering incompatible QoS.
+    No messages will be sent to it. Last incompatible policy: RELIABILITY_QOS"
+```
+
+Incompatible QoS ⇒ DDS delivers nothing ⇒ the synchroniser never fires ⇒ no map node is ever
+added. Not a camera fault: `rgbd_sync` starved only at startup and during an unrelated WiFi
+outage (20 warnings total), so RGB-D was live for most of the run while odometry was dead
+throughout. **Left unfixed pending a decision** on who should own RTABMap's odometry input —
+see BUG-021 for the three candidates. Consequence worth stating plainly: **the primary mapper has
+still never produced a map on the composed path.**
+
+Also surfaced in this run:
+- **BUG-022** — two `f1tenth_container` processes with byte-identical args. `ros2 component list`
+  was empty (BUG-012), so `ps` was the only detector, exactly as with BUG-018. Not root-caused.
+- **BUG-007 amendment** — the root-level duplicates `rtabmap_icp_odom` / `rtabmap_stereo_odom`
+  were *actively warning* (~1030 each), so the "duplicate stack is inert" verdict does not
+  generalise. Audit each member individually, per the BUG-019 lesson.
+
+### BUG-012 — first measured evidence (and a caveat)
+
+The RTABMap log contained **~330,000** lines of:
+
+```
+tev: ddsi_udp_conn_write to udp/<ip>:<port> failed with retcode -1
+```
+
+| Destination | Failures | What it is |
+|---|---|---|
+| `192.168.2.195` | 118,049 | **the Jetson's own `wlP1p1s0` address** |
+| `192.168.2.194` | 85,198 | static `Peer`, not present |
+| `192.168.2.193` | 85,000 | static `Peer`, not present |
+| `192.168.2.141` | 85,000 | static `Peer`, not present |
+| `192.168.2.140` | 85,000 | static `Peer`, not present |
+
+**Caveat, stated up front: this was a bounded 87-second burst (16:50:55–16:52:22) coinciding with
+a lab WiFi changeover, not steady state.** It therefore does *not* explain the continuous
+introspection flakiness on its own. What it does do is turn suspect (a) from hypothesis into a
+falsifiable test: because Cyclone is bound to `wlP1p1s0` with **no loopback in `<Interfaces>`**,
+same-host traffic egresses over the radio — so a `ros2 param get` against a node in the *same
+container on the same host* was disrupted by a WiFi event that should have been irrelevant to it.
+**Next step: add loopback to `<Interfaces>` and confirm a WiFi disturbance no longer perturbs
+same-host discovery — before touching `MaxAutoParticipantIndex` or `AllowMulticast`.**
+The tight-loop baseline measurement described in the plan was not run this session.
+
+### Still outstanding
+
+1. **BUG-021 (RTABMap QoS)** — blocker for the primary mapper; needs an ownership decision.
+   Also still untested at `use_composition:=False`.
+2. **BUG-022** duplicate container, and the per-member BUG-007 liveness audit.
+3. **Session D not re-run composed** — deferred again.
+4. C2 nav goal, A5 live loop closure, A6 convergence — all need the car moving. Session C was
+   left up on the robot for C2.
+5. Checklist §1–3 (VESC actuation, joystick, safety mux) — need motor power + joystick.
+6. **VSLAM SIGABRT (task 3): no new evidence.** It did not occur in either session today, so the
+   single earlier non-reproduction remains weak evidence and the crash is still unexplained.
+7. BUG-008, BUG-010 untouched. BUG-009 re-checked but now needs a per-node CPU instrument that
+   works with composed containers.
