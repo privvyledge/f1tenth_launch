@@ -387,7 +387,13 @@ def launch_setup(context, *args, **kwargs):
                         ],
                         arguments=['--ros-args', '--log-level', log_level],
                         remappings=remappings),
-                Node(
+                # Only create the manager when it has something to manage. An empty 'node_names'
+                # is not an idle manager — ROS 2 Humble rejects the empty tuple outright
+                # ("Expected 'value' to be one of [float, int, str, bool, bytes], but got '()'")
+                # and the exception aborts the ENTIRE launch, sensors included. Reachable whenever
+                # both map_server and amcl are off, e.g. under slam:=True. The composable manager
+                # below is already guarded this way at its LaunchDescription entry.
+                *([Node(
                         package='nav2_lifecycle_manager',
                         executable='lifecycle_manager',
                         # condition=IfCondition(launch_amcl),
@@ -397,7 +403,8 @@ def launch_setup(context, *args, **kwargs):
                         arguments=['--ros-args', '--log-level', log_level],
                         parameters=[{'use_sim_time': use_sim_time},
                                     {'autostart': autostart},
-                                    {'node_names': lifecycle_nodes}])
+                                    {'node_names': lifecycle_nodes}])]
+                  if lifecycle_nodes else []),
             ]
     )
 

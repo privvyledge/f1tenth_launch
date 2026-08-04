@@ -645,6 +645,16 @@ def launch_setup(context, *args, **kwargs):
 
     realsense_qos_int = qos_str_to_rtabmap_int.get(realsense_qos_string, 2)
 
+    # In mapping mode there is no prior map to localize against, so the global localization stack
+    # must not run: AMCL, the map EKF and the SLAM node would all broadcast map->odom, and
+    # map_server would publish /map from a file alongside the SLAM node's live /map. Measured with
+    # slam:=True before this gate: map->odom at 25.2 Hz from three broadcasters, and
+    # `ros2 topic info -v /<ns>/map` reporting "Publisher count: 2" (rtabmap AND map_server) — so a
+    # map saved during mapping could come from the stale file rather than the run.
+    slam_string = slam.perform(context)
+    global_localization_effective = 'False' if slam_string.lower() == 'true' else launch_global_localization
+    map_server_effective = 'False' if slam_string.lower() == 'true' else launch_map_server
+
     # determine what namespace to use
     if use_f1tenth_namespace_string.lower() == 'true':
         if not f1tenth_namespace_string.lower().strip():
@@ -873,9 +883,9 @@ def launch_setup(context, *args, **kwargs):
                                         # AMCL subscribes to the wrong scan topic, never localizing.
                                         "params_file": localization_params_file_path,
                                         "launch_sensor_fusion": 'True',
-                                        "launch_map_server": launch_map_server,
+                                        "launch_map_server": map_server_effective,
                                         "launch_ekf_odom": launch_local_localization,
-                                        "launch_ekf_map": launch_global_localization,
+                                        "launch_ekf_map": global_localization_effective,
                                         "odom_tf_publisher": odom_tf_publisher,
                                         "map_tf_publisher": map_tf_publisher,
                                         "launch_slam_toolbox_localizer": 'False',
@@ -885,7 +895,7 @@ def launch_setup(context, *args, **kwargs):
                                         'launch_stereo_odometry': 'True',
                                         'launch_laserscan_odometry': 'True',
                                         'launch_icp_odometry': 'True',
-                                        'launch_amcl': launch_global_localization,
+                                        'launch_amcl': global_localization_effective,
                                         "map_file": map_file,
                                         "use_sim_time": use_sim_time,
                                         "use_gpu": use_gpu,
@@ -976,6 +986,14 @@ def launch_setup(context, *args, **kwargs):
                                                       "launch_command_gate": 'False',
                                                       "launch_localization": 'False',
                                                       "launch_local_localization": 'False',
+                                                      # bringup starts the EKF itself (localization
+                                                      # include above), so the two flags directly
+                                                      # above mean "don't start a SECOND copy" —
+                                                      # they do NOT mean odometry is absent. Say so
+                                                      # explicitly, otherwise mapping stands up its
+                                                      # own visual odometry and fights the EKF for
+                                                      # ownership of odom->base_link.
+                                                      "external_odometry": 'True',
                                                       # "odom_tf_publisher": odom_tf_publisher,
                                                       # "map_tf_publisher": map_tf_publisher,
                                                       "launch_global_localization": 'False',

@@ -87,6 +87,7 @@ def launch_setup(context, *args, **kwargs):
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
     launch_visualization = LaunchConfiguration('launch_visualization', default='True')
+    external_odometry = LaunchConfiguration('external_odometry', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=True)
@@ -217,6 +218,12 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+    external_odometry_arg = DeclareLaunchArgument(
+            'external_odometry', default_value=external_odometry,
+            description="Odometry is already provided by a node this launch file did NOT start "
+                        "(e.g. the parent's EKF). Suppresses mapping's own visual odometry and its "
+                        "odom->base_link broadcast. Set True by any parent that starts the EKF "
+                        "itself and therefore passes launch_local_localization:=False.")
 
     localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
             'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
@@ -463,6 +470,7 @@ def launch_setup(context, *args, **kwargs):
         launch_localization_arg,
         launch_local_localization_arg,
         launch_global_localization_arg,
+        external_odometry_arg,
         localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
         launch_map_saver_la,
@@ -516,9 +524,19 @@ def launch_setup(context, *args, **kwargs):
     use_gpu_string = use_gpu.perform(context)
     use_gpu_for_localization_string = use_gpu_for_localization.perform(context)
 
-    # whether this launch file is responsible for starting up odometry
+    # whether this launch file is responsible for starting up odometry.
+    #
+    # 'launch_localization'/'launch_local_localization' answer "should I START localization?",
+    # which is NOT the same question as "does odometry EXIST?". A parent that already started the
+    # EKF itself passes them as False to avoid launching a second copy — and mapping then wrongly
+    # concluded that nobody was providing odometry, stood up its own visual odometry, and
+    # broadcast odom->base_link in competition with the parent's EKF (measured: 32.7 Hz on that
+    # edge = ekf_odom 30 Hz + rgbd_odometry 2.9 Hz). 'external_odometry' carries the second
+    # question explicitly; such a parent sets it True.
     enable_odom_here = True
     if launch_localization_string.lower() == 'true' and launch_local_localization_string.lower() == 'true':
+        enable_odom_here = False
+    if external_odometry.perform(context).lower() == 'true':
         enable_odom_here = False
 
     if camera_name_string != '':
@@ -797,7 +815,11 @@ def launch_setup(context, *args, **kwargs):
                 "database_path": rtabmap_database_file,
                 "qos": "1",
                 "qos_scan": "1",
-                "qos_odom": "1",
+                # BUG-021: rgbd_odometry publishes rtabmap/odom with its own `qos` param, which
+                # upstream rtabmap.launch.py ties to qos_image (=2/BEST_EFFORT for the RealSense).
+                # A RELIABLE subscription here is an incompatible-QoS match, so DDS delivers
+                # nothing and rtabmap's synchroniser never fires. Must track qos_image.
+                "qos_odom": "2",
                 "qos_image": str(realsense_qos_int),
                 "qos_camera_info": str(realsense_qos_int),
                 "qos_imu": str(realsense_qos_int),
