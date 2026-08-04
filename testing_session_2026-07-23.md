@@ -684,6 +684,10 @@ ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_2d_mapping:=True 
 - **B2 map save — PASS**: `result=True`, `sessB_map.pgm` 44649 B + `.yaml` written.
 - **B1 map-frame ownership — PASS**: `map→odom` is published by `slam_toolbox` alone;
   `amcl` has `tf_broadcast: False`, so no competing map-frame publisher.
+  **[CORRECTION 2026-08-04]** The second clause is wrong: `config/localization/localizer_amcl.yaml:40`
+  reads `tf_broadcast: true`. AMCL was simply not *running* in this 2D run. On the RTABMap path it
+  was, and it was one of three competing `map→odom` broadcasters — see BUG-027. The PASS verdict on
+  `slam_toolbox` sole ownership stands; the stated reason for it does not.
 - BUG-007 unchanged: root-level duplicate stack present (48 non-namespaced topics) and inert
   (`/odometry/local` at root NO DATA).
 
@@ -879,3 +883,107 @@ The tight-loop baseline measurement described in the plan was not run this sessi
    single earlier non-reproduction remains weak evidence and the crash is still unexplained.
 7. BUG-008, BUG-010 untouched. BUG-009 re-checked but now needs a per-node CPU instrument that
    works with composed containers.
+
+---
+
+## RUN LOG — 2026-08-04 (Session D: RTABMap QoS fix + TF ownership audit, agent-driven, gosling1)
+
+Follows directly from the previous block. Addresses BUG-021 (the primary mapper's blocker), the
+`odom→base_link` ownership question it raised, and the `use_composition:=False` gap.
+
+Conditions: container `f1tenth_claude_test`, `ROS_DOMAIN_ID=77`, `docker restart` between every run,
+`reset_realsense:=True` on every run. **VESC still unpowered** — `vehicle/vesc_odom` and
+`vehicle/sensors/imu/raw` had NO DATA throughout, so every EKF number below comes from
+`odom/rf2o` (8.8 Hz) + the two IMU inputs only. Robot stationary. Launch files deployed by
+`scp` → `docker cp` (no rebuild, `--symlink-install`).
+
+Note: the Session C stack left running for the C2 nav-goal test was killed by the first
+`docker restart` of this session.
+
+### BUG-021 — FIXED (option (a)), verified on both composition paths
+
+`mapping.launch.py`: `qos_odom: "1"` → `"2"`. The mismatch was structural, not a typo — upstream
+`rtabmap.launch.py:183` hands `rgbd_odometry` `"qos": qos_image`, and that one parameter drives both
+its image subscriptions and its `odom` publisher, so the BEST_EFFORT we correctly want for the
+RealSense propagates to `rtabmap/odom`. **Candidate (b) is therefore impossible** without breaking
+the image input.
+
+```
+composed:      incompatible-QoS warnings 1055 -> 0 | rtabmap/odom 2.90 Hz
+               /gosling1/map  NO DATA (88 min) -> 0.443 Hz
+               rtabmap starvation warnings  1055 continuous -> 2 (startup only)
+non-composed:  /gosling1/map 0.102 Hz, Publisher count 1, Memory.cpp forget() = adding signatures
+               odometry/local 29.876 Hz | launch exceptions 0
+```
+
+**The primary mapper has produced a map for the first time on the composed path.**
+
+Honest limit: the fix is verified on both paths, but the original failure was never *reproduced* at
+`use_composition:=False` — the fix was already deployed by then. "Composition-independent" is
+inferred from the wiring, not observed.
+
+Warning attribution matters here. Of the residual `Did not receive data since 5 seconds` lines,
+`rtabmap` itself accounts for **2**; the rest are `rtabmap_icp_odom` (55) and `rtabmap_stereo_odom`
+(54) — the BUG-007 set, not the mapper.
+
+### TF ownership audit — two edges had competing broadcasters (BUG-026, BUG-027)
+
+Instrumented by `ros2 param get <node> publish_tf` on every `/tf` publisher, cross-checked against
+per-edge rates counted off `/gosling1/tf`.
+
+| Edge / topic | Before | After |
+|---|---|---|
+| `odom→base_link` | `ekf_odom_node` + `rgbd_odometry` (32.70 Hz ≈ 30 + 2.9) | **`ekf_odom_node` alone** |
+| `map→odom` | `rtabmap` + `ekf_map_node` + `amcl` (25.2 Hz) | **`rtabmap` alone** |
+| `/gosling1/map` publishers | **2** — `rtabmap` *and* `map_server` | **1** |
+| `odometry/local` | 30.0 Hz | **30.000 Hz** (no regression) |
+
+Two independent causes, both fixed:
+
+- **BUG-026 — an overloaded flag.** `launch_localization`/`launch_local_localization` mean *"should I
+  START localization?"*; `mapping.launch.py` read them as *"does odometry EXIST?"*. Because bringup
+  starts the EKF itself it passes both `False`, so `enable_odom_here` was **always True under
+  bringup** — the very reasoning that block exists for never fired on the path that matters. Fixed
+  with an explicit `external_odometry` arg.
+- **BUG-027 — no `slam` gate on global localization.** AMCL, the map EKF and `map_server` all ran
+  while SLAM was building the map. A map saved during mapping could have come from the stale file.
+  Fixed with `global_localization_effective` / `map_server_effective` in bringup.
+
+Stationary, neither is very visible. Under motion two broadcasters on one edge disagree and the TF
+buffer returns whichever arrived last — this would have corrupted the A5 loop-closure drive.
+
+### BUG-028 — an empty lifecycle list aborts the whole launch (found by the composition:=False run)
+
+Fixing BUG-027 turned off both `map_server` and `amcl`, which left `localization.launch.py` building
+its **non-composed** lifecycle manager with `node_names=[]`. ROS 2 Humble rejects the empty tuple and
+the exception took down every node in the launch:
+
+```
+[ERROR] [launch]: Caught exception in launch: Expected 'value' to be one of
+[float, int, str, bool, bytes], but got '()' of type '<class 'tuple'>'
+```
+
+Worth recording as a **diagnostic trap**: what dominates the log is `realsense2_camera_node` dying
+with a GLFW assertion (`_glfwPlatformGetTls`, exit `-6`) and a wall of `image_transport` plugin-load
+failures. That is all shutdown cascade. The cause is one line ~120 lines earlier. The composable
+manager was already guarded (`*([...] if lifecycle_nodes else [])`); the non-composed `Node` was not.
+Same hazard already documented for Nav2, now shown to apply to localization too.
+
+### Still outstanding
+
+1. **BUG-022** duplicate `f1tenth_container` — not re-examined this session.
+2. **BUG-007** — new evidence: the root duplicates subscribe to **root** `/lidar/scan_filtered`
+   while sensors publish under `/gosling1/`, so they are permanently starved, not merely redundant.
+   `ps` shows 2 at `ns=/` plus 2 at `ns=/gosling1` for the stereo/ICP pair. Still not fixed.
+3. **BUG-012** — the loopback-`<Interfaces>` test and the tight-loop failure-rate baseline were
+   **not** run this session. `ros2 param get` / `topic info` flakiness recurred as usual and retry
+   fixed it every time, consistent with all previous sessions.
+4. C2 nav goal, A5 live loop closure, A6 convergence — still need the car moving.
+5. Checklist §1–3 (VESC actuation, joystick, safety mux) — still need motor power + joystick.
+6. BUG-008, BUG-009, BUG-010 untouched. BUG-009 still needs a per-node CPU instrument for composed
+   containers, and BUG-010 still needs the VESC powered.
+7. **VSLAM SIGABRT: still no new evidence** (`use_gpu:=False` throughout). Noting one possible
+   thread: the RealSense abort in the BUG-028 cascade was *also* a GLFW/TLS assertion — if the VSLAM
+   abort ever produces a stack, check whether it shares that signature before assuming they differ.
+8. **Two CLAUDE.md errors found** (see BUG-027): `launch_global_localization` defaults **True**, not
+   False; and `localizer_amcl.yaml` has `tf_broadcast: true`, not false. Not yet corrected.
