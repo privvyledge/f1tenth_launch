@@ -1,0 +1,634 @@
+# F1/10 Testing Checklist — humble-dev branch
+
+Track progress by replacing `[ ]` with `[x]` (done) or `[!]` (bug found).
+Add bug notes inline under the failing item.
+
+---
+
+## 0. Pre-flight (offline, no robot required)
+
+- [x] **Python syntax check** — verify all modified launch files parse without error.
+  ```bash
+  python3 -c "import ast; ast.parse(open('launch/bringup.launch.py').read())"
+  python3 -c "import ast; ast.parse(open('launch/mapping.launch.py').read())"
+  python3 -c "import ast; ast.parse(open('launch/teleop.launch.py').read())"
+  python3 -c "import ast; ast.parse(open('launch/localization/localization.launch.py').read())"
+  python3 -c "import ast; ast.parse(open('launch/vehicle/ackermann_mux.launch.py').read())"
+  python3 -c "import ast; ast.parse(open('launch/vehicle/joystick.launch.py').read())"
+  ```
+
+- [x] **joy_config.yaml exists and is correct** — split from joy_teleop.yaml; contains joy node params only.
+  ```bash
+  cat config/vehicle/joy_config.yaml
+  # Expected: device_id, deadzone, autorepeat_rate, coalesce_interval
+  ```
+
+- [x] **YAML syntax** — check all modified config files.
+  ```bash
+  python3 -c "import yaml; yaml.safe_load(open('config/vehicle/joy_teleop.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/vehicle/mux.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/vehicle/vesc.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/localization/ekf_odom.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/localization/ekf_map.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/localization/localizer_amcl.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/localization/localizer_slam.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/sensors/realsense_config.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('config/nav2_params.yaml'))"
+  ```
+
+- [x] **Build package** — confirm no install-time errors.
+  ```bash
+  # From workspace root:
+  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release --packages-up-to f1tenth_launch
+  ```
+
+---
+
+## 1. Vehicle Actuators (VESC)
+
+**What changed**: `max_acceleration` in vesc.yaml lowered 2.5 → 1.0 m/s²; `vesc_poll_rate` default 200 → 50 Hz; variable name bug fixed (`max_servo_rate` → `max_steering_rate`).
+
+- [x] **VESC driver starts** — check no parameter errors on launch.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_sensors:=False launch_localization:=False
+  ros2 node list | grep vesc
+  ```
+
+- [x] **vesc_poll_rate is 50 Hz** — verify actual publish rate of VESC state topic.
+  ```bash
+  ros2 topic hz /sensors/core
+  # Expected: ~50 Hz
+  ```
+
+- [x] **Encoder odometry publishes** — confirm `odom/vesc` topic is active. (Actual topic: `/gosling1/vehicle/vesc_odom`)
+  ```bash
+  ros2 topic echo /odom/vesc --once
+  ```
+
+- [x] **Motor responds to drive command** — send a zero-speed command, wheel should not spin.
+  ```bash
+  ros2 topic pub --once /drive ackermann_msgs/msg/AckermannDriveStamped \
+    '{drive: {speed: 0.0, steering_angle: 0.0}}'
+  ```
+
+- [!] **Acceleration limit works** — with the lower limit (1.0 m/s²), the car should accelerate more gradually. Drive forward with joystick and observe start behavior.
+  > **Bug**: When `launch_throttle_interpolator_node:=True`, throttle acceleration is limited correctly but steering misbehaves — returns to center instead of responding to joystick. TODO: investigate throttle_interpolator package for steering passthrough.
+
+---
+
+## 2. Joystick / Teleop
+
+**What changed**: `joystick.launch.py` now loads separate `joy_config.yaml` (joy node) and `joy_teleop.yaml` (joy_teleop node). Previously both pointed to the same file. `joy_teleop.yaml` had the joy node params (device_id etc.) removed.
+
+- [x] **Joy node starts with correct config** — verify device_id and deadzone are applied.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_sensors:=False launch_localization:=False
+  ros2 param get /joy joy/device_id
+  # Expected: 0
+  ros2 param get /joy joy/deadzone
+  # Expected: 0.01
+  ```
+
+- [!] **Joy_teleop starts without error** — should not log any missing parameter warnings.
+  ```bash
+  ros2 node list | grep joy_teleop
+  ros2 node info /joy_teleop
+  ```
+  > **Note**: `joy_teleop` not visible in `ros2 node list` under rmw_fastrtps_cpp. Appears normally under rmw_cyclonedds_cpp (confirmed). Run `ros2 component list` to verify when using fastrtps. `/gosling1/teleop` publishes and drive is functional.
+
+- [x] **DualSense / controller connects** — `/joy` topic should publish on button press.
+  ```bash
+  ros2 topic echo /joy --once
+  ```
+
+- [x] **Manual drive works** — hold deadman button (L1/R1), push left stick forward, car should drive.
+  Verify `teleop` topic receives commands:
+  ```bash
+  ros2 topic echo /teleop --once
+  ```
+
+- [x] **Steering works** — left stick left/right produces correct `steering_angle` (positive=left on F1/10).
+  Check steering axis (should be axis 2 for DualSense):
+  ```bash
+  ros2 topic echo /teleop
+  ```
+
+- [x] **`require_deadman:=False` disables interlock** — `teleop` should publish drive commands without any button held.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_vehicle:=False launch_sensors:=False launch_localization:=False require_deadman:=False
+  # Push stick without holding L1/R1 — teleop topic should publish:
+  ros2 topic echo /teleop --once
+  # Also verify the parameter reached joy_teleop:
+  ros2 param get /joy_teleop human_control.deadman_buttons
+  # Expected: [] (empty list)
+  ```
+  > **Fix applied**: `deadman_buttons` param in `joy_teleop.yaml` was commented out; upstream `joy_teleop` disables deadman when the param is absent. Works correctly.
+
+- [x] **`require_deadman:=True` (default) still enforces interlock** — release L1/R1 and confirm `teleop` stops publishing.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_vehicle:=False launch_sensors:=False launch_localization:=False
+  ros2 param get /joy_teleop human_control.deadman_buttons
+  # Expected: [4, 9]
+  ```
+  > **Fix applied**: `deadman_buttons` commented out of `joy_teleop.yaml`; `joystick.launch.py` injects it via `teleop_params` only when `require_deadman:=True` (lines 108–110). Both modes tested on robot and confirmed functional.
+
+- [x] **`max_speed` launch arg overrides YAML** — the `scale` in `joy_teleop.yaml` is overridden at runtime by the `max_speed` launch arg; editing the YAML has no effect. Verify the runtime value.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_vehicle:=False launch_sensors:=False launch_localization:=False
+  ros2 param get /joy_teleop human_control.axis_mappings.drive-speed.scale
+  # Expected: 5.0 (default launch arg), regardless of what joy_teleop.yaml says
+  ```
+  > **Note**: Tested at `max_speed:=1.0`. `/gosling1/drive` consistently published 1.0. `ackermann_cmd` also showed 1.0 after mux timeout was raised from 0.05 → 0.1 s (see below).
+
+- [x] **Speed cap is respected at full stick deflection** — hold deadman, push left stick to max; `teleop` speed field should equal `max_speed`. Relaunch at a lower value to confirm the cap changes.
+  ```bash
+  # At default max_speed:=5.0:
+  ros2 topic echo /teleop --field drive.speed
+  # Expected: ~5.0 at full forward stick
+  #
+  # Relaunch at 2.0 m/s and recheck:
+  ros2 launch f1tenth_launch teleop.launch.py launch_vehicle:=False launch_sensors:=False launch_localization:=False max_speed:=2.0
+  ros2 topic echo /teleop --field drive.speed
+  # Expected: ~2.0 at full forward stick
+  ros2 param get /joy_teleop human_control.axis_mappings.drive-speed.scale
+  # Expected: 2.0
+  ```
+  > **Bug found → fixed**: `ackermann_cmd` occasionally showed 0.0 spikes at `max_speed:=1.0`. Root cause: `/gosling1/teleop` publishes at 16–65 Hz (highly variable) while mux joystick timeout was 0.05 s. Gaps between publishes exceeded the timeout, causing the safety fallback to fire. Fixed: raised joystick `timeout` in `mux.yaml` from 0.05 → 0.1 s. Confirmed stable 1.0 output after fix.
+
+---
+
+## 3. Safety Mux
+
+**What changed**: `mux.yaml` adds a `safety` topic at priority 1 (lowest). `ackermann_mux.launch.py` spawns a 40 Hz zero-speed publisher on `safety`. Joystick timeout tightened 0.2 → 0.05 s. Namespace bug fixed: safety publisher now resolves to `/<ns>/safety` when `use_f1tenth_namespace=True`.
+
+- [x] **Mux starts and safety publisher is running**.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_sensors:=False launch_localization:=False
+  ros2 topic hz /safety
+  # Expected: ~40 Hz
+  ros2 topic echo /safety --once
+  # Expected: AckermannDriveStamped with speed=0.0
+  ```
+
+- [x] **Safety publisher reaches the mux under namespace** — `ExecuteProcess` bypasses `PushRosNamespace`; the fix must publish to the correct absolute topic.
+  > **Note**: `ros2 topic info -v /gosling1/safety` reports `Publisher count: 0` under rmw_fastrtps_cpp despite 40 Hz traffic. This is a fastrtps discovery artifact for intra-process (component) publishers — not an issue under rmw_cyclonedds_cpp (confirmed). No root `/safety` in topic list — namespace fix confirmed correct.
+  ```bash
+  # Launch with namespace active (the default when VEHICLE_NAME or USER is set):
+  ros2 launch f1tenth_launch teleop.launch.py launch_sensors:=False launch_localization:=False \
+    use_f1tenth_namespace:=True f1tenth_namespace:=f1tenth
+  # Safety publisher should appear on the NAMESPACED topic, not root /safety:
+  ros2 topic hz /f1tenth/safety
+  # Expected: ~40 Hz
+  ros2 topic hz /safety
+  # Expected: no publishers (root topic should be empty)
+  ```
+
+- [x] **Mux output topic exists**.
+  ```bash
+  ros2 topic echo /ackermann_cmd --once
+  ```
+
+- [x] **Joystick priority overrides safety** — when joystick is active (deadman held), `/ackermann_cmd` reflects joystick commands, not zero.
+
+- [x] **Safety fallback fires on joystick disconnect** — disconnect the controller (or release deadman for >0.05 s). The car should stop within 50 ms (joystick timeout).
+  ```bash
+  ros2 topic echo /ackermann_cmd
+  # After releasing deadman: speed should drop to 0.0 quickly
+  ```
+
+- [x] **No noise from safety topic** — verify safety publisher output has exactly zero speed and steering; no floating point garbage.
+
+---
+
+## 4. Sensors
+
+**What changed**: RealSense `ordered_pc` false (was true); IMU rate lowered 200 → 100 Hz; decimation filter enabled (magnitude 2). YDLidar: `intensity: true`, `range_max: 10.0`, `range_min: 0.12`, `frequency: 12.0`, `invalid_range_is_inf: true`; intensity filter added to `laser_filter.yaml` as commented-out `filter1` (requires tuning before enabling).
+
+- [x] **LiDAR scan publishes** — 8.7 Hz (expected 8-9 Hz for YDLidar X4). Frame id: `lidar`. ✓
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py launch_localization:=False
+  ros2 topic hz /lidar/scan
+  # Expected: ~8-9 Hz (YDLidar X4)
+  ros2 topic echo /lidar/scan --once
+  ```
+
+- [x] **LiDAR scan_filtered publishes** — 8.7 Hz, matching raw scan rate. ✓
+  ```bash
+  ros2 topic hz /lidar/scan_filtered
+  ```
+
+- [!] **LiDAR intensity field is populated** — `intensity: true` is now set in `ydlidar_X4.yaml`; verify the field is non-empty.
+  ```bash
+  ros2 topic echo /lidar/scan --once | grep -A5 intensities
+  # Expected: array of non-zero values (typically 0–255 for X4)
+  # If all zeros or field absent: intensity not supported on this firmware/driver build
+  ```
+  > **Bug confirmed**: YDLidar X4 does NOT support per-return intensity. Setting `intensity: true` causes continuous checksum errors and driver failure. With `intensity: false` (current config), the driver publishes `intensities: [0.0, 1008.0, ...]` — constant 1008.0 values that are internal status bits, not real intensity. **Conclusion**: intensity filter in `laser_filter.yaml` is unusable on the X4. Keep `intensity: false`; disable the `filter1` intensity filter entry permanently (leave it commented). See https://github.com/YDLIDAR/ydlidar_ros2_driver/blob/humble/details.md for X4 channel details.
+
+- [!] **Intensity filter tuning** — N/A: YDLidar X4 does not support real intensity data; skip this item.
+  ```bash
+  # Step 1: observe raw intensity distribution while driving near walls and across open space
+  ros2 topic echo /lidar/scan | grep -A2 intensities
+  # Note min/max of values for valid wall returns vs ghost/noise returns.
+  # Typical valid returns on X4: 100–255. Ghost returns from multipath/near-range: <50.
+
+  # Step 2: uncomment filter1 in config/filters/laser_filter.yaml with a candidate threshold, e.g.:
+  #   lower_threshold: 100
+  # No rebuild needed (symlink-install). Restart the laser_filters node:
+  ros2 launch f1tenth_launch teleop.launch.py launch_localization:=False
+
+  # Step 3: compare raw vs filtered in RViz
+  # Add two LaserScan displays: /lidar/scan (red) and /lidar/scan_filtered (green)
+  # Drive near walls. Green scan should match red for solid walls; ghost returns should disappear.
+
+  # Step 4: if real wall returns are being dropped, lower the threshold and repeat.
+  # If ghost returns persist, raise the threshold.
+  ros2 topic hz /lidar/scan_filtered
+  # Expected: same Hz as /lidar/scan (filter does not change rate)
+  ```
+  > **Tuning note**: Start at `lower_threshold: 100`. Raise to remove phantoms; lower if real walls disappear. Do not set above ~150 without confirming wall returns are preserved at distance (>5 m returns have lower intensity on the X4). Leave `upper_threshold: 65535` unless specular spikes appear.
+
+- [x] **RealSense color stream starts** — confirmed at 848×480×30 (~28 Hz) after clean Jetson reboot with USB 3 enumeration.
+  > **Resolved**: Prior "USB 2.1" warning and 640×360×30 rejection were artifacts of a GLSL runtime restart, not clean startup. After full USB re-enumeration the camera is detected as USB 3 and accepts the configured profile. Current config: `848x480x30` in `realsense_config.yaml`.
+  ```bash
+  ros2 topic hz /camera/color/image_raw
+  # Observed: ~28 Hz
+  ros2 topic echo /camera/color/image_raw --once | grep -E 'width|height'
+  # Observed: height: 480, width: 848
+  ```
+
+- [x] **RealSense depth stream starts** — aligned depth at 640×480 (aligned to color); raw depth at 640×360. ✓
+  > **Note**: Decimation filter (magnitude 2) halves depth resolution. `camera/depth/image_rect_raw` shows 640×360 — this is BEFORE decimation (raw sensor). Decimation output visible on the pointcloud/aligned topic path. Confirm decimated dimensions if needed.
+  ```bash
+  ros2 topic echo /camera/aligned_depth_to_color/image_raw --once | grep -E 'width|height'
+  ```
+
+- [x] **RealSense IMU rate** — confirmed at 200 Hz after `gyro_fps: 200` fix.
+  > **Bug fixed**: D435i gyroscope only supports 200 Hz and 400 Hz. `gyro_fps: 100` is invalid and rejected. Fixed: `gyro_fps: 200` in realsense_config.yaml. `accel_fps: 100` is valid. IMU at 200 Hz is acceptable for EKF at 30 Hz.
+  ```bash
+  ros2 topic hz /camera/imu/filtered
+  # Observed: ~200 Hz
+  ```
+
+- [x] **SDK pointcloud (`camera/depth/color/points`) publishing** — confirmed after clean boot and `color_format: RGB8` fix.
+  > **Root cause found and fixed**: `color_format: BGR8` in `realsense_config.yaml` caused "No stream match for pointcloud chosen texture Process - Color" — the RealSense SDK requires `RGB8` for colored pointcloud generation. Fixed: `color_format: "RGB8"`. After fix, SDK pointcloud publishes at ~27 Hz. RTABMap `depthimage_to_pointcloud` path also works but costs ~200% CPU vs ~72% for the SDK path; use SDK path by default (`depthimage_to_pointcloud:=False`).
+  > **Note on `is_dense`**: Both `camera/depth/color/points` and `camera/downsampled_cloud_from_depth` report `is_dense: true` even with `ordered_pc: false`. This is correct — `is_dense` means no NaN/Inf points in the cloud, which is independent of point ordering.
+  ```bash
+  ros2 topic hz /camera/depth/color/points
+  # Observed: ~27 Hz (stabilizes after ~10s)
+  ros2 topic echo /camera/depth/color/points --once | grep is_dense
+  # Observed: is_dense: true (all points valid; ordered_pc affects grid layout, not validity)
+  ```
+
+---
+
+## 5. Localization — rf2o + EKF Odom
+
+**What changed** (most significant block):
+- `rf2o_odometry_node` was **commented out** in the previous version; it is now **active**.
+- EKF `odom2` source changed from `odom/rtabmap/icp` (ran ICP odometry which was **also** controlled by `launch_laserscan_odometry`) to `odom/rf2o`.
+- ICP odometry now has its own `launch_icp_odometry` flag (default `False`); rf2o `publish_tf` condition was checking for the wrong string (`'icp'`), now correctly checks `'rf2o'`.
+- EKF frequency 50 → 30 Hz; `use_control: true`; acceleration limits uncommented (3.0 m/s²).
+
+- [x] **rf2o_odometry_node starts** — was previously commented out.
+  ```bash
+  ros2 launch f1tenth_launch teleop.launch.py
+  ros2 node list | grep rf2o
+  ros2 topic hz /odom/rf2o
+  # Expected: rf2o publishes at ~8-9 Hz (tied to LiDAR)
+  ```
+  > **Note**: Node names are `CLaserOdometry2D` and `CLaserOdometry2DNode` — `grep rf2o` returns empty. Use `grep CLaserOdometry` instead. Topic `/gosling1/odom/rf2o` publishes at ~8.5 Hz as expected. rf2o outputs verbose INFO logs every scan cycle (two lines per 100 ms); see bug note for silencing.
+
+- [x] **EKF odom node starts at 30 Hz**.
+  ```bash
+  ros2 topic hz /odometry/local
+  # Expected: ~30 Hz
+  ```
+  > **Confirmed**: ~29–30 Hz. Note: EKF was tested with `use_control: true` (since reverted to `false` in ekf_odom.yaml). Three warnings appeared — see bug notes for `odom2`/`imu0` differential+relative conflict.
+
+- [x] **EKF is fusing VESC odom + rf2o** — check covariance is not exploding.
+  ```bash
+  ros2 topic echo /odometry/local --once
+  # covariance diagonal values should be small (not NaN or >1.0 for x,y,yaw)
+  ```
+  > **Bug**: rf2o publishes all-zero covariance (see `/gosling1/odom/rf2o` echo). robot_localization treats zero-covariance as infinitely precise, biasing the EKF heavily toward rf2o. Pose covariance values on `/odometry/local` are non-NaN (4.39, 4.42 for x/y) but large relative to short-term drift. Root fix: use the forked rf2o (https://github.com/privvyledge/rf2o_laser_odometry.git) which adds proper covariance estimation. Also: `odom2_differential: true` and `odom2_relative: true` are both set — EKF warns and picks differential; set `odom2_relative: false` to suppress.
+  > **RESOLVED (2026-07-22)**: forked rf2o is pinned in `f1tenth.repos` (adds covariance estimation); commit `cb3b567` set `odom2_relative: false` and added Mahalanobis rejection thresholds on odom2 in `ekf_odom.yaml`.
+
+- [x] **odom → base_link TF publishes** — with `odom_tf_publisher=ekf`, EKF should publish this TF.
+  ```bash
+  ros2 run tf2_ros tf2_echo odom base_link
+  ```
+  > **Confirmed**: TF publishes. Observed ~0.5°/s yaw drift while stationary — see rf2o competing TF bug below.
+
+- [x] **rf2o publish_tf is False** — with default `odom_tf_publisher=ekf`, rf2o should not publish a competing TF.
+  ```bash
+  ros2 param get /rf2o_odometry_node publish_tf
+  # Expected: false
+  ```
+  > **Bug**: `ros2 param get /gosling1/CLaserOdometry2DNode publish_tf` returns `false`, but `ros2 node info /gosling1/CLaserOdometry2DNode` shows the node is a publisher on `/gosling1/tf`. Upstream rf2o does not respect the `publish_tf` parameter — it publishes `odom→base_link` TF regardless. This creates a second competing TF source alongside the EKF and is the likely cause of the stationary yaw drift (~0.5°/s). Fix: switch to the forked rf2o package (https://github.com/privvyledge/rf2o_laser_odometry.git).
+  > **RESOLVED (2026-07-22)**: forked rf2o is pinned in `f1tenth.repos`; the fork respects `publish_tf: False`.
+
+- [x] **ICP odometry is NOT running** — verify `launch_icp_odometry` defaults to False.
+  ```bash
+  ros2 node list | grep icp
+  # Should NOT see rtabmap_icp_odom node
+  ```
+  > **Confirmed**: empty output.
+
+- [ ] **Drive robot in a loop** — odom should roughly close the loop over ~5 m. Visualize in RViz or check via:
+  ```bash
+  ros2 topic echo /odometry/local | grep -A3 'pose:'
+  ```
+  > **Result (elliptical loop, robot returned to origin)**: Position closure excellent — x=0.005 m, y=0.0004 m (sub-centimeter). Yaw at closure: z=−0.211, w=0.977 → **−24.3°** residual heading error. Position fusion (VESC + rf2o) is working well; yaw accumulates drift. Likely causes: (1) rf2o competing TF (upstream bug — publishes `odom→base_link` TF despite `publish_tf: False`); (2) rf2o zero covariance over-weighting its yaw; (3) IMU yaw drift with no magnetometer correction. Retest after switching to forked rf2o (proper covariance + TF fix) to isolate the contribution.
+  > **Update (2026-07-22)**: forked rf2o now deployed (`f1tenth.repos`) + EKF fixes in `cb3b567`. Marked `[ ]` — on-robot retest pending to confirm the yaw closure improvement.
+
+---
+
+## 6. Localization — AMCL (with pre-built map)
+
+**What changed**: `max_beams` 360→90, `max_particles` 2000→500, `min_particles` 500→100, `update_min_a` -1.0→0.5 rad, `update_min_d` -1.0→0.2 m (motion-triggered updates).
+
+> **Dependency**: Requires a pre-existing 2D map. Complete **Section 8a** (2D Online Mapping) first to generate `data/maps/raslab.yaml`, then return here.
+
+- [x] **AMCL starts without error**.
+  ```bash
+  ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=False
+  ros2 node list | grep amcl
+  ```
+  > **Confirmed**: Node visible in `ros2 node list`. No errors on launch.
+
+- [!] **Particle cloud visible in RViz** — load a `PoseArray` topic `/particlecloud`. Should see particle cloud spread across robot starting area. **[2026-08-04] Root cause confirmed, RViz check still pending**: the topic is `/particle_cloud` and its type is **`nav2_msgs/msg/ParticleCloud`**, NOT `PoseArray` — so the display must be added via **Add → By display type → nav2_rviz_plugins → Particle Cloud**. Verified publishing at 8.97 Hz alongside `/amcl_pose` at 8.68 Hz (headless, so nothing was rendered). Convergence-under-motion still untested.
+  > **Bug**: `particle_cloud` publishes at ~0.8 Hz (confirmed via `ros2 topic hz /gosling1/particle_cloud`) but is not visible in RViz. Root cause: Nav2 Humble publishes `particle_cloud` as `nav2_msgs/msg/ParticleCloud`, not `geometry_msgs/msg/PoseArray` — the standard RViz2 PoseArray display cannot render it. Fix: install `ros-humble-nav2-rviz-plugins` and add the **"Particle Cloud"** display type from that package (not the generic PoseArray display). The ~0.8 Hz rate while stationary is expected — AMCL resamples slowly when motion triggers (`update_min_d: 0.2 m`, `update_min_a: 0.5 rad`) are not met.
+
+- [x] **AMCL localizes** — set initial pose estimate in RViz (2D Pose Estimate). Particles should converge.
+  ```bash
+  ros2 topic echo /amcl_pose --once
+  # Expected: reasonable (x,y,yaw) close to actual robot position
+  ```
+  > **Confirmed**: Pose looks correct. Localization converges with `set_initial_pose: True` at origin.
+
+- [x] **Motion-triggered updates work** — particles should only update when robot moves >0.2 m or turns >0.5 rad. Verify AMCL is NOT spinning the CPU when robot is stationary.
+  ```bash
+  # Check CPU while robot is stationary:
+  top -b -n1 | grep amcl
+  ```
+  > **Note**: AMCL runs as a composable node inside `component_container` — `top | grep amcl` returns empty. Monitor `component_container` instead. Observed 28–48% CPU for the whole container (all composed nodes combined). AMCL's own contribution is small; CPU is dominated by other components.
+
+- [x] **map → odom TF publishes**.
+  ```bash
+  ros2 run tf2_ros tf2_echo map odom
+  ```
+  > **Confirmed**: `map→odom` TF publishes correctly.
+
+> **Tuning note**: Attempted to improve accuracy by increasing `max_beams: 90→180`, `max_particles: 500→1000`, tightening `sigma_hit: 0.4→0.2`, and adjusting `z_hit`/`z_rand`. Result: particle cloud rate dropped from 8.7 Hz → 0.4 Hz causing pose jumps. Computation scales O(particles × beams) — doubling both is ~2.7× overhead. Since AMCL is one source fused into `ekf_map`, high update rate matters more than per-update precision. All parameters reverted to original values.
+
+---
+
+## 7. Localization — SLAM Toolbox (localization mode)
+
+**What changed**: `map_update_interval` 0.02 → 0.2 s (was updating at 50 Hz; now 5 Hz).
+
+- [x] **slam_toolbox localizer starts** (requires `odom_tf_publisher:=slam` or explicit launch arg).
+  ```bash
+  ros2 launch f1tenth_launch localization.launch.py launch_slam_toolbox_localizer:=True launch_amcl:=False
+  ros2 node list | grep slam
+  ```
+  > **Confirmed**: `/gosling1/slam_toolbox` present. `/gosling1/visual_slam_node` also running — launched with `use_gpu:=True`, expected.
+
+- [x] **CPU usage is lower** — 5 Hz map updates vs the previous 50 Hz should be visible.
+  ```bash
+  top -b -n1 | grep slam
+  ```
+  > **Confirmed**: `top | grep slam` returns empty (process runs under a different name); `top` directly shows ~10% CPU for the slam_toolbox process. `map_update_interval: 0.2 s` change confirmed effective.
+  > **Pose rate**: `ros2 topic hz /gosling1/slam_toolbox/pose` shows ~0.8 Hz. slam_toolbox only publishes a pose when it accepts a scan match (motion-gated), so each correction is a larger step — causes visible jumps. Less accurate and jumpier than AMCL. **Conclusion**: AMCL is the preferred localizer for this platform; slam_toolbox localization mode is a fallback only.
+
+---
+
+## 8. Mapping
+
+**What changed**: `use_sim_time` default in `mapping.launch.py` changed **True → False** (was accidentally enabling sim time for online mapping). `odom_tf_publisher` and `map_tf_publisher` are now proper top-level args.
+
+### 8a. 2D Online Mapping (SLAM Toolbox)
+
+- [x] **Starts without sim time when mapping online**.
+  ```bash
+  ros2 launch f1tenth_launch mapping.launch.py launch_2d_mapping:=True launch_3d_mapping:=False launch_localization:=True
+  ros2 param get /slam_toolbox use_sim_time
+  # Expected: false
+  ```
+  > **Confirmed (live robot)**: `false`. Confirmed (bag): `true` when `use_sim_time:=True` is passed.
+
+- [x] **Map is building** — open RViz, add `/map` topic. Drive robot around; map should grow.
+  > **Confirmed**: Map generated successfully via bag playback (`loop3x_no_localization`). Results are rough — localizer tuning still needed. See rosbag command in `COMMANDs.md`.
+
+- [x] **Save map works**.
+  ```bash
+  # After mapping, save manually:
+  ros2 run nav2_map_server map_saver_cli -f raslab_test -t /gosling1/map --ros-args -p map_subscribe_transient_local:=true
+  ls raslab_test.yaml
+  ```
+  > **Bug**: Automatic map saving via `map_saver` (configured in `2d_mapping.launch.py`) did not save on its own during the bag test. Manual save with the command above worked. Needs investigation — likely the `map_saver` lifecycle or topic remapping is not wired correctly for the namespaced case. TODO: verify map_saver node is running and subscribed to the correct `/gosling1/map` topic.
+  > **RESOLVED — not a namespace bug (2026-07-22)**: verified offline by resolving the launch tree with the ROS 2 launch API (`PushRosNamespace('gosling1')` from `mapping.launch.py:851` propagates through the `2d_mapping.launch.py` include): `slam_toolbox` publishes `/gosling1/map`, `map_saver_server` runs at `/gosling1/map_saver` with relative `map_topic: map` → `/gosling1/map`. Wiring is correct. The actual cause: **`map_saver_server` has no auto-save feature** — it is an on-demand service server; the `map_url`/`map_topic` launch params are not declared node parameters (the `SaveMap` service *request* carries them). To save in the namespaced case:
+  > `ros2 service call /gosling1/map_saver/save_map nav2_msgs/srv/SaveMap "{map_topic: map, map_url: <path>, image_format: pgm, map_mode: trinary, free_thresh: 0.25, occupied_thresh: 0.65}"`
+  > If periodic auto-save is wanted, it must be added (e.g. a timer node calling the service) — feature request, not a bug.
+
+### 8b. 3D Online Mapping (RTABMap CPU)
+
+- [x] **RTABMap starts in online mode**. **[2026-08-04] PASS** — `bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False launch_2d_mapping:=False launch_3d_mapping:=True` brings up `rtabmap_slam/rtabmap`, `rtabmap_sync`, `rtabmap_viz`, and **zero** nvblox/visual_slam processes (the `use_gpu` leak is genuinely fixed). Caveats: `icp_odometry`/`stereo_odometry` each start ×2 (double-include bug, 2026-08-04), and `rtabmap_viz` starts a GUI that costs CPU. Verified via `ps`, not `ros2 node list`.
+  ```bash
+  ros2 launch f1tenth_launch mapping.launch.py launch_3d_mapping:=True use_gpu:=False launch_localization:=True
+  ros2 node list | grep rtabmap
+  ```
+  > **Bug (fixed)**: With `use_gpu:=False launch_localization:=True`, `nvblox_node` and `visual_slam_node` still launched. Two root causes, both now fixed:
+  >
+  > 1. **`mapping.launch.py` line 531** (teleop_launch `use_gpu` arg): `'True' if (...or not enable_odom_here) else 'False'` forced `use_gpu='True'` into `teleop_launch`'s `launch_arguments` when `launch_localization=True`. `IncludeLaunchDescription` `launch_arguments` write directly to the shared `context.launch_configurations` dict (not scoped), so this mutated `use_gpu` for all subsequent actions — including the `mapping_3d_gpu_node` condition and `localization.launch.py`'s `gpu_group`. **Fix**: pass `use_gpu` as-is (`"use_gpu": use_gpu`).
+  >
+  > 2. **`mapping.launch.py` `mapping_3d_gpu_node` condition**: `IfCondition(use_gpu)` used a lazy `LaunchConfiguration` substitution evaluated *after* the action list runs. By that point the shared context had `use_gpu='True'` from the bug above. **Fix**: replaced both `mapping_3d_cpu_node` and `mapping_3d_gpu_node` conditions with the eager string `gpu_enabled = 'True' if use_gpu_string.lower() == 'true' else 'False'`, computed inside the OpaqueFunction where `use_gpu_string` is already the correct user-provided value.
+
+- [x] **RTABMap database is fresh** — verify `life_long_mapping:=False` (default) deletes old DB.
+  ```bash
+  ls -la data/maps/rtabmap/rtabmap.db
+  # Should be a new file (recent timestamp)
+  ```
+  > **Confirmed**: Fresh DB created on launch. RTABMap DB, occupancy grid, and point cloud (PCD/PLY) all saved successfully.
+
+- [x] **Occupancy grid is building** — RViz, add `/rtabmap/grid_map` topic.
+  > **Confirmed**: Occupancy grid visible and building during mapping session.
+
+- [x] **No odometry TF conflict** — with default `launch_localization:=True`, `enable_odom_here=False`, RTABMap should NOT publish its own odom TF.
+  ```bash
+  ros2 run tf2_tools view_frames
+  # Only one odom->base_link edge expected (from EKF)
+  ```
+  > **Confirmed**: No TF conflicts. Single `odom→base_link` edge from EKF as expected.
+
+### 8c. Offline/Rosbag Mapping
+
+- [x] **Sim time is enabled when using rosbag**.
+  ```bash
+  ros2 launch f1tenth_launch mapping.launch.py launch_3d_mapping:=True use_sim_time:=True ...
+  ros2 param get /gosling1/slam_toolbox use_sim_time
+  # Expected: true
+  ```
+  > **Confirmed**: `true` when `use_sim_time:=True` is passed.
+
+- [x] **ICP odom `guess_from_tf` errors during bag playback**.
+  > **Resolved**: Errors no longer appear when the bag's TF tree is properly initialized (static TFs present at playback start). Root cause was that `loop3x_no_localization` was recorded without static TFs — `sensor_kit_link` disconnected from `base_link`. **Fix**: pass `launch_tfs:=True` when replaying bags that lack static TFs. **Prevention**: confirm `ros2 run rqt_tf_tree rqt_tf_tree` shows a complete tree before starting a recording; record several seconds after all static TF publishers are active.
+
+- [x] **SLAM Toolbox message filter queue full at high playback rates**.
+  > **Resolved**: No longer occurs at `--clock 10` with `--rate 0.2`. Not a code bug — at 100× the slam_toolbox internal TF message filter cannot drain fast enough. Fix is to reduce bag playback rate; `--clock 10` / `--rate 0.2` is sufficient. If higher-speed replay is needed, increase `message_filter_queue_size` in the slam_toolbox YAML config.
+
+- [!] **Visual SLAM frame delta warnings at high playback rates**.
+  > **Observed**: `Delta between current and previous frame [66ms] is above threshold [34ms]` from `visual_slam_node` during 100× bag playback. Expected: the Jetson Orin Nano GPU pipeline cannot process stereo frames at 100× realtime. This warning also appeared because `visual_slam_node` was incorrectly launched due to the `use_gpu` bug above. After the bug fix, `visual_slam_node` will not launch with `use_gpu:=False`, eliminating this warning entirely in CPU mode.
+
+---
+
+## 9. Navigation (Nav2)
+
+**What changed**: `controller_frequency` 20→10 Hz; local costmap `update_frequency` 20→5 Hz; global costmap `update_frequency` 2→1 Hz; removed STVL and NonPersistentVoxelLayer (LiDAR-only costmap now); `max_planning_time_ms` renamed to `max_planning_time` (was silently ignored in Humble).
+
+- [x] **Nav2 stack starts**.
+  ```bash
+  ros2 launch f1tenth_launch bringup.launch.py slam:=False
+  ros2 node list | grep -E 'controller|planner|bt_navigator|costmap'
+  ```
+  > **Confirmed**: `bt_navigator`, `controller_server`, `planner_server`, `local_costmap/local_costmap`, `global_costmap/global_costmap` all visible. Stack started; see `component_container_isolated` crash bug below.
+
+- [x] **Local costmap uses only LiDAR** — STVL and NonPersistentVoxelLayer removed.
+  ```bash
+  ros2 param get /local_costmap/local_costmap plugins
+  # Expected: ['obstacle_layer', 'inflation_layer']
+  ```
+  > **Confirmed**: `['obstacle_layer', 'inflation_layer']`. Width: 10 m. STVL and NonPersistentVoxelLayer correctly absent.
+
+- [x] **Global costmap uses LiDAR only**.
+  ```bash
+  ros2 param get /global_costmap/global_costmap plugins
+  # Expected: ['static_layer', 'obstacle_layer', 'inflation_layer']
+  ```
+  > **Confirmed**: `['static_layer', 'obstacle_layer', 'inflation_layer']`.
+
+- [x] **Planner uses max_planning_time (not ms variant)** — was silently ignored before; now should actually apply the 5 s limit.
+  ```bash
+  ros2 param get /planner_server GridBased.max_planning_time
+  # Expected: 5.0
+  # If key doesn't exist or returns error, the rename may not have taken effect
+  ```
+  > **Confirmed**: `5.0`. Rename took effect correctly.
+
+- [!] **Send a navigation goal** — 2D Nav Goal in RViz. Robot should plan and drive without crashing.
+  - Path should appear on map.
+  - Robot should not oscillate or hesitate excessively at 10 Hz controller rate.
+  > **Blocked**: `component_container_isolated` crashes before a goal can be sent — see crash bug below. Fix the container crash first, then retest.
+
+- [!] **CPU load during navigation** — with the reduced costmap frequencies, CPU on Nano should be lower than before. **[2026-08-04] Inconclusive + new issue**: stationary with no goal ever sent, `planner_server` ran at **94.1% of one core**; system load 12.60/6 cores. A concurrent MPC sim shared the host, so total load is not attributable to this stack — but the per-process 94% is. No clean pre/post-tuning comparison yet: needs a quiet machine plus an actual nav goal.
+  ```bash
+  top -b -n1 | grep -E 'controller|costmap|planner'
+  ```
+
+---
+
+## 10. Integration — Full Bringup
+
+- [ ] **Teleop mode: full stack launches**.
+  ```bash
+  ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=False
+  ros2 run tf2_tools view_frames
+  # Expected TF chain: map -> odom -> base_link -> lidar, camera_link, etc.
+  ```
+
+- [!] **Mapping mode: no TF conflicts**. **[2026-08-04]** No TF extrapolation/TF_REPEATED/authority warnings (0 in log), but `slam:=True` **double-launches localization** → duplicate `icp_odometry`/`stereo_odometry` and a map_server lifecycle abort. See the 2026-08-04 double-include bug. Re-test after that fix.
+  ```bash
+  ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False
+  # Watch for TF extrapolation errors or duplicate TF warnings in the log
+  ```
+
+- [x] **odom_tf_publisher and map_tf_publisher propagate through bringup**: **[2026-08-04] PASS** — with `odom_tf_publisher:=rf2o map_tf_publisher:=rtabmap`, `rf2o_laser_odometry` gains `/tf` in its publisher list (vs. absent under the default) and `ekf_odom_node` reports `publish_tf: False`. **Caveat when re-testing**: `ros2 node info /ekf_odom_node` still lists `/tf` under Publishers even in this mode — robot_localization constructs the broadcaster unconditionally and simply does not broadcast. Check the `publish_tf` **param**, not the publisher list. Run was un-namespaced.
+  ```bash
+  ros2 launch f1tenth_launch bringup.launch.py odom_tf_publisher:=rf2o map_tf_publisher:=rtabmap slam:=False
+  ros2 param get /rf2o_odometry_node publish_tf
+  # Expected: true (rf2o is now the odom TF publisher)
+  ```
+
+---
+
+## Known Bugs / Issues Found
+
+<!-- Add entries here as bugs are discovered during testing -->
+<!-- Format: - [DATE] Short description. Reproduction steps. -->
+
+- [2026-05-19] **Throttle interpolator breaks steering**. When `launch_throttle_interpolator_node:=True`, steering does not respond to joystick — car tries to return to center. Throttle/acceleration is limited correctly. Repro: launch teleop with `launch_throttle_interpolator_node:=True`, push left stick sideways. TODO: inspect throttle_interpolator source for steering passthrough logic.
+
+- [2026-05-19] **`joy_teleop` node not discoverable in `ros2 node list`** (rmw_fastrtps_cpp). `/gosling1/teleop` publishes and drive works. Run `ros2 component list` to confirm it's loaded inside `f1tenth_container`. May be a fastrtps visibility limitation for intra-process components.
+
+- [2026-05-19] **`ros2 topic info -v /gosling1/safety` shows `Publisher count: 0`** despite 40 Hz traffic confirmed via `ros2 topic hz`. Using rmw_fastrtps_cpp; likely a discovery artifact for intra-process component publishers. Safety fallback tested and confirmed functional.
+
+- [2026-05-19] **`gyro_fps: 100` rejected by D435i hardware**. D435i gyroscope only supports 200 Hz and 400 Hz; setting 100 Hz is invalid. Camera falls back to 200 Hz silently at startup (error appears explicitly during runtime reconfiguration). Fixed: updated `gyro_fps: 200` in `config/sensors/realsense_config.yaml`. `accel_fps: 100` is valid and unaffected.
+
+- [2026-05-19] **SDK pointcloud (`camera/depth/color/points`) not published** — retest after clean Jetson restart. "No stream match" warning appeared only during a GLSL runtime restart (transient USB 2.1 re-enum). On clean USB 3 startup, color at 640×360×30 + depth at 640×360×30 may resolve the stream mismatch. `accelerate_gpu_with_glsl: true` must be set at startup (not runtime) since it IS compiled in.
+
+- [2026-05-19] **`rtabmap_depth_to_pointcloud_xyzrgb` had no remapped inputs** — `SetRemap` with `condition=IfCondition(...)` is unreliable inside `GroupAction` in ROS2 Humble. Fixed: removed conditions from all input SetRemap calls in `stereo_and_depth_image_processing.launch.py` and replaced `LaunchConfiguration` dst values with resolved Python strings. Node now correctly subscribes to `camera/aligned_depth_to_color/image_raw` and `camera/color/image_raw`. Retest `camera/downsampled_cloud_from_depth` after rebuild.
+
+- [2026-05-24] **VESC steering servo clips on full-left joystick deflection**. With default `max_steering:=0.34` rad, full left stick sends −0.34 rad → servo = −1.4×(−0.34)+0.56 = 1.036, which is clipped to max 0.92. Root cause: `steering_angle_to_servo_offset: 0.56` shifts the servo center above 0.5, giving an asymmetric physical range: [−0.257 rad left, +0.343 rad right]. The default `max_steering=0.34` is within the right-side limit but exceeds the left-side limit (0.257 rad). The car steers to mechanical maximum on both sides (clipping is benign since the VESC handles it correctly), but the log is noisy. Options: (a) reduce `max_steering` default to 0.25 for symmetric no-clip behavior at the cost of ~25% less right-turn range; (b) recalibrate `steering_angle_to_servo_offset` toward 0.5 for symmetric range; (c) accept the clip as-is. TODO: recalibrate servo offset after verifying physical center position with VESC Tool.
+
+- [2026-05-24] **YDLidar X4 does not support per-return intensity**. `intensity: true` causes continuous checksum errors and driver crash. `intensity: false` produces constant 1008.0 values (internal status bits, not real intensity). The intensity filter in `laser_filter.yaml` is unusable for this sensor. Fixed: `intensity: false` confirmed in `ydlidar_X4.yaml`; intensity filter entry left commented out permanently.
+
+- [2026-05-24] **RealSense pointcloud required `color_format: RGB8`**. `color_format: BGR8` caused "No stream match for pointcloud chosen texture Process - Color" and no pointcloud output. Fixed: `color_format: "RGB8"` in `realsense_config.yaml`. SDK pointcloud (`camera/depth/color/points`) now publishes ~27 Hz at ~72% CPU. RTABMap `depthimage_to_pointcloud` path publishes ~49 Hz but uses ~200% CPU — prefer SDK path.
+
+- [2026-05-26] **rf2o node name is `CLaserOdometry2DNode`, not `rf2o_odometry_node`**. `ros2 node list | grep rf2o` returns empty. Use `grep CLaserOdometry` to find the node. The forked package (https://github.com/privvyledge/rf2o_laser_odometry.git) may rename it; verify after switching.
+
+- [2026-05-26] **rf2o publishes `odom→base_link` TF despite `publish_tf: False`**. Upstream rf2o (`CLaserOdometry2DNode`) appears on `ros2 topic info /gosling1/tf` as a publisher even when `publish_tf` is confirmed false via `ros2 param get`. This creates a competing TF alongside the EKF and causes ~0.5°/s yaw drift while the robot is stationary. Fix: switch to the forked rf2o (https://github.com/privvyledge/rf2o_laser_odometry.git) which fixes TF publication control. **RESOLVED (2026-07-22)**: fork pinned in `f1tenth.repos`.
+
+- [2026-05-26] **rf2o publishes zero covariance**. All 36 elements of both pose and twist covariance in `/odom/rf2o` are 0.0. robot_localization EKF treats zero covariance as infinite precision, heavily biasing the fused estimate toward rf2o. Fix: the forked rf2o adds proper covariance estimation. Until deployed, consider adding a `odom2_pose_rejection_threshold` and `odom2_twist_rejection_threshold` in `ekf_odom.yaml`, or setting `odom2_config` to only fuse twist (not pose) to reduce exposure. **RESOLVED (2026-07-22)**: fork pinned in `f1tenth.repos` (adds covariance); odom2 rejection thresholds also added in `cb3b567`.
+
+- [2026-05-26] **EKF `odom2_differential` and `odom2_relative` both true in `ekf_odom.yaml`**. robot_localization warns "Both odom2_differential and odom2_relative were set to true. Using differential mode." Same issue on `imu0_differential`/`imu0_relative`. These flags are mutually exclusive. Fix: set `odom2_relative: false` and `imu0_relative: false` (keep only `_differential: true`).
+
+- [2026-05-26] **rf2o verbose INFO logging at every scan cycle**. Two INFO lines per ~100 ms ("execution time" + "Laser odom [x,y,yaw]") flood the terminal. To suppress without code changes, set the logger level at launch: add `--ros-args --log-level gosling1.CLaserOdometry2D:=WARN` and `--log-level gosling1.CLaserOdometry2DNode:=WARN`, or configure via `log_level` arg in the launch file. The forked package may expose a `verbose` parameter.
+
+- [2026-05-27] **`nvblox_node` and `visual_slam_node` launched despite `use_gpu:=False`** in `mapping.launch.py`. Two interacting root causes: (1) `teleop_launch` `launch_arguments` had `"use_gpu": 'True' if (...or not enable_odom_here) else 'False'` — when `launch_localization=True`, this forced `use_gpu='True'` into the shared `context.launch_configurations` (ROS2 `IncludeLaunchDescription` `launch_arguments` are not context-scoped); (2) `mapping_3d_gpu_node` used `condition=IfCondition(use_gpu)` — a lazy `LaunchConfiguration` substitution evaluated after the action list, by which time the context was already mutated to `'True'`. **Fixed**: (1) changed `teleop_launch` arg to pass `use_gpu` as-is; (2) replaced both `mapping_3d_cpu_node` and `mapping_3d_gpu_node` conditions with an eager string `gpu_enabled` computed at OpaqueFunction time, immune to downstream context mutations.
+
+- [2026-05-27] **`lifecycle_manager_localization` waits indefinitely for AMCL in mapping mode**. In `localization.launch.py`, the `lifecycle_nodes` logic appended `'amcl'` when `map_tf_publisher_str == 'amcl'`, even when `launch_amcl=False`. Since `mapping.launch.py` defaults `map_tf_publisher='amcl'` but `launch_global_localization=False` (which controls `launch_amcl`), the lifecycle manager managed a node that was never started. **Fixed**: removed the `or map_tf_publisher_str.lower() == 'amcl'` branch; now only adds `'amcl'` to lifecycle nodes when `launch_amcl_str == 'true'`.
+
+- [2026-05-27] **Static TFs missing from recorded bags**. Bags recorded with the `gosling1` namespace (`loop3x_no_localization`) have `sensor_kit_link` disconnected from `base_link` in the TF tree — the static TF publishers were not running (or their latched `/tf_static` messages were missed) at bag record time. Breaks rf2o, EKF, and ICP odom during playback. **Workaround**: pass `launch_tfs:=True` when replaying. **Prevention**: confirm `ros2 run rqt_tf_tree rqt_tf_tree` shows a complete tree before starting the bag recording; use `--all-topics` and record for several seconds after all static publishers are active.
+
+- [2026-05-29] **RTABMap localizer incompatible with VSLAM in same launch session**. Launching `launch_rtabmap_localizer:=True use_gpu:=True` fails with "parameter {image_qos} is of type {string}, setting it to {integer} is not allowed" on the VSLAM composable node. Root cause: upstream `rtabmap_launch/rtabmap.launch.py` uses `SetParameter(name='image_qos', value=<integer>)` globally, which bleeds into the shared launch context and conflicts with VSLAM's string-typed `image_qos`. Workaround: pass `use_gpu:=False` when using the RTABMap localizer — it does not need VSLAM. Not planned for active use; RTABMap localization deprioritized in favour of AMCL.
+
+- [2026-05-30] **`component_container_isolated` crashes with `free(): invalid pointer` / SIGABRT during Nav2 bringup (bag replay)**. `visual_slam_node` runs in the same `f1tenth_container` as all Nav2 composable nodes. At 1× bag playback (default `--rate`) with a 30 fps stereo stream, the Jetson Orin Nano GPU falls behind: VSLAM processes only ~3–5 fps, causing 200–300 ms sim-time frame deltas. When VSLAM falls far enough behind it hits heap corruption and SIGABRT, which kills the entire container — taking `controller_server`, `planner_server`, costmaps, and all other composable nodes with it. **Fix options**: (1) **Architectural (permanent)**: move `visual_slam_node` to its own `component_container_isolated` (`vslam_container`) in `localization.launch.py` so a VSLAM crash cannot cascade into Nav2. Tradeoff: intra-process zero-copy between VSLAM and realsense nodes is lost (they communicate via DDS instead — adds ~1 copy per image frame). (2) **Lower bag playback rate**: add `--rate 0.3` so VSLAM has ~3× more wall time per frame; `--rate 0.2` confirmed stable in earlier tests (see Section 8c). (3) **Reduce camera FPS**: lower `stereo_fps` in `realsense_config.yaml` from 30 → 15 Hz to halve VSLAM GPU load at the source — applies to live robot as well.
+
+- [2026-08-04] **Duplicate `sensing_container` name kills the RealSense (default composition path)**. With `use_composition:=True` (the bringup default), THREE containers are created with the name `sensing_container`: one by `sensors.launch.py` (default `component_container_name`, line 78), one by `realsense_d435i.launch.py` (its `realsense_d435i_container` default is overridden by the inherited value), and one by the VSLAM include in `localization.launch.py:914-915` which hardcodes `vslam_container_name = '/sensing_container'` with `attach_to_shared_component_container: 'False'` (so it *creates* rather than attaches). `LoadComposableNodes` targets containers **by name**, so the RealSense driver is loaded more than once → two `/camera` nodes → both open the same D435i → `failed to claim usb interface ... RS2_USB_STATUS_BUSY` → **the camera never starts**, and with it VSLAM and `camera/imu/filtered` are dead. ROS logs `WARNING: Be aware that are nodes in the graph that share an exact name`; `ros2 node list` shows `/camera` ×2, `/sensing_container` ×3, `/visual_slam_node` ×2. Repro: `ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=False launch_global_localization:=True`. **Workaround**: `use_composition:=False` — all node names unique, zero USB-busy errors, camera starts. **Fix**: give the VSLAM container a distinct name (restore the commented-out `component_container_name: 'realsense_d435i_container'` at `bringup.launch.py:795-797`), and never reuse one container name across independent creators. Note this defeats the `b47d45d` VSLAM-isolation intent.
+
+- [2026-08-04] **`slam:=True` double-launches the entire localization stack**. `bringup.launch.py:943` includes `mapping.launch.py`, which at line 577 includes `teleop.launch.py`, which at line 645 includes `localization.launch.py` — while `bringup.launch.py:855` already included `localization.launch.py` directly. Result: `icp_odometry` ×2 and `stereo_odometry` ×2 (confirmed via `ps`), duplicate lifecycle managers, and the map_server lifecycle transition fails: `Unable to start transition 1 from current state active: Transition is not registered` → `Failed to change state for node: map_server` → `Failed to bring up all requested nodes. Aborting bringup.` Repro: `ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False`. **Fix**: bringup should either include localization directly OR delegate via mapping/teleop, not both — gate the direct include on `not slam`, or stop `mapping.launch.py` from pulling in `teleop.launch.py` when the parent already launched localization.
+
+- [2026-08-04] **`slam:=True` alone starts no 2D mapping**. `launch_2d_mapping` defaults to `False` (`mapping.launch.py:91`), so `bringup.launch.py slam:=True` brings up no `slam_toolbox`, no `/map` topic, and no `map_saver` — the map-save test silently has nothing to save. Must pass `launch_2d_mapping:=True` explicitly. Arguably `slam:=True` should default at least one mapping backend on, or warn loudly when both `launch_2d_mapping` and `launch_3d_mapping` are false.
+
+- [2026-08-04] **`planner_server` consumes ~94% of a CPU core while idle**. Observed stationary, with no navigation goal ever sent: `planner_server` at 94.1% in `top`, system load 12.60 on a 6-core Orin. Repro: `ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=True launch_global_localization:=True`, wait 2 min, run `top -b -n1`. A planner with no active goal should be near-idle; suspect the global costmap update loop or a planner spin without goal gating. Caveat: a concurrent MPC sim was running on the same host, so total load is not attributable to this stack alone — but the 94% figure is per-process.
+
+- [2026-08-04] **VESC driver respawns in a tight loop with no backoff**. With `/dev/sensors/vesc` absent (motor unpowered), `vesc_driver_node` logs `FATAL ... Failed to connect to the VESC` and is immediately respawned — ~30 restarts observed in a single launch log, several per second. `use_respawn:=True` in bringup has no `respawn_delay`. Adds log noise and churn during any VESC disconnect. **Fix**: set a `respawn_delay` (e.g. 2.0 s) on the VESC node.
+
+- [2026-08-04] **A topic literally named `/dev/null` is created**. `ros2 topic list` includes `/dev/null`. It is also present in the May-2026 recordings (`loop3x_no_localization` metadata), so this is long-standing, not new. Something is passing a log/file path where a topic name is expected (likely a remap or an output redirect string reaching a topic argument). Harmless but pollutes the graph — worth tracking down.
+
+- [2026-08-04] **Local EKF diverges catastrophically if the VESC odometry source drops out**. Stationary with the VESC unpowered, `/odometry/local` drifted **3012 m in 58 s** with twist pegged at (+22.8, −41.9) m/s, while `/odom/rf2o` showed 1.27 m and `/visual_slam/tracking/odometry` 0.05 m of drift — i.e. the EKF manufactured ~48 m/s from inputs reading ~0.004 m/s; pose covariance reached 7.5e6. Root cause: `imu1_config` in `ekf_odom.yaml` fuses linear acceleration (`ax, ay, az = true`) from `camera/imu/filtered` at 200 Hz with `imu1_linear_acceleration_rejection_threshold` **commented out**; the D435i sits ~3.3° off level, so ≈0.57 m/s² of gravity leaks into the horizontal axes after gravity removal (0.57 m/s² × 70 s ≈ 40 m/s, matching the observed velocity). The only thing normally bounding this is `odom0_config`, which fuses **vx and vy** from `vehicle/vesc_odom` (vy≈0, nonholonomic). **This does not occur in normal operation with the VESC powered** — but a mid-run VESC dropout (USB glitch, brownout) would diverge within seconds instead of degrading gracefully. **Fix**: uncomment/set `imu1_linear_acceleration_rejection_threshold`, and consider dropping `az` (2D robot) or adding a zero-velocity update when no odometry source is alive.
+
+- [2026-08-04] **[Environment, not a repo bug] RealSense needs a working GL context inside the container**. `realsense2_camera_node` fails with `Error starting device: Could not open OpenGL window, please check your graphic drivers or use the textual SDK tools` — **even with `accelerate_gpu_with_glsl:=false` passed explicitly on the command line** (the wrapper in this image is compiled with GLSL support and initialises GL regardless; the device itself is detected fine — serial 140122071097, USB 3.2). Fix: mount the X socket into the container (`-v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=:0`) **and** grant access on the host with `DISPLAY=:0 xhost +local:`. Note `bolus_ws/f1tenth_launch.sh` runs its `xhost` line without `DISPLAY` set, which is why it emits `X Error of failed request: BadValue ... X_ChangeHosts` — worth fixing in that script.
+
+- [2026-08-04] **[Tooling caveat] `ros2 node list` is unreliable under the static-peer CycloneDDS config**. With `CYCLONEDDS_URI=cyclonedds_config_static.xml` (`AllowMulticast=false`, `EnableMulticastLoopback=false`, unicast peers), `ros2 node list` / `ros2 param get` intermittently return empty or `Node not found` while the nodes are demonstrably healthy and publishing at full rate. Always cross-check with `ps -eo args` before concluding a node did not start. This differs from the older fastrtps intra-process visibility caveat above — here even non-composed nodes vanish.
+
+- [2026-08-04] **Namespaced bringup double-namespaced the entire localization stack (`/gosling1/gosling1/*`)** — every localization node received no data. With `use_f1tenth_namespace:=True`, sensors/vehicle/camera/VSLAM correctly landed on `/gosling1/*` while `amcl`, `ekf_odom_node`, `ekf_map_node`, `map_server`, `lifecycle_manager_localization`, `rf2o_laser_odometry` and `rtabmap_icp_odom` landed one level deeper and starved (`rf2o`: `Waiting for laser_scans....`; `/gosling1/gosling1/odometry/local`: NO DATA). Root cause: **the launch-config inheritance leak, sibling-to-sibling via `ld` ordering** — `bringup.launch.py`'s `ld` is `[nodes_to_launch, sensors_launch, localization_launch]`; the sensors include passes `use_namespace: True` / `namespace: gosling1` as `launch_arguments`, which leak into the shared context, so `localization_launch`'s `PushRosNamespace(condition=IfCondition(use_namespace), ...)` — dormant by default since `use_namespace` defaults `False` — fires on top of the namespacing `localization.launch.py` already performs. `vehicle_bringup_group` escaped only because `nodes_to_launch` is visited *before* the leak. Bisect: standalone `localization.launch.py` → `/gosling1` ✓; bringup with `launch_sensors:=False` → `/gosling1` ✓; with `launch_sensors:=True` → `/gosling1/gosling1` ✗. Delaying sensors past localization's 10 s timer did **not** help — this is description-build time, not runtime ordering. **Fixed (2026-08-04, uncommitted)**: removed the `PushRosNamespace` from the localization and mapping includes in `bringup.launch.py` (the children namespace themselves), keeping the `SetRemap` `/tf` pairs. `teleop.launch.py` was already correct — it places `sensors_launch`/`localization_launch` outside its pushing `GroupAction`. **Lesson**: when a parent and child both handle namespacing, only one may push; and a *sibling* include visited earlier can silently arm a condition in a later one.
+
+- [2026-08-04] **Under a namespace, the `slam:=True` duplicate localization stack lands at root `/`** (refines the double-launch entry above). `mapping.launch.py:645` passes `use_namespace: 'False'` to its teleop include, so with `use_f1tenth_namespace:=True` the second copy is created un-namespaced: 8 root-level nodes (`amcl`, `ekf_odom_node`, `ekf_map_node`, `map_server`, `lifecycle_manager_localization`, `rf2o_laser_odometry`, `rtabmap_icp_odom`, `rtabmap_stereo_odom`). Verified **inert** — `/odometry/local`, `/odom/rf2o`, `/tf` and `/map` at root all read NO DATA — so it wastes CPU/RAM but does not corrupt `/gosling1/tf`. Side effect: the `map_server` lifecycle abort documented above does **not** occur in namespaced mode, because the duplicate stack carries its own root-level `map_server`. Repro: `ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_2d_mapping:=True use_f1tenth_namespace:=True`.
+
+- [2026-08-04] **RESOLVED — `sensing_container` name collision fixed.** Two edits removed all three same-name creators: (1) `localization.launch.py` — `vslam_container_name` changed from `'{ns}/sensing_container'` to `'{ns}/visual_slam_container'` (VSLAM was told to *create* a container using the RealSense's name, despite the adjacent comment saying it should be isolated; the non-composed branch already used `visual_slam_container`); (2) `sensors.launch.py` — the `stereo_and_depth_image_processing` include now passes `attach_to_shared_component_container: 'True'` instead of inheriting `False`, since both it and `realsense_d435i.launch.py` create their container under `condition=UnlessCondition(attach_to_shared_component_container)` and so produced two `sensing_container` nodes; attaching also preserves intra-process zero-copy with the RealSense driver. **Verified on-robot, namespaced, `use_composition:=True`**: every container name unique (`sensing_container`, `visual_slam_container`, `localization_container`, `command_gate_container` — one each, previously `sensing_container` ×3), exactly one `/gosling1/camera`, 0 USB-busy errors, `camera/imu/filtered` 199.8 Hz, `visual_slam/tracking/odometry` 30.02 Hz, `odometry/local` 30.001 Hz — the first end-to-end success of the **default** composed path. Regression-checked with `use_composition:=False`: 0 errors, camera 200.1 Hz, `odometry/local` 30.001 Hz.
+
+- [2026-08-04] **[Superseded by the entry above — kept for the reasoning] BUG-006 is a race, not a deterministic failure.** A namespaced run with `use_composition:=True` came up **clean**: zero `RS2_USB_STATUS_BUSY` / "share an exact name" errors, `camera/imu/filtered` at 200.4 Hz, and exactly one `/gosling1/camera`. However `ros2 node list` still showed **`/gosling1/sensing_container` three times**, so the underlying duplicate-container-name defect is unchanged — the RealSense simply happened to load into only one of them. Do not treat a single successful composition run as evidence the bug is fixed; the name collision must still be removed. Note `reset_realsense:=True` was set in that run and may also mask the symptom.
+
+- [2026-08-04] **[Amendment] `planner_server` 94% CPU did NOT reproduce.** Re-measured namespaced with a quiet host: `planner_server` sat at **0–4.5% instantaneous** (24% averaged over its 1:53 lifetime, front-loaded during costmap initialisation), system load 5.71 vs the earlier 12.60. The earlier 94.1% coincided with the runaway local EKF (BUG-010) feeding garbage odometry into the global costmap, which would drive continuous replanning. **Hypothesis: the idle-CPU bug is a symptom of BUG-010, not an independent defect.** Confirm once the VESC is powered and the EKF has a velocity anchor.
+
+- [2026-08-04] **RealSense wedges after repeated container restarts; `reset_realsense:=True` recovers it.** After several `docker restart` cycles the D435i enumerates and the `camera` node starts, but no stream ever publishes (`camera/imu/filtered`, `infra1/2` all silent, `imu_filter_madgwick`: `Still waiting for data on topic imu/data_raw...`) with no error in the log. Passing `reset_realsense:=True` on the next launch restores it (200 Hz IMU). Worth defaulting on for test sessions that cycle the container.
+
+- [2026-05-27] **`map_saver` does not auto-save map in namespaced mapping mode**. During 2D mapping via bag playback with `use_f1tenth_namespace:=True`, the map was not automatically saved by the `map_saver` node. Manual save via `ros2 run nav2_map_server map_saver_cli -f <path> -t /gosling1/map --ros-args -p map_subscribe_transient_local:=true` worked. Likely cause: map_saver is subscribed to `/map` (unnamespaced) rather than `/gosling1/map`. TODO: verify map_saver topic remapping in `2d_mapping.launch.py` and add namespace handling. **RESOLVED (2026-07-22): hypothesis refuted** — offline launch-tree resolution shows `map_saver_server` correctly lands in `/gosling1` (via `PushRosNamespace` in `mapping.launch.py`; the hardcoded `namespace: ''` in the include args intentionally avoids double-nesting) and its relative `map_topic: map` resolves to `/gosling1/map`. Real cause: `map_saver_server` never auto-saves — it only saves on a `save_map` service call (`/gosling1/map_saver/save_map`); the `map_url` launch param is ignored (not a declared node parameter). Use the namespaced service call or `map_saver_cli -t /gosling1/map` to save.
+
+- [2026-08-04] **BUG-017 — `teleop.launch.py` with `use_composition:=True` starts no camera at all** (FIXED). No `sensing_container` is ever created, there is no `realsense2_camera_node` process, and `camera/imu/filtered` / `camera/infra1/image_rect_raw` read NO DATA. `visual_slam_node` loads but starves (`visual_slam/tracking/odometry` NO DATA), and `odometry/local` degrades to ~10 Hz on rf2o alone. **No error is logged** — `LoadComposableNodes` silently waits on a container that never appears. Repro: `ros2 launch f1tenth_launch teleop.launch.py use_f1tenth_namespace:=True use_composition:=True reset_realsense:=True`, then `ros2 component list`. Cause: `teleop.launch.py:591-592` told the sensors include to *attach* to `sensing_container`, but only `container_name` (`f1tenth_container`) is ever created (line 504), and `realsense_d435i.launch.py` creates its container under `UnlessCondition(attach_to_shared_component_container)` so it stood down too. `bringup.launch.py` was immune only because its equivalent overrides (lines 794-797) are commented out. Fixed: teleop now passes `attach_to_shared_component_container:='False'`, letting RealSense create and own `sensing_container` as it does under bringup. Verified: camera IMU 200.376 Hz, color 36.387 Hz, VSLAM 31.147 Hz, `odometry/local` 30.038 Hz, cov 1.768e-4.
+
+- [2026-08-04] **BUG-018 — duplicate `f1tenth_container` under composed teleop** (FIXED). `ps` showed two containers named `f1tenth_container` at `/gosling1` (one `component_container_isolated`, one `component_container_mt`) while `ros2 component list` showed one; the `_mt` duplicate loaded nothing. Cause: `localization.launch.py:973-978` creates a container named `container_name` under `IfCondition(use_composition and not attach_to_shared_component_container)`, and teleop's localization include passed `container_name` but **inherited** `attach_to_shared_component_container`. Before the BUG-017 fix that inherited value happened to be `'True'` — leaked sideways from the sensors include visited earlier in teleop's `ld` (the BUG-013 mechanism) — which kept the second creator dormant by luck. Fixing BUG-017 flipped it to `'False'` and the duplicate appeared. Fixed: teleop now passes `attach_to_shared_component_container` explicitly to the localization include. Verified: four uniquely-named containers, one process each, 0 `process has died`.
+
+- [2026-08-04] **BUG-019 — SAFETY: `slam:=True` runs TWO `command_gate` nodes, both publishing the actuation topic** (FIXED). Repro: `ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_2d_mapping:=True use_f1tenth_namespace:=True use_composition:=True`, then `ros2 component list` → `/gosling1/command_gate` listed twice inside `/gosling1/command_gate_container`; `ps` shows two `command_gate_container` processes; `ros2 topic info -v /gosling1/vehicle/ackermann_cmd` → **`Publisher count: 2`**; the log has two `Loaded node '/gosling1/command_gate'` lines. Cause: `bringup.launch.py` includes `vehicle/command_gate.launch.py` directly *and*, under `slam:=True`, includes `mapping.launch.py` → `teleop.launch.py` → `command_gate.launch.py` again. Bringup's mapping include already suppresses the other double-launched subsystems (`launch_joystick`/`launch_sensors`/`launch_vehicle`/`launch_tfs`/`launch_localization` all `'False'`); `launch_command_gate` was simply missing from that list. **Unlike the rest of the BUG-007 duplicates, which land inert at root `/`, both `command_gate` copies land at `/<namespace>`** and both publish `vehicle/ackermann_cmd`, each with its own heartbeat watchdog — so one can publish zero-initialized commands while the other passes real ones. Harmless with the VESC unpowered; an actuation hazard as soon as the motor is powered and driving in mapping mode. Fixed: bringup's mapping include now also passes `"launch_command_gate": 'False'`. Verified `slam:=True`: 1 load / 1 container / `Publisher count: 1`, mapping healthy (`/gosling1/map` 4.569 Hz, `odometry/local` 31.865 Hz). Regression-checked `slam:=False`: 1 load / 1 container / `Publisher count: 1`, `odometry/local` 30.003 Hz.
