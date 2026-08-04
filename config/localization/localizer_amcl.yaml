@@ -37,7 +37,10 @@
     robot_model_type: "nav2_amcl::DifferentialMotionModel" # nav2_amcl::DifferentialMotionModel, nav2_amcl::OmniMotionModel
     save_pose_rate: 0.5  # 0.5, 0.1
     sigma_hit: 0.4  # 0.2. For noisy scans. Test values higher or lower than 0.2
-    tf_broadcast: true
+    # tf_broadcast is overridden by localization.launch.py: true only when map_tf_publisher:='amcl'.
+    # The launch file, not this file, decides which node owns map->odom. Keep this false so the
+    # YAML never implies AMCL is the map-frame broadcaster (matches localizer_pf.yaml).
+    tf_broadcast: false
     transform_tolerance: 1.0 # 0.2
     update_min_a: 0.5  # -1.0 (disabled); motion-triggered to avoid continuous updates
     update_min_d: 0.2  # -1.0 (disabled); motion-triggered to avoid continuous updates

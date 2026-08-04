@@ -684,10 +684,13 @@ ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_2d_mapping:=True 
 - **B2 map save — PASS**: `result=True`, `sessB_map.pgm` 44649 B + `.yaml` written.
 - **B1 map-frame ownership — PASS**: `map→odom` is published by `slam_toolbox` alone;
   `amcl` has `tf_broadcast: False`, so no competing map-frame publisher.
-  **[CORRECTION 2026-08-04]** The second clause is wrong: `config/localization/localizer_amcl.yaml:40`
-  reads `tf_broadcast: true`. AMCL was simply not *running* in this 2D run. On the RTABMap path it
-  was, and it was one of three competing `map→odom` broadcasters — see BUG-027. The PASS verdict on
-  `slam_toolbox` sole ownership stands; the stated reason for it does not.
+  **[CORRECTION 2026-08-04]** The second clause cited the wrong mechanism. AMCL's `tf_broadcast` is
+  set by the **launch file**, not the YAML: `localization.launch.py:384/429` passes
+  `tf_broadcast: True if map_tf_publisher == 'amcl' else False` after `params_file`, so it overrides
+  `localizer_amcl.yaml` either way. The real reason there was no competing publisher here is simply
+  that **AMCL was not running** in this 2D run. On the RTABMap path it was, and `map_tf_publisher`
+  defaults to `'amcl'`, so it became one of three competing `map→odom` broadcasters — see BUG-027.
+  The PASS verdict on `slam_toolbox` sole ownership stands; the stated reason for it does not.
 - BUG-007 unchanged: root-level duplicate stack present (48 non-namespaced topics) and inert
   (`/odometry/local` at root NO DATA).
 
