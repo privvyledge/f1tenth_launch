@@ -41,6 +41,29 @@ OUT="${OUT%.yaml}"
 
 $SHOW_BANNER && print_env
 
+# rtabmap_republish — force RTABMap to re-publish its occupancy grid.
+#
+# slam_toolbox latches /map, so a saver can attach at any time and get the last
+# map. RTABMap's grid is NOT latched: it publishes on update only. While a bag
+# is replaying that is invisible, because updates are constant — but once the
+# mapper finishes processing it goes silent, and a saver that attaches then
+# waits out its whole timeout and dies with "Failed to spin map subscription",
+# having produced no .pgm. That is precisely the window an offline build saves
+# in, so the more correctly you wait for the mapper to finish, the more reliably
+# the save used to fail.
+#
+# The publish_map service makes the node re-emit map topics on demand.
+# optimized=true asks for the loop-closure-corrected graph rather than raw odom
+# poses; global=true asks for the whole map rather than the local window.
+rtabmap_republish() {
+  local svc="$(ns_topic rtabmap/publish_map)"
+  ros2 service list 2>/dev/null | grep -qxF "$svc" || return 0
+  timeout 45s ros2 service call "$svc" rtabmap_msgs/srv/PublishMap \
+    "{graph_only: false, optimized: true, global_map: true}" >/dev/null 2>&1 \
+    && info "asked rtabmap to re-publish its map" \
+    || warn "publish_map call failed — save may time out"
+}
+
 # save_grid <absolute map topic> <basename>
 # The map topics are latched (transient local); without
 # map_subscribe_transient_local the saver waits forever on an empty queue.
@@ -51,11 +74,27 @@ save_grid() {
     return 1
   fi
   banner "saving $topic -> ${out}.pgm / ${out}.yaml"
-  if timeout 90s ros2 run nav2_map_server map_saver_cli \
+  # $3, if given, is a function that makes the publisher emit. It has to run
+  # AFTER the saver is subscribed — an un-latched publish that happens first is
+  # simply missed — so start the saver in the background and trigger second.
+  local trigger="${3:-}" saver_pid rc=0
+  if [[ -n "$trigger" ]]; then
+    timeout 90s ros2 run nav2_map_server map_saver_cli \
         -t "$topic" -f "$out" \
         --ros-args -p map_subscribe_transient_local:=true \
-                   -p save_map_timeout:=60.0; then
-    [[ -f "${out}.yaml" ]] && info "wrote ${out}.yaml" && return 0
+                   -p save_map_timeout:=60.0 &
+    saver_pid=$!
+    sleep 5
+    "$trigger"
+    wait "$saver_pid" || rc=1
+  else
+    timeout 90s ros2 run nav2_map_server map_saver_cli \
+        -t "$topic" -f "$out" \
+        --ros-args -p map_subscribe_transient_local:=true \
+                   -p save_map_timeout:=60.0 || rc=1
+  fi
+  if (( rc == 0 )) && [[ -f "${out}.yaml" ]]; then
+    info "wrote ${out}.yaml"; return 0
   fi
   err "failed to save $topic"
   return 1
@@ -82,10 +121,18 @@ case "$MODE" in
   rtabmap|3d|all)
     # RTABMap's occupancy grid lives on grid_prob_map (probabilistic) with
     # grid_map as the binary fallback.
-    if ros2 topic list 2>/dev/null | grep -qxF "$(ns_topic rtabmap/grid_prob_map)"; then
-      save_grid "$(ns_topic rtabmap/grid_prob_map)" "${OUT}_rtabmap" || RC=1
+    #
+    # These are NOT under a rtabmap/ prefix. The node is launched as
+    # `-r __ns:=/gosling1 -r __node:=rtabmap`, and ROS 2 resolves a node's
+    # relative topic names against its NAMESPACE, not its node name — so the
+    # grid lands on /<ns>/grid_prob_map. Looking for /<ns>/rtabmap/grid_prob_map
+    # found nothing, both branches missed, and the pass reported "topic not
+    # present — skipping" while still exiting 0, so an offline build looked
+    # successful with no .pgm on disk. COMMANDs.md always had this right.
+    if ros2 topic list 2>/dev/null | grep -qxF "$(ns_topic grid_prob_map)"; then
+      save_grid "$(ns_topic grid_prob_map)" "${OUT}_rtabmap" rtabmap_republish || RC=1
     else
-      save_grid "$(ns_topic rtabmap/grid_map)" "${OUT}_rtabmap" || RC=1
+      save_grid "$(ns_topic grid_map)" "${OUT}_rtabmap" rtabmap_republish || RC=1
     fi
 
     banner "RTABMap 3D database"

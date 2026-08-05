@@ -781,8 +781,21 @@ def launch_setup(context, *args, **kwargs):
         '--Icp/Iterations 100 '
         '--Icp/MaxTranslation 1.0 '
         '--Rtabmap/ImageBufferSize 10000 '            # large buffer safe for bag replay bursts
-        '--Grid/NoiseFilteringMinNeighbors 10 '       # up from 8: stricter occupancy noise filter
-        '--Grid/NoiseFilteringRadius 0.15 '           # up from 0.1
+        # Tuned for a 2D LiDAR, not a dense cloud. Grid/Sensor is 0 (laser
+        # scan), and the YDLidar X4 returns ~625 points per revolution, so
+        # point spacing on a surface grows with range: ~0.02 m at 2 m but
+        # ~0.05 m at 5 m. Requiring 10 neighbours within 0.15 m therefore
+        # deleted every wall beyond ~3 m while ray tracing still carved out the
+        # free space in front of it. The result was an occupancy grid that was
+        # almost all free-space spokes with no room boundary — 670 occupied
+        # cells on mapping_drive_170025, versus 2766 for SLAM Toolbox on the
+        # same bag. Relaxing to 2 / 0.10 m gave 1732 occupied cells and a
+        # closed four-wall room (measured 2026-08-05, offline rebuild).
+        # NOTE: local occupancy grids are cached per-node in the .db, so
+        # changing these does NOT re-grid an existing database — the bag has to
+        # be replayed for them to take effect.
+        '--Grid/NoiseFilteringMinNeighbors 2 '
+        '--Grid/NoiseFilteringRadius 0.1 '
         '--Vis/BundleAdjustment 1 '
         '--Rtabmap/TimeThr 0 '                        # no per-iteration time cap offline
         '--RGBD/OptimizeMaxError 6 '                  # up from 4: accumulated drift over 3 loops can push a valid closure above 4 Mahalanobis; 6 is more tolerant without accepting gross errors

@@ -117,12 +117,15 @@ TOPICS_SLAM_2D=$(_ns \
   map \
   slam_toolbox/graph_visualization)
 
+# No rtabmap/ prefix: the node runs as __ns:=/<ns> __node:=rtabmap, and relative
+# topic names resolve against the namespace rather than the node name, so these
+# publish on /<ns>/grid_prob_map etc. Verified against a live offline pass.
 TOPICS_RTABMAP=$(_ns \
-  rtabmap/grid_map \
-  rtabmap/grid_prob_map \
-  rtabmap/cloud_map \
-  rtabmap/mapData \
-  rtabmap/localization_pose)
+  grid_map \
+  grid_prob_map \
+  cloud_map \
+  mapData \
+  localization_pose)
 
 # ------------------------------------------------------------ bundles ----
 # set_for <phase> — echoes the newline-separated topic list for a phase.

@@ -66,6 +66,82 @@ printf '  %-16s %s\n' \
   "2D output"  "${MAP_2D_BASE}.yaml" \
   "RTABMap DB" "$RTABMAP_DB"
 
+# ------------------------------------------------- drain / teardown ----
+# The mapper does not necessarily finish when the bag does. RTABMap runs with
+# Rtabmap/DetectionRate 0 (process every frame) and Rtabmap/ImageBufferSize
+# 10000, so if it cannot keep up with playback it queues frames and keeps
+# working after the last message is published. The old fixed `sleep 8` gambled
+# that the queue was empty; when it was not, the saved grid was whatever had
+# been assembled by then, and nothing in the log said "partial".
+#
+# So poll the mapper's own CPU consumption and only save once it has actually
+# gone quiet. utime+stime from /proc/<pid>/stat are in clock ticks (100/s);
+# fewer than 20 ticks per 10 s wall (<2% CPU) three times running means it has
+# stopped processing rather than merely paused between frames.
+#
+# At 0.2x on an Orin Nano this bag drains in ~30 s, so the wait is usually
+# short. Do not confuse it with RTABMap's *shutdown* flush, which is a separate
+# and much longer phase — see stop_launch below.
+wait_for_mapper_idle() {
+  local pid prev cur idle=0 waited=0
+  local max_wait="${MAPPER_DRAIN_TIMEOUT:-1800}"
+  pid="$(pgrep -f 'rtabmap_slam/rtabmap' | head -1)"
+  [[ -z "$pid" ]] && pid="$(pgrep -f 'async_slam_toolbox|sync_slam_toolbox' | head -1)"
+  if [[ -z "$pid" ]]; then
+    warn "no mapper process found to wait on — falling back to a fixed 15 s flush"
+    sleep 15; return 0
+  fi
+  prev="$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null)"
+  while (( waited < max_wait )); do
+    sleep 10; waited=$((waited + 10))
+    cur="$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null)"
+    # Process exited: nothing left to drain.
+    [[ -z "$cur" ]] && { info "mapper exited after ${waited}s"; return 0; }
+    if (( cur - prev < 20 )); then idle=$((idle + 1)); else idle=0; fi
+    prev="$cur"
+    if (( idle >= 3 )); then
+      info "mapper idle after ${waited}s — backlog drained"
+      return 0
+    fi
+    (( waited % 60 == 0 )) && info "still draining (${waited}s elapsed)"
+  done
+  warn "mapper still busy after ${max_wait}s — saving anyway; map may be partial"
+}
+
+# ros2 launch does not always die on a single SIGINT here: RTABMap defers the
+# signal until it has drained, so the old `kill -INT` + unbounded `wait` could
+# block forever. In --mode both that meant pass 2 silently never started.
+# Escalate instead of trusting one signal.
+stop_launch() {
+  local pid="$1" i
+  # Generous by design. RTABMap does its final graph optimization and writes the
+  # completed map to the .db during shutdown, AFTER the SIGINT — on
+  # mapping_drive_170025 that took ~10 minutes and grew the database from 94 MB
+  # to 118 MB. Killing at 90 s produced a database that opens fine but never
+  # received the optimized graph, which is the actual 3D deliverable. Wait it
+  # out; only escalate if it is genuinely wedged.
+  local grace="${LAUNCH_SHUTDOWN_GRACE:-900}"
+  kill -INT "$pid" 2>/dev/null
+  for ((i = 0; i < grace; i++)); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    warn "launch $pid still alive after ${grace}s — escalating"
+    kill -TERM "$pid" 2>/dev/null; sleep 5
+    kill -9 "$pid" 2>/dev/null
+  fi
+  wait "$pid" 2>/dev/null
+  # Nodes are orphaned rather than reaped when the launch parent is killed
+  # hard; leaving one alive contaminates the next pass (two mappers publishing
+  # the same topics into one namespace).
+  local p
+  for p in 'rtabmap_slam/rtabmap' 'rtabmap_sync/rgbd_sync' 'slam_toolbox' 'map_saver'; do
+    pkill -9 -f "$p" 2>/dev/null
+  done
+  sleep 3
+}
+
 # ------------------------------------------------------- run one pass ----
 # $1 = human label, remaining = launch args for mapping.launch.py
 run_pass() {
@@ -108,15 +184,14 @@ run_pass() {
   # slam_toolbox TF message filter and silently drop scans.
   ros2 bag play "$BAG" --clock 10 --rate "$RATE"
 
-  banner "playback finished — letting the mapper flush"
-  sleep 8
+  banner "playback finished — waiting for the mapper to drain its backlog"
+  wait_for_mapper_idle
 
   banner "saving maps for pass '$label'"
   ./41_save_map.sh --mode "$label" --out "$MAP_2D_BASE" --no-banner || \
     warn "map save reported a problem for pass '$label'"
 
-  kill -INT "$launch_pid" 2>/dev/null
-  wait "$launch_pid" 2>/dev/null
+  stop_launch "$launch_pid"
   info "pass '$label' complete"
 }
 
