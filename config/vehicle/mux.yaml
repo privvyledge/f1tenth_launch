@@ -17,7 +17,16 @@
         priority: 10
       joystick:
         topic   : teleop  # human driver
-        timeout : 0.1
+        # 0.3 s, not 0.1 s. The DualSense publishes event-driven: ~12 Hz when
+        # idle, and jitter routinely stretches an interval to 0.103 s. Measured
+        # on gosling1 2026-08-04: 155 teleop gaps over 0.100 s in 60 s. At the
+        # old 0.1 s timeout the joystick's priority-100 claim lapsed 2-3x per
+        # second while parked, letting `navigation` (drive) take the vehicle for
+        # a few ms at a time -- an unbidden servo twitch with no button pressed
+        # whenever an MPC/Nav2 was publishing. 0.3 s is ~3x the observed worst
+        # case and still well under command_gate's 1.0 s heartbeat, so the
+        # killswitch behaviour is unchanged.
+        timeout : 0.3
         priority: 100
       safety:
         topic   : safety
