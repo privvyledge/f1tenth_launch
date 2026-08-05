@@ -1,77 +1,56 @@
-We're resuming a live bag-recording session on the F1/10 car `gosling1`. A
-previous chat did a practice run, verified the recording path end to end, and
-found and fixed several defects. **Read
-`scripts/live_runs/DRIVE_SESSION_HANDOFF.md` first — it has the full procedure,
-the findings, and the gotchas.**
+# Next session — the recording job is DONE
 
-## What you're doing
+**The three bags were recorded and audited on 2026-08-05 (16:54–17:40 EDT).**
+Do not re-run the drive session. If you were handed this file expecting to
+record, stop and read `DRIVE_SESSION_HANDOFF.md` — "Status" and "Session 3".
 
-Recording three bags that a separate repo will use to build maps and generate
-waypoints **offline**. No SLAM, no Nav2, no live mapping.
+## What exists
 
-| # | Bag name | Purpose | max_speed |
-|---|---|---|---|
-| 1 | `mapping_drive` | offline 2D + 3D RTABMap source | 1.0 |
-| 2 | `loop_laps` | 2–3 laps of a loop | 1.5 |
-| 3 | `figure8` | 2–3 figure-8s | 1.5 |
+`/mnt/f1tenth_ssd/shared_dir/bags/20260805/` on the host,
+`/mnt/shared_dir/bags/20260805/` inside any container:
 
-`max_speed` is a launch arg, so **relaunch the stack between bag 1 and bag 2.**
+| bag | purpose | `max_speed` | duration | size |
+|---|---|---|---|---|
+| `mapping_drive_170025` | offline 2D + 3D RTABMap source | 1.0 | 146.9 s | 24 G |
+| `loop_laps_173558` | 2–3 laps of a loop | 1.5 | 103.1 s | 17 G |
+| `figure8_172338` | 2–3 figure-8s | 1.5 | 155.4 s | 25 G |
 
-## How I want to run it
+All audited clean, all start with every localizer at the origin, all carry the
+full 39-topic set including actuator commands and VESC state. Maps and waypoints
+are built from these **offline, in a separate repo** — nothing further is needed
+from the car.
 
-1. I say **"start"** → you run `start <name>`, verify the bag is actually
-   growing on disk, then tell me **"recording has started, move the robot now."**
-2. I drive, then say **"I am done, stop recording, on to the next bag."**
-3. You run `stop`, report the per-topic audit, and we move on.
+Also on disk from earlier in the day: `mapping_drive_145639` (practice; missing
+`imu` and `imu/mag`, and it clipped steering — prefer the three above),
+`detection_093214`, `mpc_wiring_093214`.
 
-Don't tell me recording started until you've confirmed bytes are landing.
+## Open items carried forward
 
-## Before anything else
+1. **Apply the udev fix to the other goslings.** `ydlidar-V2.rules` matches the
+   VESC's USB ID and makes `/dev/ydlidar` point at the VESC, which kills the
+   LiDAR *and* SIGABRTs the VESC driver (bug-073 — the root cause of bug-068).
+   gosling1 is fixed; the rest are not. Procedure and per-car check:
+   `UDEV_YDLIDAR_VESC_COLLISION.md`.
+2. **`vesc_driver` should catch the serial exception and reconnect** instead of
+   aborting, and the safety chain should be able to notice the actuator is gone
+   (bug-068, still open as a code defect even though its trigger is fixed).
+3. **Raise `MAX_STEERING` back to 0.34** in `scripts/live_runs/00_env.sh` after
+   the operator recalibrates `steering_angle_to_servo_offset` toward 0.5
+   (scheduled weekend of 2026-08-08). It is temporarily 0.25.
+4. **Verify `/dev/ydlidar → ttyUSB0` survived the 17:45 reboot** on gosling1 —
+   the rule fix was applied but the symlink in place at the time was a manual
+   one, so the reboot is the first real test of the surviving rule.
 
-I rebooted `gosling1` onto battery, reseated the VESC USB cable, and I'm now on
-a **new container from `privvyledge/f1tenth:humble-devel-08052026`** (the old
-session ran on the June 6 image). **The Jetson has no internet, so `git pull`
-will fail.** The updated files are staged on the SSD bind mount. Inside the new
-container, run:
+## If you do need to record again
 
-```bash
-bash /mnt/shared_dir/handoff/live_runs_20260805/install_handoff.sh
-```
+Everything still applies: `25_drive_session.sh` for the session,
+`DRIVE_SESSION_HANDOFF.md` for the protocol and the container rules. The two
+pre-flight checks Session 3 added, both of which caught real failures:
 
-It verifies everything by checksum and tells you if a rebuild is needed. It
-must end with `install OK.` before we record.
+- **Pack voltage and `fault_code`** from `vehicle/sensors/core` (BEST_EFFORT QoS)
+  before recording. A flat pack presents as "the speed cap is too low" — see
+  bug-072.
+- **`ls -l /dev/ydlidar`** must show a **ttyUSB**, never a ttyACM.
 
-## Then
-
-```bash
-cd /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs
-export ROS_DOMAIN_ID=0
-./25_drive_session.sh launch --max-speed 1.0 -y
-./25_drive_session.sh status     # show me the rates before we record
-```
-
-Run commands on the robot as:
-`ssh gosling1 'docker exec -i <container> bash -s' < script.sh`
-(`bash -lc "…"` mangles quoting through ssh + docker).
-
-## Watch for these — all seen on hardware 2026-08-05
-
-- **VESC driver aborts on serial EIO** and the car goes dead-stick while every
-  ROS command topic still looks perfectly healthy (the mux and command_gate are
-  downstream-blind to it). `respawn_delay` is now 2 s, so an outage should be
-  ~2 s not 10.7 s. Detect it as a **gap in `vehicle/sensors/core`**, not from
-  the command topics. If it fires mid-bag, discard and re-drive that bag.
-- **YDLidar** may need a physical unplug/replug (symptom: connects, then
-  `health code -1` / `Failed to start scan mode -1`). The driver *exits*, so
-  relaunch the stack afterwards. Healthy is ~8.6 Hz on `scan_filtered`.
-- `drive`, `cmd_vel`, `estop` are silent by design here. Anything else silent
-  is a real defect.
-- Budget **~11 GB/min**. Check free space on `/mnt/shared_dir` before starting.
-
-## Open items, not for today
-
-- `vesc_driver` should catch the serial exception and reconnect instead of
-  aborting; the safety chain has no way to notice the actuator is gone (bug-068).
-- I'm recalibrating `steering_angle_to_servo_offset` toward 0.5 this weekend;
-  `MAX_STEERING` is temporarily 0.25 rad to avoid clipped (and therefore
-  misleading) steering in the bags. Raise it back to 0.34 afterwards.
+And the ordering rule: **park the car at its start pose, *then* relaunch, *then*
+record** — relaunching alone does not zero the EKF and VSLAM.

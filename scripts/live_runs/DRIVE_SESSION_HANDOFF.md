@@ -9,36 +9,296 @@ verified; the real runs are still to do.
 
 ---
 
-## Status
+## Status — COMPLETE as of 2026-08-05 17:40 EDT
+
+**All three bags are recorded, audited and on the SSD.** Session 3 (16:54–17:40)
+finished the job. If you are here to *use* the bags, you only need the next
+section and "Session 3". Sessions 1 and 2 are kept for the hardware history.
 
 | | |
 |---|---|
-| Practice run | **done** — `mapping_drive_145639`, 171.5 s, 27.5 GiB, 34 live topics all at rate |
-| Real runs | **not started** — operator is rebooting `gosling1` onto battery and reseating the VESC USB cable |
-| Recording path | **verified end to end** (start → growth check → stop → per-topic summary) |
-| Stack on the robot | **shut down** cleanly before the reboot |
-| Container | **changing** — old run was on the June 6 image; real runs use `humble-devel-08052026`. Run the installer first (next section). |
-
-Bags live at `/mnt/shared_dir/bags/<YYYYMMDD>/` in the container
-(`/mnt/f1tenth_ssd/shared_dir/...` on the host). 684 GB free. **Never write to
-`/`** — the host root is a 28 GB SD card at 95%.
+| Real runs | **done** — all three bags below, every topic at rate, clean `metadata.yaml` |
+| Stack on the robot | **shut down**; operator rebooting onto AC power and disconnecting VESC + joystick |
+| Container | `-it --rm`, dies with the operator's terminal — **create with `~/bolus_ws/f1tenth_launch.sh`, never by hand** |
+| Open item | the `ydlidar-V2.rules` fix must be applied to the **other goslings** — see `UDEV_YDLIDAR_VESC_COLLISION.md` |
 
 ---
 
-## The three bags still to record
+## The three delivered bags
 
-All three use one identical 40-topic set, so they are interchangeable
-downstream. Only the name and the speed cap change.
+`/mnt/shared_dir/bags/20260805/` in the container ·
+`/mnt/f1tenth_ssd/shared_dir/bags/20260805/` on the host. 597 GB free.
+**Never write to `/`** — the host root is a 28 GB SD card at 95%.
 
-| # | Name | Purpose | `max_speed` |
+| bag | purpose | `max_speed` | duration | size | path | net displ. |
+|---|---|---|---|---|---|---|
+| `mapping_drive_170025` | offline 2D + 3D RTABMap source | 1.0 | 146.9 s | 24 G | 53.2 m | 0.75 m |
+| `loop_laps_173558` | 2–3 laps of a loop, trajectory tracking | 1.5 | 103.1 s | 17 G | 37.6 m | 0.81 m |
+| `figure8_172338` | 2–3 figure-8s, trajectory tracking | 1.5 | 155.4 s | 25 G | 40.6 m | 0.36 m |
+
+All three share one identical 39-topic set (36 live + 3 silent-by-design), so
+they are interchangeable downstream. All three **start with every localizer at
+the origin**. Every one audited clean: 0 process deaths, 0 VESC EIO, 0
+under-voltage faults, 0 servo clipping, `vehicle/sensors/core` max gap ≤ 0.065 s.
+
+Actuator ground truth is present in all three: `vehicle/commands/motor/speed`
+(ERPM, `std_msgs/Float64`), `vehicle/commands/servo/position` (normalized servo),
+`vehicle/ackermann_cmd` (gated command, m/s + rad), `ackermann_drive` (pre-gate),
+`teleop` (raw joystick intent), and measured `vehicle/sensors/core` (duty,
+current, ERPM, voltage, fault code @ 50 Hz).
+
+**Two things a downstream consumer must know:**
+
+- **`MAX_STEERING` was 0.25 rad, not 0.34** (temporary, pending the
+  `steering_angle_to_servo_offset` recalibration). Commanded steering is
+  therefore *unclipped* in these bags — recorded steering equals actual servo
+  demand, which is exactly what a trajectory fit needs. Contrast the practice
+  bag `mapping_drive_145639`, which clipped (bug-071).
+- **`mapping_drive_145639` (the 14:56 practice bag) is missing `imu` and
+  `imu/mag`** — it used the old 38-topic list. The three delivered bags have all
+  40. Prefer the delivered bags.
+
+Superseded and deleted: `mapping_drive_162715` (flat drive battery, car rolled
+for only 10.5% of it) and `loop_laps_171017` (valid, but started at
+`odometry/local` (+1.001, +0.246) instead of the origin).
+
+---
+
+## Session 3 (2026-08-05 16:54–17:40) — the successful run, and the three things it found
+
+Four bags recorded, three kept. Two hardware faults diagnosed from bag data, one
+of which turned out to be the root cause of bug-068.
+
+### Finding 1 — a flat drive battery looks exactly like "the speed cap is too low" (bug-072)
+
+The operator's first attempt failed with *"1.0 m/s is too low when the car is on
+the ground, it kept stopping and I wasn't able to drive."* That reading was
+wrong, and the correction matters because the intuitive fix makes it worse.
+
+The VESC (a 60/75 MK2) had latched **`fault_code 2` = `UNDER_VOLTAGE`** and was
+tapering motor current toward its battery cutoff:
+
+| t | throttle | commanded | measured | motor current | fault |
+|---|---|---|---|---|---|
+| 20–25 s | 0.138 | 534 erpm | 573 | 1.71 A | **2** |
+| 25–30 s | 0.444 | 1661 | 638 | 2.27 A | **2** |
+| 35–40 s | 0.706 | 2664 | 670 | **0.66 A** | **2** |
+| 40–45 s | 0.687 | 2828 | **5** | **0.10 A** | **2** |
+
+**Commanded ERPM rising while delivered current collapses is the signature.** A
+genuinely-too-low speed cap looks the opposite: current present, ERPM tracking
+the command, car creeping. Cross-run comparison settled it:
+
+| | idle V | under load | fault 2 | rolling |
+|---|---|---|---|---|
+| flat pack (16:27) | 11.49 | 11.10 | 15.1% | 10.5% |
+| practice pack (14:56) | 11.61 | 11.50 | 5.2% | 10.0% |
+| fresh pack (17:00+) | **12.80** | 12.30–12.50 | **0.0%** | **55–66%** |
+
+**Do not raise `max_speed` to work around this** — more speed draws more current,
+sags the pack further and trips the cutoff sooner. Charge the pack.
+
+**Rule adopted:** read `fault_code` and `voltage_input` from
+`vehicle/sensors/core` as part of the pre-record check. Neither the mux, the
+command gate, nor any command topic shows anything wrong when this fires — same
+blind spot as bug-068.
+
+### Finding 2 — `/dev/ydlidar` was pointing at the VESC (bug-073) — **root cause of bug-068**
+
+`ydlidar-V2.rules` matches USB `0483:5740`, which is the **VESC's** USB CDC
+identity (`STMicroelectronics ChibiOS_RT_Virtual_COM_Port`), not a LiDAR's. Both
+`/dev/ydlidar` and `/dev/sensors/vesc` ended up on `ttyACM0`; the YDLidar driver
+then opened the VESC's port and wrote 128000-baud probe traffic into it while
+`vesc_driver` was using it. The LiDAR got `health code -1` and exited; the VESC
+got `EIO` and `SIGABRT`ed.
+
+**bug-068 was never a flaky VESC USB cable.** Before/after on one stack:
+
+| | colliding | after fix |
+|---|---|---|
+| `lidar/scan_filtered` | 0 Hz (driver exited) | **8.59 Hz** |
+| `process has died` per launch | 2 | **0** |
+| `async_send_handler` EIO | 8 | **0** |
+
+Full write-up, the fix, and the per-car check: **`UDEV_YDLIDAR_VESC_COLLISION.md`**.
+Fixed on gosling1 2026-08-05 17:44; **still to do on the other goslings.**
+
+### Finding 3 — relaunching the stack does *not* zero odometry
+
+The operator asked for the localizers to be restarted between bags so odometry
+would start at zero. Restarting is necessary but **not sufficient**: anything
+that happens between relaunch and `start` is integrated, including *carrying the
+car back to the start line*.
+
+| bag | `odometry/local` first | `vesc_odom` first | VSLAM first |
 |---|---|---|---|
-| 1 | `mapping_drive` | offline 2D + 3D RTABMap source | **1.0** |
-| 2 | `loop_laps` | 2–3 laps of a loop, trajectory tracking | **1.5** |
-| 3 | `figure8` | 2–3 figure-8s, trajectory tracking | **1.5** |
+| `loop_laps_171017` (relaunched, then car moved) | **(+1.001, +0.246)** | (0, 0) | **(+1.884, −0.925)** |
+| `loop_laps_173558` (car parked, then relaunched) | (−0.005, −0.003) | (0, 0) | (+0.009, −0.003) |
 
-The operator chose a slower cap for mapping (rotation rate is what breaks scan
-matching). `max_speed` is a launch argument, so **the stack must be relaunched
-between bag 1 and bag 2.**
+`vesc_odom` reads zero in both because carrying the car doesn't turn the wheels —
+so **`vesc_odom` being zero is not evidence the other localizers are zeroed.**
+
+**Correct order: park the car at its start pose → relaunch → `start` immediately.**
+
+### Other notes from this session
+
+- **The RealSense worked first try** on `humble-devel-08052026` once the
+  container came from `f1tenth_launch.sh`. Cause (a) from Session 2 is confirmed:
+  the hand-built container's missing X/xauth plumbing, **not** an image
+  regression. `/tmp/.docker.xauth` was a real 54-byte file and `xdpyinfo`
+  succeeded from inside the container. A burst of libusb `control_transfer`
+  warnings and two `Right MIPI error` notifications during the startup reset are
+  **normal** and stop once streaming starts.
+- **The Jetson's logic battery going flat kills the LiDAR too** — the X4 is
+  bus-powered, and a sagging supply produces the same `health code -1` as the
+  udev collision. Two different causes, one symptom; check the symlinks *and* the
+  pack.
+- **`25_drive_session.sh shutdown` can leave an orphaned
+  `component_container_isolated`.** It survived `shutdown` on three of four
+  attempts and had to be `pkill`ed separately. Always confirm with
+  `pgrep -f "component_container|ros2 launch|ros2 bag record"` before relaunching.
+- **A standalone `ydlidar.launch.py` probe is a cheap pre-flight** — it proves
+  the LiDAR without powering the whole stack. Note it publishes **un-namespaced**
+  (`/lidar/scan_filtered`, no `/gosling1` prefix), so don't poll the namespaced
+  topic and conclude the sensor is dead.
+- **`ros2 topic hz` under-reports vs a Python subscriber** using
+  `spin_once` in a loop (32 Hz measured vs 50 Hz actual on `sensors/core`). Judge
+  health by **max gap**, not by the rate a quick script reports.
+- `vehicle/sensors/core` is **BEST_EFFORT**. A default-QoS subscriber gets
+  `incompatible QoS ... RELIABILITY` and silently receives nothing.
+- The bags are **mcap**, not sqlite3 — `storage_id='mcap'` when opening with
+  `rosbag2_py`.
+
+---
+
+## Session 2 (2026-08-05 15:37–16:05) — what happened, and the two rules it produced
+
+Nothing was recorded. The session went: found the robot in an unexpected state,
+fixed that, installed the handoff, launched twice, RealSense failed both times,
+operator called it and rebooted. ~25 minutes, LiDAR and VESC powered the whole
+time on battery.
+
+### What was found on the robot (all real, all still relevant after a reboot)
+
+1. **No container from `humble-devel-08052026` was running.** The operator's
+   `~/bolus_ws/f1tenth_launch.sh` starts one *interactively* (`-it --rm`), and
+   after the reboot nothing had run it.
+2. **A stale teleop stack had auto-started at boot** inside `docker-ros2-1`
+   (compose project `~/bolus_ws/ros1_to_ros2_communication/docker`, image
+   `privvyledge/f1tenth:humble-latest` from **May 2025**), running
+   `teleop.launch.py … launch_vehicle:=True` in namespace `/gosling1` on
+   **ROS_DOMAIN_ID=0** — the same domain the live-run scripts use. It held
+   `/dev/sensors/vesc` and the joystick, and would have put duplicate nodes and
+   duplicate TF publishers into any bag. It was stopped with `docker stop`
+   (clean stop + `on-failure` policy = it stays down, but **re-check after every
+   reboot**).
+3. `docker-bridge-1` (foxy ROS1 bridge) is in a permanent restart loop. It was
+   there during the good practice run too — ignore it, but don't mistake it for
+   ours.
+
+### The mistake that cost the session
+
+The agent recreated the container **by hand**, replicating
+`docker inspect f1tenth_claude_test` instead of using
+`~/bolus_ws/f1tenth_launch.sh`. One mount in that copy (`/tmp/nv_jetson_model`)
+failed, and the retry dropped several flags along with it — including the X11 /
+`XAUTHORITY` plumbing and the explicit `--device /dev/video*` /
+`--device /dev/bus/usb` lines.
+
+The stack then came up with everything healthy **except** the camera:
+
+```
+[INFO]  [camera]: Device with name Intel RealSense D435I was found.
+[INFO]  [camera]: Device USB type: 3.2
+[INFO]  [camera]: Resetting device...
+[INFO]  [camera]: Device with name Intel RealSense D435I was found.
+[ERROR] [camera]: Error starting device: Could not open OpenGL window,
+        please check your graphic drivers or use the textual SDK tools
+```
+
+librealsense **finds the D435i over USB 3.2 and then fails on an OpenGL/X
+call**. Everything else was fine at the time — `lidar/scan_filtered` 8.654 Hz,
+`vehicle/sensors/imu/raw` 100 Hz, `vehicle/vesc_odom` 50 Hz, `odometry/local`
+30 Hz.
+
+A second launch with `DISPLAY`/`XAUTHORITY` unset (headless) **also** failed —
+`timed out after 120s waiting for camera/color/image_raw`. That attempt was
+interrupted before its log was read, so **why the headless attempt failed is
+unverified.** Do not assume it is the same cause.
+
+Two candidate causes remain open, in priority order:
+
+- **(a) the hand-built container** — missing `-v /tmp/.docker.xauth`,
+  `XAUTHORITY`, `--device /dev/bus/usb`, `--device /dev/video0…5`,
+  `--shm-size=8g`. Test first: it is free.
+- **(b) an image regression** — the RealSense worked on
+  `humble-devel-06062026` (the 27.5 GiB practice bag has all camera topics at
+  25–32 Hz) and this is the first camera use on `humble-devel-08052026`.
+  If (a) is ruled out, fall back to the June 6 image, which is still on disk and
+  is a known-good camera path.
+
+### Rule 1 — create the container with the operator's script, never by hand
+
+```bash
+ssh gosling1
+./bolus_ws/f1tenth_launch.sh          # interactive; leave this terminal open
+docker ps --format '{{.Names}}\t{{.Image}}'   # from a second shell — note the name
+```
+
+It names containers `jetson_container_<YYYYMMDD>_<HHMMSS>` and runs `-it --rm`,
+so **it disappears when that terminal exits**. Give the agent the name.
+
+If the agent must create it unattended, use the operator's flags verbatim with
+only the interactive bits swapped — and `DISPLAY=:0`, which is what the working
+June container used (`f1tenth_launch.sh` inherits `localhost:10.0` from the
+operator's X-forwarded ssh session, which won't exist for a detached container):
+
+```bash
+docker run -d --name f1tenth_run --runtime nvidia --privileged \
+  --network host --ipc host --shm-size=8g \
+  --env NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
+  -v /dev:/dev --device /dev/bus/usb --device /dev/ttyACM0 \
+  --device /dev/video0 --device /dev/video1 --device /dev/video2 \
+  --device /dev/video3 --device /dev/video4 --device /dev/video5 \
+  --device /dev/i2c-0 --device /dev/i2c-1 --device /dev/i2c-2 --device /dev/i2c-4 \
+  --device /dev/i2c-5 --device /dev/i2c-7 --device /dev/i2c-9 --device /dev/snd \
+  -v /mnt/f1tenth_ssd/shared_dir:/mnt/shared_dir \
+  -v /usr/lib/aarch64-linux-gnu/nvidia:/usr/lib/aarch64-linux-gnu/nvidia:ro \
+  -v /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra:ro \
+  -v /usr/lib/aarch64-linux-gnu/tegra-egl:/usr/lib/aarch64-linux-gnu/tegra-egl:ro \
+  -v /tmp/argus_socket:/tmp/argus_socket -v /etc/enctune.conf:/etc/enctune.conf \
+  -v /etc/nv_tegra_release:/etc/nv_tegra_release \
+  -v /tmp/nv_jetson_model:/tmp/nv_jetson_model \
+  -v /var/run/dbus:/var/run/dbus -v /run/jtop.sock:/run/jtop.sock \
+  -v /home/gosling1/Downloads/jetson-containers/data:/data \
+  -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro \
+  -v /tmp/.X11-unix/:/tmp/.X11-unix -v /tmp/.docker.xauth:/tmp/.docker.xauth \
+  -e DISPLAY=:0 -e XAUTHORITY=/tmp/.docker.xauth -e QT_X11_NO_MITSHM=1 \
+  -e VEHICLE_NAME=gosling1 -e USER=gosling1 -e ROS_DOMAIN_ID=0 \
+  -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_config_static.xml \
+  privvyledge/f1tenth:humble-devel-08052026 sleep infinity
+```
+
+`/tmp/.docker.xauth` **does not exist on the host** (the operator's own script
+logs `xauth: file /tmp/.docker.xauth does not exist` and an `X_ChangeHosts`
+BadValue error). Docker will then create it as an empty *directory*, which is
+not a valid `XAUTHORITY`. If the camera fails on OpenGL again, create the file
+first — `touch /tmp/.docker.xauth && xauth nlist :0 | sed -e 's/^..../ffff/' |
+xauth -f /tmp/.docker.xauth nmerge -` — or drop both X flags and test headless.
+
+### Rule 2 — prove the camera before the operator is asked to stand by
+
+The camera is the one device that has failed twice and the one the launch script
+waits 120 s for. Check it **while the car is still idle**, before saying
+anything about launching:
+
+```bash
+docker exec -i <container> bash -lc 'ls -l /dev/sensors/vesc /dev/ydlidar; rs-enumerate-devices -s'
+```
+
+`rs-enumerate-devices -s` should list the D435i without opening a window. If it
+errors, fix the container *before* burning battery on a stack launch.
 
 ---
 
@@ -181,7 +441,17 @@ was built from.
 
 ## Findings from the practice run — read before driving
 
-### 1. The VESC driver aborts on serial EIO (bug-068) — **the important one**
+### 1. The VESC driver aborts on serial EIO (bug-068) — **root-caused in Session 3**
+
+> **Read this first: the cause was found on 2026-08-05 17:15 and it is not a
+> cable.** `/dev/ydlidar` was pointing at the VESC because of a bad udev rule, so
+> the LiDAR driver was writing into the VESC's serial port. See "Session 3,
+> Finding 2" and `UDEV_YDLIDAR_VESC_COLLISION.md`. After the fix, four
+> consecutive launches produced **zero** aborts on a car that had been aborting
+> twice per launch. The analysis below is the original investigation, kept
+> because the *detection* advice is still correct — and because the fault could
+> in principle recur for other reasons.
+
 
 Mid-drive the car stopped for 10.7 s and then resumed on its own under constant
 throttle. Cause:
@@ -248,7 +518,18 @@ from every bag. `TOPICS_VEHICLE` is corrected, which fixes every phase set.
 **The practice bag `mapping_drive_145639` used the old 38-topic list** and is
 therefore missing `imu` and `imu/mag`. Real runs get all 40.
 
-### 5. The YDLidar needs a physical replug after repeated restarts
+### 5. The YDLidar "needs a physical replug" — usually it doesn't
+
+> **Session 3 update.** This exact symptom has **three** causes, and a replug
+> only fixes the third. Check in this order:
+> 1. **`/dev/ydlidar` points at the VESC** (bug-073, udev rule collision) —
+>    `ls -l /dev/ydlidar` must show a **ttyUSB**, never a ttyACM. See
+>    `UDEV_YDLIDAR_VESC_COLLISION.md`. This was the cause on gosling1.
+> 2. **The Jetson's logic battery is flat** — the X4 is bus-powered and a sagging
+>    supply produces the identical `health code -1`. Put the Jetson on AC or a
+>    fresh pack.
+> 3. Only then, a genuine USB re-enumeration needing a replug.
+
 
 Symptom — port opens, device answers nothing:
 
