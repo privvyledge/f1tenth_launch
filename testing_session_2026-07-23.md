@@ -1080,3 +1080,132 @@ Two honest limits, stated rather than smoothed over:
   worked on retry. Retry before believing empty output.
 - `/gosling1/cmd_vel` reported **Publisher count 14** with a mixed type list
   (`geometry_msgs/msg/Twist` *and* `TwistStamped`). Not investigated; flagged for a future session.
+
+---
+
+## RUN LOG — 2026-08-04 (Session F: `use_gpu:=True` viability + `/cmd_vel` audit)
+
+Goal: make `use_gpu:=True` trustworthy as the default, and resolve the `/cmd_vel` mixed-type
+observation from session E. Three stationary runs on gosling1, `ROS_DOMAIN_ID=77`, **VESC unpowered**
+(so `vehicle/vesc_odom` and `vehicle/sensors/imu/raw` had no data throughout — `ekf_odom` ran on
+`odom/rf2o` + the two IMUs, plus VSLAM once `use_gpu:=True`). Logs: `/tmp/run_gpu{,2,3}.log`.
+
+### `/cmd_vel` — the "14 publishers" is explained, and the real issue is different
+
+Post-BUG-022 the count is **7, not 14** — the 14 was BUG-022's two nav2 stacks. Breakdown:
+
+| Publisher | Count | Type |
+|---|---|---|
+| `behavior_server` | 5 | `Twist` |
+| `velocity_smoother` | 1 | `Twist` |
+| `ackermann_to_twist` | 1 | `TwistStamped` |
+
+The 5 are normal: nav2's `behavior_server` creates one `cmd_vel` publisher per behavior plugin, and
+`nav2_params.yaml` lists 5 (`spin`, `backup`, `drive_on_heading`, `assisted_teleop`, `wait`).
+
+The mixed type list is `ackermann_to_twist` (`use_stamped_publisher: True`) publishing a
+**TwistStamped echo of the executed command** onto the same topic name nav2 uses for **outgoing
+commands**. Measured: `/cmd_vel` **Subscription count 0**, `/drive` **Publisher count 0**.
+`launch_twist_to_ackermann` defaults `False` in every entry point, so the nav2 → mux bridge is not
+running. Per the user, `/drive` having no publisher is expected — their MPC node (separate repo)
+publishes `/drive` directly; `twist_to_ackermann` exists specifically for the nav2 path.
+
+**Latent hazard if the types are unified on one topic:** `twist_to_ackermann` subscribes `Twist` on
+`cmd_vel` and publishes `drive`. Today the TwistStamped echo cannot reach it (type mismatch). Set
+`use_stamped_publisher: False` *while both stay on `cmd_vel`* and the loop closes:
+`vehicle/ackermann_cmd` → `cmd_vel` → `drive` → mux → command_gate → `vehicle/ackermann_cmd`.
+Unifying on plain `Twist` is right (ROS 2 `robot_localization` only supports unstamped control input —
+see the `stamped_control` note in `ekf_odom.yaml`), but the echo needs its **own topic**, with the
+`ekf_odom` node remapping `cmd_vel` → that topic if `use_control` is ever enabled.
+Also note `velocity_smoother` has `deadband_velocity: [0.25, 0.0, 0.0]` — commands under 0.25 m/s are
+zeroed. **No actuation wiring was changed this session** (user scoped the work to VSLAM + ICP).
+
+### FIXED — bug-039: bringup hardcoded ICP odometry ON, starving the EKF
+
+`bringup.launch.py` passed `'launch_icp_odometry': 'True'` as a **string literal**, contradicting
+`localization.launch.py`'s documented `False` default and un-overridable from the CLI. (CLAUDE.md's
+claim that `odom3` receives no data is therefore wrong *under bringup*.)
+
+Before → after on the same command:
+
+| Metric | ICP on (as shipped) | ICP off (fixed) |
+|---|---|---|
+| `ekf_odom` "Failed to meet update rate" | **1.35 s** | **0.11–0.15 s** |
+| `/odometry/local` rate | 12.78 Hz | **29.70 Hz** |
+| `/odometry/local` max gap | **2.444 s** | **0.180 s** |
+| `guess_from_tf ... odom->base_link` errors | 156/run | **0** |
+
+Multi-second dropouts in the odometry Nav2 consumes were the most driving-relevant defect found.
+Fix: real `launch_icp_odometry` arg, default `'False'`.
+
+### FIXED — bug-040: VSLAM told to localize in a map that cannot work
+
+Two faults. (1) `isaac_ros_visual_slam_realsense.launch.py` created the map dir unconditionally and
+set `load_map_folder_path` unconditionally, **ignoring** the `load_map:'False'` that localization
+passes — a fresh machine gets an *empty* map manufactured and is told to localize in it.
+(2) `localize_on_startup` defaulted `True` while its own description says "Set True only when a valid
+VSLAM map exists"; gosling1 had a stale **6 MB `data.mdb` from Sep 2025** at
+`/mnt/data/maps/nvidia/vslam_map`, so every run attempted and failed a doomed relocalization.
+Fix: gate on a non-empty map dir, only `makedirs` when `save_map`, and default `localize_on_startup`
+to `'False'`. Verified: zero localize attempts, zero `Error 3`.
+
+### OPEN — bug-041: the SIGABRT precursor is real, but it is NOT a GPU problem
+
+`use_gpu:=True` ran **~19 min total across three runs with zero aborts**, cuVSLAM initialized, and
+`tracking/odometry` + `vis/slam_odometry` both at 30.0 Hz in their own `visual_slam_container`.
+But the documented abort precursor is live: 89 × `Delta between current and previous frame
+[~633 ms] above threshold [34 ms]`, at **exactly 8.000 s intervals** in run 1.
+
+Ruled out by measurement:
+- **Camera** — infra1/infra2 at 29.97 Hz, max gap 72–95 ms
+- **IMU** — `camera/imu/filtered` 199.8 Hz, max gap 43 ms
+- **CPU** — ~30 %/core, all at max clock 1728 MHz; `vmstat` showed no stall second
+- **GPU** — `tegrastats` **GR3D_FREQ 0–12 %**
+- **Thermal** — ~52 °C, no throttling; **RAM** 2.3/7.6 GB, no swap or I/O stalls
+- **cuVSLAM visualization views** — with `enable_slam_visualization`/`enable_landmarks_view`
+  confirmed `False` via `ros2 param get`, stalls got **worse and irregular** (333–2368 ms), not better
+
+**This disproves the 2026-05-30 "Jetson Orin GPU falls behind at 30 fps" explanation for the live
+robot** — that finding came from bag replay at 1×. Both recorded aborts also happened under load that
+no longer exists (VSLAM inside the shared `f1tenth_container` pre-`b47d45d`; two nav2 stacks
+pre-BUG-022).
+
+**Leading hypothesis — DDS image transport.** `visual_slam_node` sets
+`use_intra_process_comms: False` and receives the 848×480 stereo pair over DDS from
+`sensing_container`, while `/mnt/shared_dir/cyclonedds_config_static.xml` binds CycloneDDS to
+**`wlP1p1s0` only**, with `AllowMulticast false`, `EnableMulticastLoopback false` and **no loopback
+interface**. So ~24 MB/s of same-host image traffic traverses the WiFi interface's network stack.
+This is the same root condition as the deferred bug-012 experiment, which now has a second motive.
+
+**Next step:** add loopback to the CycloneDDS `<Interfaces>` list and re-measure the frame-delta
+rate. That file is shared across robots — needs user approval before editing.
+
+### Incidental observation (not investigated)
+In run 2 `lidar/scan_filtered` degraded to **5.9 Hz with a 2.70 s max gap** (rf2o consequently
+4.49 Hz, 41 × "Waiting for laser_scans"), against ~8.8 Hz in run 1. Upstream of rf2o and unrelated to
+the ICP change. Worth a look alongside the known YDLidar/USB bandwidth issues.
+
+### New launch argument
+`visual_slam_enable_visualization` (default `'True'`) on `localization.launch.py` — replaces the
+hardcoded `'True'`, so the cuVSLAM view topics can be toggled from the CLI.
+
+### Session F addendum — `/cmd_vel` fix applied
+
+Per the user's clarification (their MPC node publishes `drive` directly; `twist_to_ackermann` exists
+for the Nav2 path; unify on plain `Twist` because ROS 2 `robot_localization` only accepts unstamped
+control input), the fix was **type unification plus topic separation**:
+
+- `launch/vehicle/vehicle.launch.py` — `ackermann_to_twist` now `use_stamped_publisher: False` and
+  `twist_topic: 'vehicle/cmd_vel_executed'`.
+- `launch/localization/ekf_odom.launch.py` — added `('cmd_vel', 'vehicle/cmd_vel_executed')` to both
+  the EKF and UKF node remappings, since `robot_localization` hardcodes the control topic name. Inert
+  while `use_control: false`.
+
+Result: `cmd_vel` carries exactly one type (`Twist`) and one meaning (inbound commands to the robot).
+**Not unified onto `cmd_vel` itself** — with both as plain `Twist` there, enabling
+`twist_to_ackermann` would close the loop `vehicle/ackermann_cmd` → `cmd_vel` → `drive` → mux →
+command_gate → `vehicle/ackermann_cmd`; the old type mismatch was the only thing preventing it.
+
+`launch_twist_to_ackermann` left at `False` (MPC path publishes `drive` directly) — **set it `True`
+when driving under Nav2.** Not yet verified on the robot: needs a run to confirm `cmd_vel` shows a
+single type and `vehicle/cmd_vel_executed` appears.
