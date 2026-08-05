@@ -95,6 +95,39 @@ Look at the `Hz` column for `camera/color/image_raw` and
 camera rates, keep `publish_realsense_pointcloud:=False` and regenerate the
 cloud offline from depth + colour + `camera_info`.
 
+### 1d. Stationary detection dataset — for the downstream perception repos
+
+A different job from 1a–1c. This one produces a hand-off dataset for the
+detection / segmentation repos, not a diagnostic bag for this one. The vehicle
+stays still and the **VESC does not need to be connected**; you move obstacles
+of varying scale and range through the scene by hand.
+
+```bash
+./21_detection_dataset_bag.sh                 # 120 s
+./21_detection_dataset_bag.sh --duration 90 --name aisle_boxes
+```
+
+It launches sensors and local localization only — no vehicle, no joystick, no
+command_gate — and always records the colored pointcloud plus the depth
+`camera_info`, the inter-stream extrinsics and `/robot_description`, so a repo
+that does not have `f1tenth_launch` checked out can still reconstruct the
+geometry. `EXPECT_VESC=false` / `EXPECT_JOYSTICK=false` keep preflight from
+failing on hardware this phase does not use.
+
+The IR emitter stays **off**, so `infra1`/`infra2` are clean stereo at the cost
+of holier depth. Flip that with `realsense_emitter_enabled:=1` in the launch
+line inside the script if a consumer needs the best possible depth instead.
+
+Two sidecar files are written next to the bag and must travel with it:
+`<bag>.README.md` (conditions, namespace, frames, sensor caveats) and
+`<bag>.topics.txt`.
+
+Consumers replaying outside this namespace need:
+
+```bash
+ros2 bag play <bag> --remap /gosling1/tf:=/tf /gosling1/tf_static:=/tf_static
+```
+
 ---
 
 ## 2. Mapping drive — objective 2

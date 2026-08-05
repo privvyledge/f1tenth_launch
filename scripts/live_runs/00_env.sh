@@ -100,8 +100,21 @@ setup_ros() {
 ns_topic() { printf '/%s/%s' "$NS" "${1#/}"; }
 
 # have_topic <absolute topic>  — present in the graph at all?
+#
+# A single `ros2 topic list` is NOT trustworthy on this vehicle. Each CLI call
+# spins a fresh node that has to discover the graph from scratch, and under the
+# CycloneDDS static-peer config that discovery comes back partial: on
+# 2026-08-05 one pass reported color/image_raw, both infra streams and the
+# colored pointcloud all "missing" while every one of them was measurably
+# publishing at ~30 Hz. Retry, then fall back to asking about the topic
+# directly, which resolves names the list pass dropped.
 have_topic() {
-  ros2 topic list 2>/dev/null | grep -qxF "$1"
+  local topic="$1" attempt
+  for attempt in 1 2 3; do
+    if ros2 topic list 2>/dev/null | grep -qxF "$topic"; then return 0; fi
+    sleep 1
+  done
+  timeout 8s ros2 topic info "$topic" 2>/dev/null | grep -q '^Type: '
 }
 
 # topic_hz <absolute topic> [window_secs]  — echoes average Hz, or 0.
@@ -140,11 +153,25 @@ require_rate() {
 }
 
 # tf_has_edge <parent> <child> — is this TF edge being broadcast?
+#
+# The remaps are load-bearing, not decoration. tf2_echo's TransformListener
+# subscribes to the ABSOLUTE names /tf and /tf_static, so `-r __ns:=/$NS` alone
+# moves the node into the namespace without moving its TF subscriptions —
+# it then listens on a /tf nobody publishes and reports every edge missing.
+# That produced three false "TF edge missing" failures on 2026-08-05 against a
+# tree that was demonstrably healthy. Remap the topics themselves.
+# The output is captured before grepping rather than piped into it, and that is
+# the second half of the bug. This file sets `set -o pipefail`, and tf2_echo
+# never exits on its own, so `timeout` always kills it with 124 — piping into
+# grep therefore returned 124 for the whole pipeline even when grep HAD matched.
+# Combined with the namespace problem above, every TF check in every phase
+# reported failure regardless of the tree's actual state.
 tf_has_edge() {
-  local parent="$1" child="$2"
-  timeout 12s ros2 run tf2_ros tf2_echo --ros-args -r __ns:="/$NS" \
-      -p use_sim_time:=false -- "$parent" "$child" 2>&1 \
-    | grep -q 'Translation'
+  local parent="$1" child="$2" out
+  out="$(timeout 12s ros2 run tf2_ros tf2_echo --ros-args \
+      -r /tf:="$(ns_topic tf)" -r /tf_static:="$(ns_topic tf_static)" \
+      -p use_sim_time:=false -- "$parent" "$child" 2>&1)" || true
+  [[ "$out" == *Translation* ]]
 }
 
 # tf_edge_publishers <parent> <child> — count distinct nodes publishing an
@@ -204,12 +231,41 @@ bag_record() {
   local args=(-o "$out" -s "$BAG_STORAGE")
   [[ "$BAG_COMPRESSION" != "none" ]] && \
     args+=(--compression-mode file --compression-format "$BAG_COMPRESSION")
+  # Callers may add flags via the BAG_RECORD_EXTRA array. The +"${...}" form is
+  # the one that stays empty under `set -u`.
+  args+=(${BAG_RECORD_EXTRA[@]+"${BAG_RECORD_EXTRA[@]}"})
 
   banner "recording -> $out"
-  printf '  %d topics; Ctrl-C to stop\n\n' "$#"
-  ros2 bag record "${args[@]}" "$@"
+  printf '  %d topics\n\n' "$#"
+
+  # ROS 2 Humble's `ros2 bag record` has NO record-for-N-seconds option. Its
+  # -d/--max-bag-duration is a *split* interval, and passing --duration makes
+  # the CLI exit immediately with "unrecognized arguments". A fixed-length take
+  # therefore has to be done by timing a SIGINT ourselves. (Cost of learning
+  # this the hard way: one 120 s scene recorded into nothing on 2026-08-05.)
+  local rc=0
+  if [[ -n "${BAG_DURATION:-}" ]]; then
+    printf '  stopping automatically after %s s\n\n' "$BAG_DURATION"
+    ros2 bag record "${args[@]}" "$@" &
+    local rec=$! timer
+    ( sleep "$BAG_DURATION"; kill -INT "$rec" 2>/dev/null ) & timer=$!
+    wait "$rec"; rc=$?
+    kill "$timer" 2>/dev/null
+  else
+    printf '  Ctrl-C to stop\n\n'
+    ros2 bag record "${args[@]}" "$@"; rc=$?
+  fi
   printf '\n'
-  info "bag written: $out"
+
+  # Never claim success without looking. The recorder exiting non-zero is
+  # normal here (SIGINT), so the authority is the bag itself: rosbag2 writes
+  # metadata.yaml on clean shutdown, and its absence means no usable bag.
+  if [[ ! -s "$out/metadata.yaml" ]]; then
+    err "NO BAG WRITTEN to $out (recorder exit $rc, no metadata.yaml).
+         Nothing was captured — do not treat this run as recorded."
+    return 1
+  fi
+  info "bag written: $out ($(du -sh "$out" 2>/dev/null | cut -f1))"
   printf '%s\n' "$out" > "${BAG_ROOT}/.last_bag"
 }
 

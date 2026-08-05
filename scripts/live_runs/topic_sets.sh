@@ -41,6 +41,22 @@ TOPICS_CAMERA=$(_ns \
 
 TOPICS_CAMERA_CLOUD=$(_ns camera/depth/color/points)
 
+# Everything a consumer needs to re-derive geometry offline: the unaligned
+# depth stream (aligned_depth_to_color is resampled into the colour intrinsics
+# and loses the native depth FOV), and the latched inter-stream extrinsics the
+# RealSense driver publishes once at startup. Only worth recording for the
+# detection dataset; the phase bags don't need them.
+TOPICS_CAMERA_CALIB=$(_ns \
+  camera/depth/image_rect_raw \
+  camera/depth/camera_info \
+  camera/extrinsics/depth_to_color \
+  camera/extrinsics/depth_to_infra1 \
+  camera/extrinsics/depth_to_infra2)
+
+# Latched URDF. Lets a downstream repo rebuild the full kinematic chain (and
+# every camera_link -> optical_frame hop) without this package checked out.
+TOPICS_DESCRIPTION=$(_ns robot_description)
+
 # ------------------------------------------------------- vehicle / VESC ----
 TOPICS_VEHICLE=$(_ns \
   vehicle/sensors/imu/raw \
@@ -112,6 +128,26 @@ set_for() {
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_CAMERA" \
                     "$TOPICS_CAMERA_CLOUD" "$TOPICS_VEHICLE" \
                     "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" ;;
+    detection)
+      # Perception-only dataset for the downstream detection/segmentation
+      # repos. Deliberately omits TOPICS_VEHICLE and TOPICS_ACTUATOR: this set
+      # is recorded with the VESC disconnected, so those topics never appear
+      # and listing them would only manufacture preflight failures. VSLAM odom
+      # is included only on the GPU path, where it actually publishes.
+      printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_CAMERA" \
+                    "$TOPICS_CAMERA_CLOUD" "$TOPICS_CAMERA_CALIB" \
+                    "$TOPICS_DESCRIPTION" "$TOPICS_ODOM_LOCAL"
+      if [[ "${USE_GPU,,}" == "true" ]]; then
+        printf '%s\n' "$TOPICS_ODOM_VSLAM"
+      fi
+      # Added only when the VESC is actually connected and the vehicle stack is
+      # launched. TOPICS_ACTUATOR stays out either way: with the command_gate
+      # disabled nothing publishes a drive command, so those topics would be
+      # silent by construction.
+      if [[ "${DETECTION_WITH_VEHICLE:-false}" == "true" ]]; then
+        printf '%s\n' "$TOPICS_VEHICLE"
+      fi
+      ;;
     mapping)
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_CAMERA" \
                     "$TOPICS_VEHICLE" "$TOPICS_ACTUATOR" \
@@ -150,6 +186,8 @@ declare -A MIN_RATE=(
   ["camera/aligned_depth_to_color/image_raw"]=10
   ["camera/infra1/image_rect_raw"]=10
   ["camera/infra2/image_rect_raw"]=10
+  ["camera/depth/image_rect_raw"]=10
+  ["camera/depth/color/points"]=5
   ["camera/imu/filtered"]=50
   ["vehicle/sensors/imu/raw"]=50
   ["vehicle/vesc_odom"]=20

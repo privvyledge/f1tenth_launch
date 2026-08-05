@@ -49,8 +49,14 @@ info "RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 # ---------------------------------------------------------- 2. hardware ----
 banner "2. hardware"
 
+# EXPECT_VESC / EXPECT_JOYSTICK let a sensor-only phase (nothing actuates, so
+# neither device is needed) downgrade these from hard failures to notes. They
+# default true: for every phase that can move the car, a missing VESC or
+# joystick must still abort.
 if [[ -e /dev/sensors/vesc ]]; then
   info "VESC present at /dev/sensors/vesc"
+elif [[ "${EXPECT_VESC:-true}" != "true" ]]; then
+  info "VESC absent — not required for this phase (EXPECT_VESC=false)"
 else
   fail "/dev/sensors/vesc missing — the udev symlink is not in place, the VESC
         is unpowered, or /dev is not passed into the container."
@@ -61,6 +67,8 @@ JOYS=(/dev/input/js*)
 shopt -u nullglob
 if (( ${#JOYS[@]} > 0 )); then
   info "joystick present: ${JOYS[*]}"
+elif [[ "${EXPECT_JOYSTICK:-true}" != "true" ]]; then
+  info "joystick absent — not required for this phase (EXPECT_JOYSTICK=false)"
 else
   fail "no /dev/input/js* — without a joystick the command_gate heartbeat never
         arrives and the gate stays closed, so the vehicle will not move."
@@ -134,6 +142,12 @@ if [[ -n "$PHASE" ]]; then
     for t in "${TOPIC_LIST[@]}"; do
       rel="${t#/$NS/}"
       min="${MIN_RATE[$rel]:-}"
+      # RATE_EXEMPT lets a phase declare that a topic is legitimately silent in
+      # its configuration, so a rate floor defined for other phases does not
+      # manufacture a failure. Presence is still checked.
+      if [[ " ${RATE_EXEMPT:-} " == *" $rel "* ]]; then
+        min=""
+      fi
       if [[ -z "$min" ]]; then
         # No rate floor defined (latched, event-driven, or command topics):
         # presence alone is the check.

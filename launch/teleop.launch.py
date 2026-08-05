@@ -48,6 +48,13 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=False)
+    # Off by default, matching localization.launch.py and bringup.launch.py. This
+    # was previously hardcoded 'True' in the localization include below, so
+    # RTABMap ICP odometry ran on every teleop launch and could not be turned
+    # off from the command line. With it on, ekf_odom misses its update rate
+    # (measured: odometry/local at 12.78 Hz with 2.44 s gaps, versus 29.70 Hz
+    # and a 0.180 s max gap with it off). rf2o covers the same job far cheaper.
+    launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default=False)
     localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
@@ -162,6 +169,10 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization_arg = DeclareLaunchArgument('launch_global_localization',
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
+    launch_icp_odometry_arg = DeclareLaunchArgument('launch_icp_odometry',
+                                                    default_value=launch_icp_odometry,
+                                                    description="Launch RTABMap ICP odometry (odom/rtabmap/icp, the EKF's "
+                                                                "odom3). Expensive; rf2o is the preferred LiDAR odometry.")
 
     localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
             'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
@@ -430,6 +441,7 @@ def launch_setup(context, *args, **kwargs):
         launch_tfs_arg,
         launch_localization_arg,
         launch_local_localization_arg,
+        launch_icp_odometry_arg,
         launch_global_localization_arg,
         localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
@@ -687,7 +699,7 @@ def launch_setup(context, *args, **kwargs):
                             'launch_rgbd_odometry': 'False',
                             'launch_stereo_odometry': 'True',
                             'launch_laserscan_odometry': 'True',
-                            'launch_icp_odometry': 'True',
+                            'launch_icp_odometry': launch_icp_odometry,
                             'launch_amcl': 'True',  # launch_global_localization,
                             'launch_particle_filter': 'False',  # launch_global_localization
                             'launch_map_server': launch_map_server,
