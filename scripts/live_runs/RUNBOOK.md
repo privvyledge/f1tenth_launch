@@ -340,6 +340,14 @@ believing any list**.
 publishes at full rate with zero payloads; `ros2 topic hz` cannot see the
 difference.
 
+**Expect the DDS peer noise, and grep past it.** Every ROS process emits
+`ddsi_udp_conn_write ... failed with retcode -3` at ~200 lines/s for each
+powered-off machine in the static peer list — one stack launch produced a
+381,976-line log that hid a four-line YDLidar failure. Filter with
+`grep -v ddsi_udp_conn_write` when reading any log. The cause, the measurements,
+and the fix (which lives in the build repo, not here) are in
+[CYCLONEDDS_PEERS.md](CYCLONEDDS_PEERS.md).
+
 ### Recording
 
 **`ros2 bag record` has no record-for-N-seconds flag in Humble.** `-d` /
