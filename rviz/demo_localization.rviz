@@ -1,0 +1,313 @@
+# Demo config: localization. Map, AMCL particle cloud, and every odometry
+# estimator drawn as a trailing path so their divergence is visible.
+# Fixed frame is 'map' — nothing appears until map->odom is being broadcast
+# (by ekf_map_node, with map_tf_publisher:='ekf').
+#
+# Namespaced for /gosling1. Latched topics (map) need Transient Local
+# durability; sensor streams need Best Effort.
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Particle Cloud1
+        - /EKF global1
+      Splitter Ratio: 0.5
+    Tree Height: 700
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Pose Estimate1
+    Name: Tool Properties
+    Splitter Ratio: 0.6
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.2
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: false
+      Line Style: {Line Width: 0.03, Value: Lines}
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: <Fixed Frame>
+      Value: false
+
+    # --- the map ---
+    - Alpha: 0.75
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: true
+      Enabled: true
+      Name: Map
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /gosling1/map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /gosling1/map_updates
+      Use Timestamp: false
+      Value: true
+
+    # --- clip 2.1 : particle convergence ---
+    - Alpha: 1
+      Arrow Length: 0.08
+      Axes Length: 0.3
+      Axes Radius: 0.01
+      Class: rviz_default_plugins/PoseArray
+      Color: 0; 192; 0
+      Enabled: true
+      Head Length: 0.02
+      Head Radius: 0.02
+      Name: Particle Cloud
+      Shaft Length: 0.06
+      Shaft Radius: 0.005
+      Shape: Arrow (Flat)
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/particle_cloud
+      Value: true
+
+    - Alpha: 1
+      Class: rviz_default_plugins/LaserScan
+      Color: 239; 41; 41
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: LaserScan Filtered
+      Position Transformer: XYZ
+      Size (Pixels): 3
+      Size (m): 0.03
+      Style: Spheres
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/lidar/scan_filtered
+      Use Fixed Frame: true
+      Value: true
+
+    # --- clip 2.2 : estimator comparison ---
+    # Long Keep (trail length) so a full lap stays on screen. Colours match
+    # scripts/analysis/plot_localization.py so video and figure agree.
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance: {Value: false}
+      Enabled: true
+      Keep: 2000
+      Name: VESC wheel odom
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 1
+        Color: 140; 86; 75
+        Head Length: 0.06
+        Head Radius: 0.03
+        Shaft Length: 0.1
+        Shaft Radius: 0.01
+        Value: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/vehicle/vesc_odom
+      Value: true
+
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance: {Value: false}
+      Enabled: true
+      Keep: 2000
+      Name: rf2o LiDAR odom
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 1
+        Color: 255; 127; 14
+        Head Length: 0.06
+        Head Radius: 0.03
+        Shaft Length: 0.1
+        Shaft Radius: 0.01
+        Value: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/odom/rf2o
+      Value: true
+
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance: {Value: false}
+      Enabled: true
+      Keep: 2000
+      Name: Isaac VSLAM
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 1
+        Color: 148; 103; 189
+        Head Length: 0.06
+        Head Radius: 0.03
+        Shaft Length: 0.1
+        Shaft Radius: 0.01
+        Value: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/visual_slam/tracking/odometry
+      Value: true
+
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance: {Value: false}
+      Enabled: true
+      Keep: 2000
+      Name: EKF local
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 1
+        Color: 31; 119; 180
+        Head Length: 0.08
+        Head Radius: 0.04
+        Shaft Length: 0.14
+        Shaft Radius: 0.015
+        Value: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/odometry/local
+      Value: true
+
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation: {Alpha: 0.4, Color: 255; 255; 127, Color Style: Unique, Frame: Local, Offset: 1, Scale: 1, Value: true}
+        Position: {Alpha: 0.25, Color: 204; 51; 204, Scale: 1, Value: true}
+        Value: true
+      Enabled: true
+      Keep: 2000
+      Name: EKF global
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 1
+        Color: 214; 39; 40
+        Head Length: 0.08
+        Head Radius: 0.04
+        Shaft Length: 0.14
+        Shaft Radius: 0.015
+        Value: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/odometry/global
+      Value: true
+
+    - Alpha: 1
+      Axes Length: 0.4
+      Axes Radius: 0.02
+      Class: rviz_default_plugins/Pose
+      Color: 0; 255; 0
+      Enabled: true
+      Head Length: 0.1
+      Head Radius: 0.05
+      Name: AMCL pose
+      Shaft Length: 0.2
+      Shaft Radius: 0.02
+      Shape: Axes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /gosling1/amcl_pose
+      Value: true
+
+    - Class: rviz_default_plugins/TF
+      Enabled: false
+      Frame Timeout: 15
+      Frames: {All Enabled: false}
+      Marker Scale: 0.6
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree: {}
+      Update Interval: 0
+      Value: false
+
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    # 2D Pose Estimate must publish to the NAMESPACED initialpose or AMCL
+    # never receives it.
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /gosling1/initialpose
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Angle: 0
+      Class: rviz_default_plugins/TopDownOrtho
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Scale: 45
+      Target Frame: <Fixed Frame>
+      Value: TopDownOrtho (rviz_default_plugins)
+      X: 0
+      Y: 0
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1000
+  Hide Left Dock: false
+  Hide Right Dock: true
+  Tool Properties:
+    collapsed: true
+  Width: 1600
+  X: 40
+  Y: 40
