@@ -1372,3 +1372,91 @@ file.**
 - **bug-050** — YDLidar down.
 - Phases 3+ of the live-run scripts (mapping, localization, Nav2, MPC) still unexercised against
   powered hardware — this session only reached the teleop and mux phases.
+
+## RUN LOG — 2026-08-04 (Session H: CycloneDDS loopback — BUG-041 root-caused and fixed)
+
+**Objective:** stop same-host ROS 2 image traffic on gosling1 egressing over the WiFi stack, and see
+whether the VSLAM frame-jitter stalls (the documented `SIGABRT` precursor, bug-041) disappear.
+
+### The fix
+
+`/mnt/shared_dir/cyclonedds_config_static.xml` bound CycloneDDS to `wlP1p1s0` only — no loopback —
+with `AllowMulticast false` and an explicit unicast `<Peers>` list. `visual_slam_node` sets
+`use_intra_process_comms: False` and receives the 848×480 stereo pair from `sensing_container` over
+DDS, so ~24 MB/s of **same-host** image traffic was traversing the WiFi interface's network stack.
+
+Two-line change:
+
+```xml
+<Interfaces>
+    <NetworkInterface autodetermine="false" name="wlP1p1s0" priority="default" multicast="false" />
+    <NetworkInterface autodetermine="false" name="lo"       priority="10"      multicast="false" />
+</Interfaces>
+...
+<Peers>
+    <Peer address="localhost"/>       <!-- same-host, over lo -->
+    <Peer address="192.168.2.195"/>   <!-- gosling1 -->
+```
+
+The `localhost` peer is **not optional**: `AllowMulticast` is `false`, so discovery is purely unicast.
+Without it, nothing would ever discover a peer over the new interface and the change would be a no-op.
+`lo` gets `priority="10"` (above `wlP1p1s0`'s `default`) so same-host peers prefer loopback; remote
+machines are unreachable on `lo` and keep using WiFi.
+
+Verified live: **31 DDS sockets bound on `127.0.0.1`**, where there were previously zero.
+
+### Result — the stalls are gone
+
+| | Baseline `run_gpu3` | After `run_lo3` |
+|---|---|---|
+| Steady-state span | 2264 s | 2000 s |
+| Stalls (all) | 308 (0.1360/s) | **0** |
+| Stalls >200 ms | 304 (0.1343/s) | **0** |
+| Max stall | 2402 ms | — |
+| Aborts | 0 | 0 |
+
+`run_lo3` logged 8 delta warnings total, **all within the first 25.2 s of startup**, then ran 2000 s
+(33 min) completely clean. The baseline rate predicts ~269 severe stalls over that span; observed 0.
+
+**Verified as a true negative, not a dead node** — the failure mode that would mimic this result is
+VSLAM silently stopping. It was not: `visual_slam/tracking/odometry` held **30.05–30.19 Hz** and
+`camera/infra1/image_rect_raw` **30.0 Hz** for the whole window.
+
+This closes bug-041 and confirms the DDS-transport hypothesis. It also retires the 2026-05-30
+"Jetson GPU falls behind at 30 fps" explanation for the *live* robot — GPU was measured at
+`GR3D_FREQ` 0–12% and ruled out before this change was attempted.
+
+`use_gpu` already defaults to `True` in `bringup.launch.py:61`; this validates that default rather
+than changing it.
+
+### bug-012 could not be measured
+
+The DDS-introspection failure (`ros2 node list` intermittently empty) **did not reproduce**: 0/40
+failures before the change, 0/20 after, a steady 56–57 nodes throughout. This experiment therefore
+neither confirms nor refutes the loopback theory for bug-012 — it only shows no regression. Drop it
+as an outcome metric unless it resurfaces.
+
+### `/cmd_vel` audit — PASS (deferred from Session F, now run on hardware)
+
+- `/cmd_vel` — single type `geometry_msgs/msg/Twist`, 6 publishers (`behavior_server` ×5 +
+  `velocity_smoother` ×1), exactly as predicted. The mixed `Twist`/`TwistStamped` publisher list is gone.
+- `/vehicle/cmd_vel_executed` — exists, type `Twist`, 1 publisher.
+- 0 subscribers on both is **correct**: `twist_to_ackermann` defaults off, and `ekf_odom` has
+  `use_control: false`, so `robot_localization` never creates the subscription.
+
+### Notes / hazards
+
+- **The CycloneDDS config is not in version control.** It lives only on the robot at
+  `/mnt/f1tenth_ssd/shared_dir` (bind-mounted to `/mnt/shared_dir`). A reflash loses this fix silently.
+  Backups on the robot: `cyclonedds_config_static.bak08042026.xml`, `cyclonedds_config_static.prelo.bak.xml`.
+- **`/mnt/shared_dir` is NOT a cross-machine share** — earlier notes assumed it was. It is a bind mount
+  of a local SSD directory, so this edit affects gosling1 only. gosling2/3/5 and DigitalStorm need the
+  same change applied separately, and `name="wlP1p1s0"` will not be valid on all of them.
+- Two runs (`run_lo1`, `run_lo2`) were lost to **BUG-047** serial-port contention with a second agent
+  session. `vesc_driver_node` responds to serial trouble by throwing `std::system_error` and aborting
+  (exit -6) rather than retrying — worth hardening independently of the contention that triggered it.
+- `192.168.2.194` (DigitalStorm, offline) produces continuous `ddsi_udp_conn_write ... retcode -3`
+  noise from the peer list. Pre-existing, harmless, but it clutters every log.
+- Log volume: `run_lo3` reached **754 MB in 34 min**, dominated by `vesc_driver_node` (468 k lines,
+  VESC unpowered) and joy/mux nodes (205 k lines each, joystick off). Container `/` is on the NVMe, so
+  the SD card is not at risk, but long runs need `--log-level` tuning or rotation.
