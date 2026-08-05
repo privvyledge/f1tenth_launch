@@ -75,6 +75,9 @@ def launch_setup(context, *args, **kwargs):
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=True)
     localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
+    # RTABMap ICP LiDAR odometry: expensive, and rf2o already covers this. Was previously hardcoded
+    # 'True' at the localization include, which made it un-overridable from the command line.
+    launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')
     launch_navigation = LaunchConfiguration('launch_navigation', default=True)
     launch_controller_server = LaunchConfiguration('launch_controller_server', default=True)
     launch_smoother_server = LaunchConfiguration('launch_smoother_server', default=True)
@@ -284,6 +287,11 @@ def launch_setup(context, *args, **kwargs):
             description='Whether to launch the map server. '
                         'Disable when building a new map (slam:=True) to prevent a stale stored map '
                         'from being published during mapping.')
+
+    launch_icp_odometry_la = DeclareLaunchArgument(
+            'launch_icp_odometry', default_value=launch_icp_odometry,
+            description='Whether to launch RTABMap ICP LiDAR odometry (odom/rtabmap/icp, ekf_odom odom3). '
+                        'Expensive and off by default; rf2o is the preferred LiDAR odometry source.')
 
     odom_tf_publisher_arg = DeclareLaunchArgument(
             'odom_tf_publisher', default_value=odom_tf_publisher,
@@ -599,6 +607,7 @@ def launch_setup(context, *args, **kwargs):
         launch_global_localization_arg,
         localize_isaac_vslam_on_startup_la,
         launch_map_server_la,
+        launch_icp_odometry_la,
         odom_tf_publisher_arg,
         map_tf_publisher_arg,
         launch_navigation_arg,
@@ -894,7 +903,7 @@ def launch_setup(context, *args, **kwargs):
                                         'launch_rgbd_odometry': 'False',
                                         'launch_stereo_odometry': 'True',
                                         'launch_laserscan_odometry': 'True',
-                                        'launch_icp_odometry': 'True',
+                                        'launch_icp_odometry': launch_icp_odometry,
                                         'launch_amcl': global_localization_effective,
                                         "map_file": map_file,
                                         "use_sim_time": use_sim_time,

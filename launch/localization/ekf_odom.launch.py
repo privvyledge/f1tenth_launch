@@ -140,6 +140,10 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/local'),
                     ('accel/filtered', 'accel/local'),
+                    # robot_localization hardcodes the control input topic to `cmd_vel`. Point it at
+                    # the executed-command echo instead, so enabling use_control cannot make the EKF
+                    # consume Nav2's *outbound* commands. Inert while use_control: false.
+                    ('cmd_vel', 'vehicle/cmd_vel_executed'),
                     *remappings
                 ]
         ),
@@ -162,6 +166,10 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/local'),
                     ('accel/filtered', 'accel/local'),
+                    # robot_localization hardcodes the control input topic to `cmd_vel`. Point it at
+                    # the executed-command echo instead, so enabling use_control cannot make the EKF
+                    # consume Nav2's *outbound* commands. Inert while use_control: false.
+                    ('cmd_vel', 'vehicle/cmd_vel_executed'),
                     *remappings
                 ]
         ),

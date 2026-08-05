@@ -308,6 +308,16 @@ def generate_launch_description():
                         *remappings]
     )
 
+    # Echo of the command the VESC actually received, as a Twist, for robot_localization's
+    # use_control input. It must NOT publish onto `cmd_vel`:
+    #   * `cmd_vel` is the *inbound command* topic (Nav2's velocity_smoother output, and the topic
+    #     twist_to_ackermann subscribes to on its way to `drive`). Putting an outbound echo there
+    #     gave one topic two opposite meanings and a mixed Twist/TwistStamped type list.
+    #   * With both as plain Twist on `cmd_vel`, enabling twist_to_ackermann closes a feedback loop:
+    #     vehicle/ackermann_cmd -> cmd_vel -> drive -> mux -> command_gate -> vehicle/ackermann_cmd.
+    #     Until 2026-08-04 only the TwistStamped/Twist type mismatch prevented that.
+    # Plain Twist (not TwistStamped) because ROS 2 robot_localization only accepts unstamped control
+    # input — see the stamped_control note in config/localization/ekf_odom.yaml.
     ackermann_to_twist_node = Node(
             condition=IfCondition(launch_ackermann_to_twist),
             package='f1tenth_stack',
@@ -317,10 +327,10 @@ def generate_launch_description():
                 'ackermann_topic': 'vehicle/ackermann_cmd',
                 'frame_id': 'base_link',
                 'override_header': False,
-                'twist_topic': 'cmd_vel',
+                'twist_topic': 'vehicle/cmd_vel_executed',
                 'wheelbase': 0.256,
                 'use_stamped_subscriber': True,
-                'use_stamped_publisher': True
+                'use_stamped_publisher': False
             }]
     )
 

@@ -80,7 +80,12 @@ def launch_setup(context, *args, **kwargs):
     launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default='False')  # RTABMap ICP; expensive, disabled by default in favour of rf2o
     launch_amcl = LaunchConfiguration('launch_amcl', default='True')
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
-    localize_on_startup = LaunchConfiguration('localize_on_startup', default=True)
+    # Default False so a stale map left at visual_slam_map_path cannot force a doomed startup
+    # localization. Opt in only when the saved map matches the current environment and start pose.
+    localize_on_startup = LaunchConfiguration('localize_on_startup', default='False')
+    # cuVSLAM's landmark/observation/SLAM views are RViz-only. Set False to rule them out as the source
+    # of the periodic ~633 ms image-jitter stall (see testing notes, 2026-08-04).
+    visual_slam_enable_visualization = LaunchConfiguration('visual_slam_enable_visualization', default='True')
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
 
@@ -226,7 +231,13 @@ def launch_setup(context, *args, **kwargs):
             'localize_on_startup', default_value=localize_on_startup,
             description='Attempt to localize in a previously saved VSLAM map on startup. '
                         'Forwarded to isaac_ros_visual_slam_realsense.launch.py. '
-                        'Set True only when a valid VSLAM map exists at visual_slam_map_path')
+                        'Set True only when a valid VSLAM map exists at visual_slam_map_path. '
+                        'Ignored (treated as False) when visual_slam_map_path holds no saved map.')
+
+    visual_slam_enable_visualization_la = DeclareLaunchArgument(
+            'visual_slam_enable_visualization', default_value=visual_slam_enable_visualization,
+            description='Publish the cuVSLAM landmark/observation/SLAM visualization topics. '
+                        'RViz-only; set False to reduce VSLAM load.')
 
     launch_map_server_la = DeclareLaunchArgument(
             'launch_map_server', default_value=launch_map_server,
@@ -923,7 +934,7 @@ def launch_setup(context, *args, **kwargs):
                                         'imu_topic': camera_name_str + 'imu/filtered',  # '/camera/camera/imu/filtered'
                                         'image_qos': qos,  # DEFAULT.
                                         'imu_qos': qos_imu,
-                                        'enable_visualization_topics': 'True',
+                                        'enable_visualization_topics': visual_slam_enable_visualization,
                                         'localize_on_startup': localize_on_startup,
                                         'attach_to_shared_component_container': 'False',  # use_composition, we now want vslam to be isolated from the rest
                                         'component_container_name': vslam_container_name if use_composition_str.lower() == 'true' else 'visual_slam_container',
@@ -1120,6 +1131,7 @@ def launch_setup(context, *args, **kwargs):
         scan_prefix_la,
         gravitational_acceleration_la,
         localize_on_startup_la,
+        visual_slam_enable_visualization_la,
         launch_particle_filter_la,
         particle_filter_config_la,
         particle_filter_node,

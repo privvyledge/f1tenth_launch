@@ -219,6 +219,15 @@ def launch_setup(context, *args, **kwargs):
     #         extra_arguments=[{'use_intra_process_comms': LaunchConfiguration("intra_process_comms")}],
     #         parameters=[config_file])
 
+    # A map must actually exist before cuVSLAM is asked to localize in it. The map directory used to be
+    # created unconditionally further down, which manufactured an EMPTY map and made
+    # "Failed to localize in map. Error 3" inevitable on every run without a previously saved map.
+    map_path_string = map_path.perform(context)
+    map_exists = os.path.isdir(map_path_string) and bool(os.listdir(map_path_string))
+    localize_on_startup_effective = (
+            localize_on_startup.perform(context).lower() == 'true' and map_exists
+    )
+
     # if a transformError occurs, it's probably due to a low realsense tf_publish_rate
     visual_slam_node = ComposableNode(
             name='visual_slam_node',
@@ -269,7 +278,7 @@ def launch_setup(context, *args, **kwargs):
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'save_map_folder_path': map_path,
                 'load_map_folder_path': map_path,
-                'localize_on_startup': localize_on_startup,
+                'localize_on_startup': localize_on_startup_effective,
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
                         ('visual_slam/camera_info_0', camera_name_string + 'infra1/camera_info'),
@@ -281,11 +290,9 @@ def launch_setup(context, *args, **kwargs):
                         ('/tf_static', 'tf_static')]
     )
 
-    # get map path context from launch configuration
-    map_path_string = map_path.perform(context)
-
-    # create the directory if it doesn't exist using python os module
-    if not os.path.exists(map_path_string):
+    # Only create the map directory when we actually intend to save into it. Creating it
+    # unconditionally left an empty directory behind that later runs then tried to localize in.
+    if save_map.perform(context).lower() == 'true' and not os.path.exists(map_path_string):
         os.makedirs(map_path_string, exist_ok=True)
 
     # to save a map (ros2 action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap "{map_url: /shared_dir/maps/nvidia/vslam_map}")
