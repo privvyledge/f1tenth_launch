@@ -1209,3 +1209,166 @@ command_gate → `vehicle/ackermann_cmd`; the old type mismatch was the only thi
 `launch_twist_to_ackermann` left at `False` (MPC path publishes `drive` directly) — **set it `True`
 when driving under Nav2.** Not yet verified on the robot: needs a run to confirm `cmd_vel` shows a
 single type and `vehicle/cmd_vel_executed` appears.
+
+---
+
+## RUN LOG — 2026-08-04 (Session G: first powered-hardware run — VESC, joystick, mux arbitration)
+
+**Objective:** verify the live-run scripts against a **powered** VESC and joystick, car elevated with
+wheels clear. Every prior session validated launch files, topics and configs; **no script had ever
+launched a stack against a powered VESC.** Also settle the open question of whether `command_gate`
+closes the gate during the button-5 autonomous handover.
+
+Environment: container `f1tenth_claude_test` on gosling1, `ROS_DOMAIN_ID=77`, `MAX_SPEED=1.0`
+(reduced from the 1.5 default for bench testing). Code at the `1c2955b` working-tree state; the
+container has no network so `git fetch` fails and the commit pointer stays stale at `03faef3` —
+the 8 modified launch files were previously verified byte-identical to `1c2955b`.
+
+### Phase 0 — preflight with VESC powered: PASS
+
+`./10_preflight.sh` all green, including `/dev/sensors/vesc → ../ttyACM0`. SSD 701 G free, joystick
+`/dev/input/js0`, RealSense in sysfs, `/dev/ttyUSB0` present. The `lsusb`-absent and `set -u`
+workarounds from bug-043/bug-044 held up.
+
+### BUG-047 — two stacks fighting over one serial port, presenting as VESC hardware failure
+
+The first launch flooded `Out-of-sync with VESC, discarding N bytes`, `Invalid end-of-frame
+character`, `Invalid payload length`, and `vesc_driver_node` died once with `exit code -6` (SIGABRT).
+
+This looked exactly like a failing VESC or a bad USB cable. It was neither. `ps` showed **two**
+`vesc_driver_node` processes on the same `/dev/sensors/vesc`:
+
+- `__ns:=/vehicle` — from a `bringup.launch.py` started by a **concurrent agent session** in the
+  same container (PID 7, un-namespaced)
+- `__ns:=/gosling1/vehicle` — from this session's `20_sensor_bag.sh`
+
+Two readers on one serial port steal each other's bytes, so every frame fails its checksum. Cleared
+with `docker restart` (zombies survive `pkill`); afterwards **0 sync errors** and
+`vehicle/sensors/core` steady at 50 Hz.
+
+**Diagnostic to keep:** `ps -eo cmd | grep vesc_driver` must return exactly one line. Differing
+namespaces on the two hits is the giveaway. Related to the duplicate-container family
+(bug-006/016/022), but this one is cross-*session*, not cross-launch-file.
+
+### Phase 1 — teleop actuation chain: PASS
+
+60 s capture with the operator working both sticks against a human deadman:
+
+| topic | samples | speed range | steering range |
+|---|---|---|---|
+| `teleop` | 3324 | −0.992 … +1.000 | −0.340 … +0.340 |
+| `ackermann_drive` | 3320 | −0.992 … +1.000 | −0.340 … +0.340 |
+| `vehicle/ackermann_cmd` | 3306 | −0.992 … +1.000 | −0.340 … +0.340 |
+
+Identical at every stage, sample counts within 0.5% — no clipping, no drops. `max_speed:=1.0` and
+`max_steering:=0.34` honoured exactly. Hands-off state correct: `vehicle/ackermann_cmd` `0.0/0.0`,
+`vehicle/commands/motor/speed` `0.0`, `vehicle/commands/servo/position` `0.56`
+(= `steering_angle_to_servo_offset`, i.e. servo centre). Operator confirmed wheels spun and the
+servo steered both ways.
+
+### Phase 2 — mux arbitration and autonomous handover
+
+Synthetic MPC stand-in: `ros2 topic pub -r 20 /gosling1/drive ... {speed: 1.0, steering_angle: 0.34}`.
+
+- **2a PASS** — human deadman held: `ackermann_drive` mirrored the joystick, not `/drive`.
+  Priority 100 > 10 confirmed.
+- **2b PASS** — button 5 held: `teleop` went silent, `ackermann_drive` switched to `+1.00/+0.34`.
+  The `topic_name: /dev/null` sink on `autonomous_control` works exactly as designed.
+- **2c FAIL, root-caused** — see BUG-048.
+- **2d PASS** — everything released: mux fell through to `safety`, zero speed.
+
+### BUG-048 — `command_gate` heartbeat closes the gate ~1 s into every handover
+
+Operator observation: button 5 commands the vehicle for about a second, then zeros indefinitely;
+release and re-press repeats the same one-second window.
+
+Root cause: `command_gate` has `heartbeat_topic: teleop`, `heartbeat_timeout: 1.0`, and bringup /
+teleop / mapping override `command_gate_require_heartbeat` to `True`. Holding button 5 silences
+`teleop` **by design** — that silence is precisely what lets the mux hand over. But the same silence
+starves the gate's heartbeat, so 1.0 s later the gate closes and emits zeros forever.
+
+Proven by relaunching with `command_gate_require_heartbeat:=False`, everything else identical:
+
+```
+  t   | teleop  | drive  | ackermann_drive | vehicle/ackermann_cmd
+ 0.0  |    0    | +1.00  |  +1.00 / +0.34  |  +1.00 / +0.34
+ ...  |    0    | +1.00  |  +1.00 / +0.34  |  +1.00 / +0.34   <- sustained 6.6 s
+ 6.5  |   77    | +1.00  |  +1.00 / +0.34  |  +1.00 / +0.34
+ 7.0  |   46    | +1.00  |  +0.00 / +0.00  |  +0.00 / +0.00   <- teleop reclaims (correct)
+```
+
+`vehicle/ackermann_cmd` held 1.0 m/s continuously for **6.6 s**, ending only when the operator
+released button 5 — versus ~1 s with the heartbeat enabled. **The mux arbitration is correct; the
+gate is the sole blocker.** As shipped, autonomous handover cannot work in bringup/teleop/mapping.
+
+Fix deferred pending sign-off (safety-behaviour change). Candidate: point `heartbeat_topic` at a
+source that survives button 5, e.g. `joy`, which publishes regardless of which deadman is held.
+Watchdog was restored to `True` before releasing the robot.
+
+**Measurement trap worth remembering:** `ros2 topic hz` reported `vehicle/ackermann_cmd` "never
+stopped, max gap 0.130 s" during a failing handover, and that was nearly written up as a PASS. A
+closed gate keeps publishing **at full rate with zero payloads** — hz counts messages, not values.
+Echo values. The operator watching the hardware was the more reliable instrument.
+
+### BUG-049 — SAFETY: mux joystick timeout is tighter than DualSense idle jitter (FOUND + FIXED)
+
+Operator reported the steering servo twitching spuriously every ~30 s–2 min with **no button
+pressed** and the car parked.
+
+Cause: `mux.yaml` gave the joystick channel `timeout: 0.1`, but the DualSense publishes
+event-driven. Measured `joy` → `teleop` → `ackermann_drive` → `vehicle/ackermann_cmd` together
+under controlled input:
+
+| regime | joy | teleop | ackermann_drive | vehicle/ackermann_cmd |
+|---|---|---|---|---|
+| idle, hands off | 12.2 Hz | 12.2 Hz | 12.2 Hz | 12.2 Hz |
+| driving, axes sweeping | 50.6 Hz | 48.3 Hz | 48.3 Hz | 48.3 Hz |
+| peak | 187 Hz | 168 Hz | 168 Hz | 168 Hz |
+| full throttle, sticks still | 22 Hz | 22 Hz | 22 Hz | 22 Hz |
+
+Over 60 s: **155 `teleop` gaps exceeded 0.100 s**, max 0.103 s; none exceeded 0.2 s. Each gap
+expires the joystick's priority-100 claim, so the mux falls to the next valid channel — `navigation`
+(`drive`) whenever an MPC/Nav2 is publishing. The window is only ~3 ms wide, so most lapses emit
+nothing; that is why it presents as a rare twitch rather than continuous handover.
+
+**Fixed:** `mux.yaml` `joystick.timeout` 0.1 → **0.3 s** (~3x observed worst case, still well under
+the 1.0 s gate heartbeat, so killswitch behaviour is unchanged). **NOT YET DEPLOYED to the robot
+container.**
+
+Follow-up (planned Fri 2026-08-07): `joy_config.yaml` sets `autorepeat_rate: 20.0`, which should
+floor the interval at 0.05 s, yet idle measures 12.2 Hz. Finding out why addresses the cause rather
+than the margin.
+
+### joy_teleop rate tracking — operator hypothesis confirmed, no bug
+
+An apparent `teleop` rate "climb" across the session (14 → 142 → 265 → 350 Hz) looked like
+accumulating duplicate publishers. It was not. The operator identified it first: the DualSense
+publishes event-driven, so rate depends on whether axes are moving, a button is held, or nothing is
+touched. `teleop` simply tracks `joy`. Loss through `joy_teleop` is real but mild — ~4.5% average
+(50.6 → 48.3 Hz), ~10% at peak (187 → 168 Hz). Downstream `teleop` → `ackermann_drive` →
+`vehicle/ackermann_cmd` is lossless to the message.
+
+### BUG-050 — YDLidar never started (UNRESOLVED)
+
+`Error, cannot retrieve Lidar health code -1`, `Fail to get baseplate device information!`,
+`Failed to start scan mode -1`; `lidar/scan` never published. `/dev/ttyUSB0` present and preflight
+passed. Did not recover across three container restarts. Did not block this session's objective but
+**blocks any mapping or localization run.** Next step: physical USB replug, and check whether another
+process holds `/dev/ttyUSB0`.
+
+### BUG-051 — `set -u` regression (recurrence of bug-043)
+
+A diagnostic launch wrapper written this session used `set -uo pipefail` and died on
+`AMENT_TRACE_SETUP_FILES: unbound variable`. bug-043 had already fixed exactly this in `00_env.sh`,
+but the lesson had not been generalised. **Rule: never `set -u` in a script that sources a ROS setup
+file.**
+
+### Still outstanding
+
+- **bug-048** — command_gate heartbeat blocks autonomous handover. Root cause proven, fix needs
+  sign-off. **This blocks all MPC/Nav2 driving.**
+- **bug-049 follow-up** — why `autorepeat_rate: 20.0` delivers 12.2 Hz. Planned Fri 2026-08-07.
+- **bug-049 deployment** — the `mux.yaml` 0.3 s timeout is in the repo but not on the robot.
+- **bug-050** — YDLidar down.
+- Phases 3+ of the live-run scripts (mapping, localization, Nav2, MPC) still unexercised against
+  powered hardware — this session only reached the teleop and mux phases.
