@@ -1,8 +1,31 @@
-# Next session — the recording job is DONE
+# Next session — recording is DONE, and so is the mapping-bag map
 
 **The three bags were recorded and audited on 2026-08-05 (16:54–17:40 EDT).**
 Do not re-run the drive session. If you were handed this file expecting to
 record, stop and read `DRIVE_SESSION_HANDOFF.md` — "Status" and "Session 3".
+
+**2D + 3D maps were then built offline from `mapping_drive_170025`
+(2026-08-05, 18:00–19:55 EDT).** Read **`MAP_BUILD_HANDOFF.md`** first — it has
+the artifacts, the environment, four fixed defects, and the next task.
+
+## Start here
+
+The next job is **localizing `loop_laps_173558` and `figure8_172338` against the
+existing map**, so all three trajectories share one `map` frame. It is a
+localization job, not a mapping job:
+
+- **A map does not publish `map→odom` — a localizer does.** The `.pgm`/`.yaml`
+  and `.db` are static files. `map→odom` comes from AMCL, slam_toolbox
+  localization mode, `particle_filter`, or RTABMap localization mode at runtime.
+  Nothing needs re-mapping to get it.
+- The bags already carry `odom→base_link` at 30 Hz from the live EKF, so a
+  localizer only has to supply the missing edge.
+- The hard part is the **initial pose**: every bag starts at its own identity
+  origin, i.e. wherever the car was parked that run, so the offsets between the
+  three are unknown until estimated. `50_localization_test.sh` is the entry point.
+
+Full reasoning, including why a "fused map" would mean RTABMap multi-session
+mapping rather than post-hoc alignment, is in `MAP_BUILD_HANDOFF.md`.
 
 ## What exists
 
@@ -17,8 +40,11 @@ record, stop and read `DRIVE_SESSION_HANDOFF.md` — "Status" and "Session 3".
 
 All audited clean, all start with every localizer at the origin, all carry the
 full 39-topic set including actuator commands and VESC state. Maps and waypoints
-are built from these **offline, in a separate repo** — nothing further is needed
-from the car.
+are built from these **offline** — nothing further is needed from the car.
+
+Maps built so far, in `/mnt/f1tenth_ssd/shared_dir/maps/20260805/` (has its own
+`README.md`): `slamtoolbox_2d_final.*` + pose graph (best 2D),
+`rtabmap_2d_final.*`, `rtabmap_final_nf.db` and `cloud_clean.pcd` (3D).
 
 Also on disk from earlier in the day: `mapping_drive_145639` (practice; missing
 `imu` and `imu/mag`, and it clipped steering — prefer the three above),
