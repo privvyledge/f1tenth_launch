@@ -290,6 +290,86 @@ ros2 topic hz /gosling1/teleop /gosling1/drive \
 
 ---
 
+## Hard-won operating rules (2026-08-05)
+
+Learned by losing a 120 s take and chasing three phantom failures in one
+session. All five are now handled in the scripts, but the operating habits
+below are what keep them from recurring in a form the scripts do not cover.
+
+### Shutting a stack down
+
+**Never `kill <pid>` the `ros2 launch` wrapper.** SIGTERM to the wrapper does
+not reap its children — it orphans them, and orphans keep publishing. An
+orphaned `ekf_node` gives you two publishers on `odometry/local` *and two
+broadcasters on `odom → base_link`*. Orphaned `scan_to_scan_filter_chain`
+instances stack one per launch and multiply `scan_filtered`.
+
+Correct shutdown, in order of preference:
+
+1. Let the run script's own `EXIT` trap do it (Ctrl-C the script).
+2. `pkill -INT -f "ros2 launch f1tenth_launch"`, then wait **20+ s** — SIGINT
+   propagates properly but shutdown is not instant.
+3. Only then sweep stragglers by name, and include **every** executable:
+   `component_container`, `ekf_node`, `ydlidar_ros2_driver`, `vesc_driver_node`,
+   `scan_to_scan_filter_chain`, `rf2o_laser_odometry`, `robot_state_publisher`,
+   `static_transform_publisher`, `ackermann_to_vesc`, `vesc_to_odom`,
+   `ackermann_to_twist`. A stubborn `component_container` may need `-9`.
+
+**Verify by rate, not by process list.** The tell for a surviving duplicate is a
+topic reading an exact integer multiple of its expected rate:
+
+```bash
+ros2 topic hz /$NS/odometry/local     # 30 Hz good, 60 Hz means two EKFs
+ros2 topic hz /$NS/lidar/scan_filtered  # must match lidar/scan, not 2-3x it
+ros2 topic info /$NS/lidar/scan_filtered | grep "Publisher count"   # want 1
+```
+
+Ignore `<defunct>` entries — zombies hold nothing and publish nothing.
+
+### Trusting the tooling
+
+**`ros2 topic list` returns a partial graph on this vehicle.** Under the
+CycloneDDS static-peer config each CLI call discovers from scratch and comes
+back with a different random subset. One pass reported colour, both infra
+streams and the colored pointcloud all "missing" while every one was publishing
+at 30 Hz. `have_topic` now retries and falls back to a direct query, but when
+diagnosing by hand, **measure the topic by name (`ros2 topic hz`) before
+believing any list**.
+
+**Echo values, not rates, when a gate is involved.** A closed `command_gate`
+publishes at full rate with zero payloads; `ros2 topic hz` cannot see the
+difference.
+
+### Recording
+
+**`ros2 bag record` has no record-for-N-seconds flag in Humble.** `-d` /
+`--max-bag-duration` is a *bag split* interval. Passing `--duration` makes the
+CLI exit immediately — which, combined with a `bag_record` that printed
+"bag written" without checking, silently threw away a full scene. `bag_record`
+now times a SIGINT itself and verifies `metadata.yaml` exists before claiming
+anything.
+
+**Never trust a "recorded" message you have not checked.** After any take:
+
+```bash
+ros2 bag info <bag> | head -20     # Messages: must be non-zero
+du -sh <bag>                       # ~10 GB per minute with the cloud on
+```
+
+Counts should be `duration x rate` per topic. Anything at half or double is a
+drop or a duplicate.
+
+### Sequencing a run
+
+Preflight the *stack you are about to record*, not a stack you started fifteen
+minutes ago — and re-verify after any restart. `--launch-only` brings a stack up
+and leaves it running so you can inspect it; `--record-only --skip-preflight`
+then records against that same verified stack without making anyone stand at the
+car for two minutes of rate checks. `--skip-preflight` is only valid when
+preflight has already passed against *that exact running stack*.
+
+---
+
 ## Abort criteria
 
 Stop and diagnose rather than pressing on if:
