@@ -58,9 +58,16 @@ TOPICS_CAMERA_CALIB=$(_ns \
 TOPICS_DESCRIPTION=$(_ns robot_description)
 
 # ------------------------------------------------------- vehicle / VESC ----
+# `vehicle/sensors/imu/data` was listed here until 2026-08-05 and does not
+# exist: there is no filter node for the VESC IMU (the only IMU filter running
+# is realsense_imu_filter, which serves the camera). The VESC driver publishes
+# three streams instead, all at ~97 Hz — the native VescImuStamped form, the
+# sensor_msgs/Imu view of it, and the magnetometer, which was being dropped.
+# Verified against a live driver, not against the launch file.
 TOPICS_VEHICLE=$(_ns \
+  vehicle/sensors/imu \
   vehicle/sensors/imu/raw \
-  vehicle/sensors/imu/data \
+  vehicle/sensors/imu/mag \
   vehicle/sensors/core \
   vehicle/vesc_odom)
 
@@ -152,6 +159,26 @@ set_for() {
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_CAMERA" \
                     "$TOPICS_VEHICLE" "$TOPICS_ACTUATOR" \
                     "$TOPICS_ODOM_LOCAL" "$TOPICS_ODOM_VSLAM" ;;
+    drive)
+      # The multi-bag driven-session set (25_drive_session.sh): offline mapping
+      # AND trajectory-tracking runs are recorded with one identical set, so the
+      # bags are interchangeable downstream and only the name differs.
+      #
+      # Superset of `mapping`, plus everything a repo that does NOT have
+      # f1tenth_launch checked out needs to reconstruct geometry on its own:
+      # the colored pointcloud, the native (unaligned) depth stream, the
+      # inter-stream extrinsics, and the latched URDF. Global-localization
+      # topics are deliberately absent — no map exists yet, so amcl_pose /
+      # odometry/global would be empty by construction and would only
+      # manufacture preflight failures.
+      printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_CAMERA" \
+                    "$TOPICS_CAMERA_CLOUD" "$TOPICS_CAMERA_CALIB" \
+                    "$TOPICS_DESCRIPTION" "$TOPICS_VEHICLE" \
+                    "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL"
+      if [[ "${USE_GPU,,}" == "true" ]]; then
+        printf '%s\n' "$TOPICS_ODOM_VSLAM"
+      fi
+      ;;
     localization)
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_VEHICLE" \
                     "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" \
@@ -189,7 +216,10 @@ declare -A MIN_RATE=(
   ["camera/depth/image_rect_raw"]=10
   ["camera/depth/color/points"]=5
   ["camera/imu/filtered"]=50
+  ["vehicle/sensors/imu"]=50
   ["vehicle/sensors/imu/raw"]=50
+  ["vehicle/sensors/imu/mag"]=50
+  ["vehicle/sensors/core"]=20
   ["vehicle/vesc_odom"]=20
   ["odometry/local"]=20
   ["odom/rf2o"]=5

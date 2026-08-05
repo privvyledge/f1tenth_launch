@@ -269,7 +269,16 @@ def generate_launch_description():
             name='vesc_driver_node',
             namespace='vehicle',
             respawn=True,
-            respawn_delay=10.0,
+            # 2 s, not 10 s. The driver aborts (SIGABRT, uncaught
+            # std::system_error) whenever a serial write to the VESC returns
+            # EIO, and respawn_delay is therefore the length of the dead-stick
+            # window: commands keep flowing on every ROS topic while nothing
+            # reaches the motor. Measured on gosling1 2026-08-05 at 10.686 s
+            # mid-drive, which reads to the operator as the car stopping and
+            # then spontaneously resuming under constant throttle. Nothing in
+            # the safety chain notices — the mux and command_gate stay healthy
+            # because the fault is downstream of them.
+            respawn_delay=2.0,
             parameters=[
                 vesc_config,
                 {

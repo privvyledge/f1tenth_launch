@@ -43,7 +43,16 @@ export USE_GPU="${USE_GPU:-true}"
 # Joystick speed cap in m/s. Low by default so a dry run with the car on the
 # ground cannot bolt. Raise deliberately per run.
 export MAX_SPEED="${MAX_SPEED:-1.5}"
-export MAX_STEERING="${MAX_STEERING:-0.34}"
+
+# 0.25 rad, not the package default of 0.34. With the current calibration
+# (servo = -1.4 * angle + 0.56, servo_max 0.92) any left-hand command beyond
+# (0.92 - 0.56) / 1.4 = 0.257 rad clips at the servo limit, and the driver
+# logs "servo command value ... above maximum limit, clipping". A clipped
+# command makes the bag lie: the recorded steering keeps rising while the
+# wheels have stopped moving, which quietly corrupts any trajectory-tracking
+# or system-identification fit done from it. Raise this back to 0.34 once
+# steering_angle_to_servo_offset has been recalibrated toward 0.5.
+export MAX_STEERING="${MAX_STEERING:-0.25}"
 
 # Isaac VSLAM refuses to localize sanely into an empty map directory, and
 # bringup defaults this to True. Keep it off unless a real map exists.
@@ -108,13 +117,30 @@ ns_topic() { printf '/%s/%s' "$NS" "${1#/}"; }
 # colored pointcloud all "missing" while every one of them was measurably
 # publishing at ~30 Hz. Retry, then fall back to asking about the topic
 # directly, which resolves names the list pass dropped.
+#
+# "Present" means SOMEONE IS PUBLISHING it, not merely that the name resolves.
+# A topic with only a subscriber resolves fine and reports a Type — so on
+# 2026-08-05 a dead YDLidar driver still passed this check, because the
+# scan_to_scan_filter_chain was subscribed to the scan topic it never received.
+# wait_for_topic then returned success and the caller went on to record a bag
+# with no LiDAR in it. Require a non-zero publisher count.
 have_topic() {
   local topic="$1" attempt
   for attempt in 1 2 3; do
-    if ros2 topic list 2>/dev/null | grep -qxF "$topic"; then return 0; fi
+    if ros2 topic list 2>/dev/null | grep -qxF "$topic"; then
+      topic_has_publisher "$topic" && return 0
+    fi
     sleep 1
   done
-  timeout 8s ros2 topic info "$topic" 2>/dev/null | grep -q '^Type: '
+  topic_has_publisher "$topic"
+}
+
+# topic_has_publisher <absolute topic> — at least one live publisher?
+topic_has_publisher() {
+  local n
+  n="$(timeout 8s ros2 topic info "$1" 2>/dev/null \
+       | grep -oP 'Publisher count: \K[0-9]+' | tail -1)"
+  [[ -n "$n" ]] && (( n > 0 ))
 }
 
 # topic_hz <absolute topic> [window_secs]  — echoes average Hz, or 0.

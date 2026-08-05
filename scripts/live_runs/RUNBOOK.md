@@ -154,6 +154,47 @@ Driving for a good map:
 ./90_inspect_bag.sh          # confirm complete TF + full-rate sensors
 ```
 
+### 2b. Several bags in one session — `25_drive_session.sh`
+
+`30_mapping_drive.sh` is one-shot: it launches, records exactly one bag, and
+tears down on Ctrl-C. When a run day needs a mapping drive *and* trajectory
+runs, use `25_drive_session.sh` instead — it brings the stack up **once** and
+starts/stops named bags against it, so every bag shares one calibration, one TF
+tree and one set of sensor clocks. It also needs no interactive Ctrl-C, so it
+can be driven from a remote shell.
+
+```bash
+./25_drive_session.sh launch --max-speed 1.0 -y
+./25_drive_session.sh status                  # check rates BEFORE recording
+./25_drive_session.sh start mapping_drive     # proves bytes are landing, then says "move the robot"
+#   ...drive...
+./25_drive_session.sh stop                    # closes the bag + per-topic count/Hz audit
+./25_drive_session.sh shutdown
+```
+
+All bags use the `drive` topic set (40 topics): everything in `mapping`, plus
+the colored pointcloud, the native depth stream, the inter-stream extrinsics and
+the latched `/robot_description` — so a downstream repo without
+`f1tenth_launch` checked out can still reconstruct the geometry.
+
+`start` never announces "recording" on faith: it confirms the recorder is alive
+and measures bytes landing on disk over 4 s first. `stop` refuses to claim
+success unless `metadata.yaml` exists, then audits every requested topic against
+its `MIN_RATE` floor. `drive`, `cmd_vel` and `estop` are silent by design
+without Nav2/MPC and report `[ -- ]`; anything else silent is a real defect.
+
+Budget **~11 GB/min** with the pointcloud on (172 MB/s measured).
+
+Driving it from a remote/agent shell — note the stdin form, since `bash -lc`
+through two levels of quoting mangles `${...}` and `"$@"`:
+
+```bash
+ssh gosling1 'docker exec -i <container> bash -s' < some_script.sh
+```
+
+See `DRIVE_SESSION_HANDOFF.md` for the full three-bag procedure and the
+hardware findings from 2026-08-05.
+
 ---
 
 ## 3. Build maps offline — no robot needed
