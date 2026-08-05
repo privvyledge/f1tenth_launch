@@ -9,6 +9,7 @@ from launch.conditions import IfCondition
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
+import ast
 import os
 
 
@@ -29,7 +30,11 @@ def generate_launch_description():
     joy_teleop_config = LaunchConfiguration('joy_teleop_config')
     require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
-    autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[5]")
+    # SDL mapping (Humble joy node, DualSense): L1=9, R1=10, PS/guide=5, Share=4.
+    # The legacy joydev lore (L1=4, R1=5) is wrong here — [5] made the PS button the
+    # autonomous deadman, which kept the car driving during the power-off long-press
+    # (measured on gosling1 2026-08-05). Autonomous is R1 = 10.
+    autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[10]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)
@@ -108,6 +113,13 @@ def generate_launch_description():
         if is_deadman_required:
             teleop_params['human_control.deadman_buttons'] = deadman_buttons
             teleop_params['autonomous_control.deadman_buttons'] = autonomous_deadman_buttons
+            # Keep the command_gate heartbeat alive in every driving state: its deadman
+            # list must be the union of the human and autonomous deadman buttons, so a
+            # button remap via launch args cannot drift from the joy_teleop.yaml value.
+            heartbeat_buttons = sorted(
+                set(ast.literal_eval(deadman_buttons.perform(context)))
+                | set(ast.literal_eval(autonomous_deadman_buttons.perform(context))))
+            teleop_params['heartbeat_deadman.deadman_buttons'] = heartbeat_buttons
 
         joy_teleop_node = Node(
                 package='joy_teleop',

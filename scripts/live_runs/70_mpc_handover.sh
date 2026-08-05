@@ -11,26 +11,29 @@
 # ----------------------
 #   ackermann_mux priorities (config/vehicle/mux.yaml):
 #       estop      255   topic: estop        timeout 0.5 s
-#       joystick   100   topic: teleop       timeout 0.1 s
+#       joystick   100   topic: teleop       timeout 0.3 s
 #       navigation  10   topic: drive        timeout 0.2 s   <- your MPC
 #       safety       1   topic: safety       timeout 0.05 s
 #
 #   Holding a human deadman button ([4, 9]) makes joy_teleop publish 'teleop',
 #   which outranks 'drive'. Holding the autonomous deadman (button 5) routes
 #   joy_teleop to its /dev/null sink instead, so 'teleop' goes silent, the
-#   joystick claim lapses after 0.1 s, and your 'drive' commands win. That
+#   joystick claim lapses after 0.3 s, and your 'drive' commands win. That
 #   /dev/null topic is intentional - do not "fix" it.
 #
 #   Full path once you have the mux:
 #       drive -> ackermann_drive -> vehicle/ackermann_cmd
 #             -> vehicle/commands/{motor/speed, servo/position}
 #
-# The open question
-# -----------------
-#   command_gate uses heartbeat_topic 'teleop' with a 1.0 s timeout. If holding
-#   button 5 silences 'teleop' entirely, the gate may close ~1 s into the
-#   handover and block everything downstream of the mux. This script verifies
-#   that empirically. If the gate does close, rerun with --no-heartbeat.
+# The command_gate heartbeat (bug-048, fixed 2026-08-04)
+# ------------------------------------------------------
+#   The gate's heartbeat used to be 'teleop', which closed the gate ~1 s into
+#   every button-5 hold. It now watches the dedicated command_gate/heartbeat
+#   topic, which joy_teleop publishes at idle AND while buttons 4/5/9 are held
+#   (heartbeat_idle/heartbeat_deadman in joy_teleop.yaml) - so the handover
+#   survives with the watchdog active. The gate still closes ~1 s after the
+#   joystick disconnects or joy_teleop dies. --no-heartbeat remains only as a
+#   diagnostic escape hatch.
 
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -129,14 +132,16 @@ cat <<EOF
                     The MPC is outranked.
 
     Step 2  Release it and hold the AUTONOMOUS deadman (button 5).
-            Expect: teleop goes silent, and within ~0.1 s ackermann_drive
+            Expect: teleop goes silent, and within ~0.3 s ackermann_drive
                     starts mirroring $(ns_topic drive) instead.
 
-    Step 3  Keep holding button 5 for at least 3 s and watch
-            $(ns_topic vehicle/ackermann_cmd).
-            PASS  it keeps flowing  -> the gate stays open, handover works
-            FAIL  it stops at ~1 s  -> the command_gate heartbeat closed the
-                  gate because 'teleop' went silent. Rerun with --no-heartbeat.
+    Step 3  Keep holding button 5 for at least 3 s and ECHO THE VALUES of
+            $(ns_topic vehicle/ackermann_cmd):
+                ros2 topic echo $(ns_topic vehicle/ackermann_cmd) --field drive
+            (hz cannot detect a closed gate - it publishes zeros at full rate)
+            PASS  values keep tracking your MPC command for the whole hold
+            FAIL  values go to zero at ~1 s -> the command_gate heartbeat died;
+                  check command_gate/heartbeat is flowing (bug-048 regression).
 
     Step 4  Release everything.
             Expect: the mux falls through to 'safety' (zero speed) and the car

@@ -105,7 +105,7 @@ def launch_setup(context, *args, **kwargs):
 
     require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
-    autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[5]")
+    autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[10]")  # SDL DualSense: R1=10 (PS/guide=5 — never use 5, it's the power-off button)
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
     max_steering = LaunchConfiguration('max_steering', default=0.34)

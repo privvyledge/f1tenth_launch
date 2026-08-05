@@ -2,9 +2,13 @@
   ros__parameters:
     num_channels: 1
     require_heartbeat: true
-    heartbeat_timeout: 1.0
-    heartbeat_topic: teleop
-    heartbeat_type: ackermann_msgs/msg/AckermannDriveStamped
+    heartbeat_timeout: 0.5  # worst measured heartbeat gap 0.136 s (2026-08-05); shrinks post-heartbeat-loss motion to ~0.2-0.35 s. Must stay well above the joystick's worst-case publish interval (bug-049 rule).
+    # Dedicated heartbeat published by joy_teleop (heartbeat_idle/heartbeat_deadman in
+    # joy_teleop.yaml). Do NOT point this back at `teleop`: teleop goes silent by design
+    # while button 5 is held (that silence triggers the mux handover), so a teleop
+    # heartbeat closes the gate ~1 s into every autonomous handover (bug-048).
+    heartbeat_topic: command_gate/heartbeat
+    heartbeat_type: std_msgs/msg/Float64
     require_enable: false
     enable_topic: ~/enable
     channel_0:

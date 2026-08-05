@@ -48,7 +48,34 @@
       type: topic
       interface_type: std_msgs/msg/Int8
       topic_name: /dev/null
-#      deadman_buttons: [5]  # Commented out here to enable overriding via launch files
+#      deadman_buttons: [10]  # R1 in SDL mapping (L1=9, R1=10, PS=5, Share=4). Commented out here to enable overriding via launch files
       message_value:
         data:
           value: 0
+
+    # command_gate heartbeat: proves joy_teleop is alive and joystick data is flowing,
+    # on a topic that carries no commands. Two commands because a no-deadman command is
+    # active only when zero buttons are pressed ('default' pseudo-button) and ROS 2
+    # param arrays cannot mix 'default' with button ints. Union covers idle, manual
+    # driving (4/9), and button-5 autonomous — so the heartbeat survives the handover
+    # while `teleop` still goes silent (which is what triggers the mux handover).
+    heartbeat_idle:
+      type: topic
+      interface_type: std_msgs/msg/Float64
+      topic_name: command_gate/heartbeat
+      axis_mappings:
+        data:
+          axis: 1
+          scale: 0.0
+          offset: 0.0
+
+    heartbeat_deadman:
+      type: topic
+      interface_type: std_msgs/msg/Float64
+      topic_name: command_gate/heartbeat
+      deadman_buttons: [4, 9, 10]  # kept in sync with human/autonomous deadman overrides by joystick.launch.py; NEVER include 5 (SDL: PS/guide button — power-off long-press must not hold the gate open)
+      axis_mappings:
+        data:
+          axis: 1
+          scale: 0.0
+          offset: 0.0

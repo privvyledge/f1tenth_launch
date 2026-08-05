@@ -1460,3 +1460,58 @@ as an outcome metric unless it resurfaces.
 - Log volume: `run_lo3` reached **754 MB in 34 min**, dominated by `vesc_driver_node` (468 k lines,
   VESC unpowered) and joy/mux nodes (205 k lines each, joystick off). Container `/` is on the NVMe, so
   the SD card is not at risk, but long runs need `--log-level` tuning or rotation.
+
+## FIX RECORD — 2026-08-04 (bug-048: dedicated command_gate heartbeat; awaiting on-robot verification)
+
+**Change (user signed off):** the gate heartbeat no longer piggybacks on `teleop`. joy_teleop now
+publishes `std_msgs/Float64` to a dedicated `command_gate/heartbeat` topic via two commands in
+`joy_teleop.yaml` — `heartbeat_idle` (no deadman → the fork's `'default'` pseudo-button, active only
+when zero buttons are pressed) and `heartbeat_deadman` (`deadman_buttons: [4, 5, 9]`, kept in sync
+with the deadman launch args by `joystick.launch.py`). `command_gate.yaml` repoints
+`heartbeat_topic`/`heartbeat_type` accordingly. Union covers idle, manual driving, and the button-5
+hold, so the handover survives with the watchdog ACTIVE; the heartbeat still exists only once
+joy_teleop (slow Python node, estop pathway) is up and receiving joy data — the startup property is
+unchanged. `teleop` untouched → mux handover mechanism unchanged.
+
+**Verification checklist (gosling1, car elevated, wheels clear, MAX_SPEED=1.0; deploy via
+`docker cp` — container has no network; confirm exactly one `vesc_driver` process first):**
+
+1. Heartbeat coverage — `rate_monitor.py` (add `command_gate/heartbeat`): continuous ~12–20 Hz at
+   idle, holding 4, and holding 5; `teleop` must still go silent under button 5.
+2. Handover A/B (the bug-048 repro, self-synchronizing) — `command_gate_require_heartbeat:=True`,
+   1.0 m/s on `drive`, hold button 5 ~10 s, record with `gate_monitor.py`, find the press in the
+   data (`teleop` silence marks it). PASS = `vehicle/ackermann_cmd` VALUES track the drive command
+   for the entire hold (echo values — a closed gate publishes zeros at full rate, hz is blind to it)
+   and zero within the mux timeout after release.
+3. Startup property — gate log shows `Gate OPEN — heartbeat received` only after joy_teleop is up;
+   before that, publishing on `drive` must leave `vehicle/ackermann_cmd` at zero.
+4. Watchdog still bites — power off the controller (and separately kill joy_teleop) while the gate
+   is open: values zero within ~1 s, `Gate CLOSED — heartbeat timeout` logged.
+5. Regression — normal manual teleop (deadman held) unaffected.
+
+Residual quirk (same as pre-fix behavior): holding only a button outside {4, 5, 9} for >1 s closes
+the gate until release; recovers within one heartbeat message.
+
+### bug-048 verification — 2026-08-05 (gosling1, wheels clear, MAX_SPEED=1.0) — PASS
+
+Three instrumented runs (`/mnt/f1tenth_ssd/shared_dir/bug048_run{1,2,3}.csv`, recorded with
+`hb_monitor.py`, self-synchronizing — button presses located from joy bitstrings in the data):
+
+- **Run 1 exposed bug-056**: the legacy deadman config predated the SDL mapping. Humble `joy` on the
+  DualSense maps **L1=9, R1=10, PS/guide=5, Share=4** (not L1=4/R1=5). So `[5]` had made the PS
+  button the autonomous deadman: R1 (index 10) killed the heartbeat (gate closed at +1.09 s — the
+  bug-048 signature), while holding PS sustained 1.0 m/s for a full 10 s hold **including during the
+  power-off long-press**. Fix: `autonomous_deadman_buttons` → `"[10]"` in bringup/teleop/mapping/
+  joystick launch files (parents pin the default — child-only fixes are silently overridden;
+  launch-config inheritance), heartbeat union → `[4, 9, 10]`. Never put 5 in any deadman/heartbeat
+  list.
+- **Run 2 (correct buttons, timeout 1.0 s)**: R1 16.1 s hold → 15.76 s at speed ending at release;
+  PS presses → 0.76–0.91 s blips; power-off → 0.86 s blip then zeros. The "~2 s" perceived overrun
+  is unpowered coast-down; commanded motion is bounded by mux 0.3 s + heartbeat 1.0 s + ≤0.25 s tick.
+- **Run 3 (timeout 0.5 s, user-approved)**: R1 12.9 s hold → 12.59 s at speed, ending exactly at
+  release (no false trips; worst alive heartbeat gap 0.136 s, p99 0.101 s); PS press → **0.23 s**
+  blip; controller power-off → one **0.21 s** blip then zeros permanently.
+
+All five checklist items pass (coverage, handover A/B, startup gating, watchdog on joystick loss,
+manual-teleop regression). Deployed values: `heartbeat_topic: command_gate/heartbeat`,
+`heartbeat_type: std_msgs/msg/Float64`, `heartbeat_timeout: 0.5`, mux joystick timeout 0.3 s.

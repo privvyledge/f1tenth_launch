@@ -24,7 +24,7 @@
         # second while parked, letting `navigation` (drive) take the vehicle for
         # a few ms at a time -- an unbidden servo twitch with no button pressed
         # whenever an MPC/Nav2 was publishing. 0.3 s is ~3x the observed worst
-        # case and still well under command_gate's 1.0 s heartbeat, so the
+        # case and still under command_gate's 0.5 s heartbeat timeout, so the
         # killswitch behaviour is unchanged.
         timeout : 0.3
         priority: 100
