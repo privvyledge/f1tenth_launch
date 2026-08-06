@@ -442,6 +442,34 @@ exactly once) — that is real logic and would be the first actual node in this
 otherwise pure-launch package. Do not write it speculatively; wait for the PF
 measurements and see whether the auto-init path is even used.
 
+**Do NOT ask the PF to publish its own estimate to `/initialpose` or `set_pose`.**
+It looks like it would remove the need for that node. It would not:
+
+- **`/initialpose` is an input the PF itself consumes** — it is what triggers the
+  coarse-to-fine global localization (see `localizer_pf.yaml`), so publishing its
+  own result there re-triggers its own relocalization. `nav2_amcl` subscribes as
+  well, so it would also be commanding AMCL to jump. And it gives one topic two
+  opposite meanings: "something external asserts the robot is here" (a command)
+  versus "the localizer estimates the robot is here". That is the same defect
+  this package already fixed on `cmd_vel`, where the executed-command echo had to
+  move to `vehicle/cmd_vel_executed`.
+- **`set_pose` RESETS the filter.** Published on every relocalization it would
+  make `ekf_map` a pass-through with repeated resets — discarding covariance and
+  history each time and spiking `map->odom`. Strictly worse than not seeding. It
+  also would not reach `ekf_map` at all while `seed_from_initialpose` is `True`,
+  since the filter is then listening on `initialpose`.
+
+**The contract to ask the PF for instead:** publish the pose on its own normal
+pose topic with an honest covariance — large while searching, small once
+converged. Then point `ekf_map`'s `pose0` at that topic here. That is the
+ordinary measurement path: continuous, covariance-weighted, no resets, no new
+node. `ekf_map.yaml` already anticipates it (`pose0: amcl_pose  # replace with pf
+topic when that is working`).
+
+If the PF instead becomes the map-frame broadcaster (`map_tf_publisher:='pf'`),
+`ekf_map` leaves the delivery path entirely and this question is moot for the
+deliverable.
+
 ---
 
 ## What changed in the repo
