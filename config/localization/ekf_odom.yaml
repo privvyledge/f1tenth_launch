@@ -171,19 +171,33 @@
     odom3_twist_rejection_threshold: 3.0
 
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
-    # the VESCs yaw drifts a lot. Will need to remove this bias after calibrating or set yaw to false below. Todo: set to true after calibrating
     # topics: /vehicle/sensors/imu/raw, /vehicle/sensors/imu/data
     imu0: vehicle/sensors/imu/raw
     imu0_config: [false, false, false,
-                  true,  true,  true,   # roll, pitch, yaw — VESC 6 75 MkII has magnetometer;
-                                        # firmware runs Madgwick internally → quaternion is globally
-                                        # referenced and wrap-free. two_d_mode ignores roll/pitch.
+                  true,  true,  false,  # roll, pitch, YAW DISABLED — measured 2026-08-06,
+                                        # parked: this quaternion's yaw free-runs at -13.99 deg/min
+                                        # and dragged odometry/local with it at -13.94. Root cause is
+                                        # a stable +0.00434 rad/s z-gyro bias (two windows, 0.9% apart)
+                                        # that the VESC's onboard Madgwick integrates unchecked:
+                                        # vehicle/sensors/imu/mag publishes 100 Hz of identical zeros,
+                                        # so there is NO magnetometer and yaw has no absolute reference.
+                                        # It still advertises orientation_covariance yaw = 0.005, which
+                                        # is why the EKF preferred it over Isaac VSLAM (+0.07 deg/min).
+                                        # Yaw now comes from odom1 (VSLAM) and odom2 (rf2o, +1.94).
+                                        # Do NOT re-enable by "calibrating a gyro offset": the VESC
+                                        # computes this quaternion onboard, and the angular-rate entries
+                                        # below are false, so an imu_corrector offset changes nothing.
+                                        # two_d_mode ignores roll/pitch.
+                                        # VERIFIED on the floor, on battery, 2026-08-06: three parked
+                                        # windows gave odometry/local +0.04, +0.01 and +0.17 deg/min,
+                                        # against the -13.94 baseline. Re-measure with
+                                        # scripts/live_runs/yaw_drift.py after touching imu0/imu1.
                   false, false, false,
                   false,  false,  false,
                   false,  false,  false]
     imu0_nodelay: false
-    imu0_differential: false  # use absolute orientation from VESC firmware's Madgwick output
-    imu0_relative: true       # discard magnetic-north initial offset so EKF frame ≠ magnetic north
+    imu0_differential: false  # roll/pitch only now; both are gravity-referenced and do not drift
+    imu0_relative: true       # discard initial offset so EKF frame ≠ IMU power-on frame
     imu0_queue_size: 10
     imu0_pose_rejection_threshold: 0.5   # gate magnetic interference spikes
 
@@ -201,6 +215,12 @@
     imu1_nodelay: false
     imu1_differential: false  # false
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.
+    # NOTE (2026-08-06): with imu0 yaw disabled above, this IMU's vyaw is the only
+    # gyro-rate input to yaw. Parked, its z-gyro sits at -0.00202 rad/s (-6.94 deg/min),
+    # so it could in principle walk the heading unless odom1 (VSLAM) and odom2 (rf2o)
+    # hold it. Measured on the floor 2026-08-06: they do — odometry/local stayed within
+    # +/-0.17 deg/min across three parked windows, so no vyaw bias correction is needed.
+    # Re-measure parked with scripts/live_runs/yaw_drift.py after any change here.
     imu1_queue_size: 20
     imu1_remove_gravitational_acceleration: true  # false
 #    imu1_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
