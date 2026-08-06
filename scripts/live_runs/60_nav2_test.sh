@@ -41,6 +41,14 @@ fi
 CMD_VEL_TOPIC=cmd_vel
 $DRY_RUN && CMD_VEL_TOPIC=cmd_vel_nav2
 
+# Nav2 speaks Twist; the vehicle takes AckermannDriveStamped. twist_to_ackermann
+# is the only bridge (cmd_vel -> drive -> mux -> command_gate -> VESC) and it
+# defaults False because the MPC publishes `drive` directly. Without it a live
+# Nav2 run plans, controls and commands perfectly while the car never moves.
+# Off in a dry run, where the point is that nothing reaches the actuation chain.
+TWIST_TO_ACKERMANN=True
+$DRY_RUN && TWIST_TO_ACKERMANN=False
+
 print_env
 ensure_dirs
 info "map: $MAP"
@@ -75,6 +83,7 @@ start_stack() {
       localize_isaac_vslam_on_startup:="$VSLAM_LOCALIZE_ON_STARTUP" \
       launch_navigation:=True \
       cmd_vel_topic:="$CMD_VEL_TOPIC" \
+      launch_twist_to_ackermann:="$TWIST_TO_ACKERMANN" \
       launch_2d_mapping:=False \
       launch_3d_mapping:=False \
       launch_command_gate:=True \

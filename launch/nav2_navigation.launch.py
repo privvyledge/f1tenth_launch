@@ -139,6 +139,14 @@ def launch_setup(context, *args, **kwargs):
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings),
         # Executes recovery behaviors (spin, backup, wait) when the robot gets stuck.
+        # The cmd_vel remap is not decoration. nav2_behaviors creates its velocity
+        # publisher on the relative name 'cmd_vel' (timed_behavior.hpp), and upstream
+        # navigation_launch.py does not remap it — so a recovery's velocity bypasses
+        # cmd_vel_topic entirely. Measured 2026-08-06 on a bag replay: with the
+        # smoother diverted to cmd_vel_nav2 for a dry run, a BackUp still put 0.5 m/s
+        # onto cmd_vel, which on the car reaches twist_to_ackermann and moves it. In
+        # live mode cmd_vel_topic IS cmd_vel and this remap is a no-op, so the only
+        # thing it changes is that a diverted run is actually diverted.
         Node(
                 condition=IfCondition(launch_behavior_server),
                 namespace=node_ns,
@@ -150,7 +158,7 @@ def launch_setup(context, *args, **kwargs):
                 respawn_delay=2.0,
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings),
+                remappings=remappings + [('cmd_vel', cmd_vel_topic_str)]),
         # Orchestrates navigation via a behavior tree: planner → controller → recoveries.
         Node(
                 condition=IfCondition(launch_bt_navigator),
@@ -259,7 +267,9 @@ def launch_setup(context, *args, **kwargs):
                     name='behavior_server',
                     namespace=node_ns,
                     parameters=[configured_params],
-                    remappings=remappings))
+                    # See the non-composable behavior_server above for why cmd_vel
+                    # is remapped here and nowhere upstream.
+                    remappings=remappings + [('cmd_vel', cmd_vel_topic_str)]))
 
     if launch_bt_navigator.perform(context).lower() == 'true':
         composable_node_descriptions.append(
