@@ -1,17 +1,82 @@
 # Next session — START HERE
 
-**Updated 2026-08-06 ~11:00 EDT.** Item 3 below (the MPC's jerky pose) was
+**Updated 2026-08-06 ~12:35 EDT.** Item 3 below (the MPC's jerky pose) was
 answered NO in `LOCALIZER_FOLLOWUPS.md` §5 — **and then reopened and answered YES
 in §6**: with B's fix `ekf_map` matches AMCL on smoothness and beats it on
 accuracy. `deliverables/20260805/` is still frozen v1 with checksums verified.
 
-## Both offline tasks are DONE. Go to items 1 and 2 — the live tests.
+`gosling1` is clean as of 12:30 — zero live ROS node processes, nothing holding
+the VESC, LiDAR or joystick. Commits from this session, on `perf/config-tuning`:
+`58a700a` (the `ekf_map` motion model), `5613acd`, `be34807`, `a2f43cb` (docs).
 
-**A is DONE** (seeding, commit `bab2172`) and **B is DONE** (the motion model,
-below). The offline work on `ekf_map` has run out of untested levers worth
-pulling, and everything measured so far is bag replay. The car was free from
-~10:45 EDT, so **item 1 (live bringup) and item 2 (the first Nav2 goal) are now
-the priority over anything else in this file.**
+## START HERE: test Nav2 on a rosbag, on your own ROS_DOMAIN_ID
+
+**The car is NOT available** — coworkers have `gosling1` from ~12:30 EDT. Do not
+launch anything that touches `/dev/sensors/vesc`, `/dev/ydlidar` or the joystick.
+
+**Nav2 has still never been tested.** A bench bringup on 2026-08-06 ~11:30
+established only that the stack *comes up*: all eight servers present exactly
+once, `map_server` publishing `/map`, both costmaps up, preflight clean. **No
+goal was ever sent**, so planning, control, the BT and the recovery behaviours
+are all still untested and there is no verdict on any of them. `cmd_vel_nav2`
+read `NO DATA` throughout, which is correct with no goal pending and therefore
+proves nothing.
+
+### The job: drive Nav2 from a bag instead of the car
+
+`mapping_drive_170025` supplies everything Nav2 needs except a goal —
+`odom->base_link` TF, `lidar/scan_filtered` for the local costmap, and
+`odometry/local`. Add `map_server` + a localizer for `map->odom` and the whole
+planning stack is exercised without a vehicle.
+
+Start from `51_localize_offline.sh`, which already does the replay, the
+localizer and the seeding correctly, and add the Nav2 servers plus a goal.
+`60_nav2_test.sh --dry-run` is the other half — it launches Nav2 with the
+velocity smoother diverted to `cmd_vel_nav2`, which is exactly the right output
+for a bag test.
+
+**Isolate the domain first.** Another agent works this machine and the default
+is `ROS_DOMAIN_ID=0` for everyone; on 2026-08-06 a live bench stack and another
+agent's `use_sim_time:=True` replay ran on domain 0 in the *same container* and
+contaminated each other silently. The offline scripts already use **42**, and
+the other agent may also be on it, so pick something else — **51** is unused —
+and keep the loopback-only DDS config so nothing escapes to the network:
+
+```bash
+export ROS_DOMAIN_ID=51
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+```
+
+Check for other stacks **from the host**, not from inside a container — a
+container's `ps` only sees its own PID namespace and will tell you it is alone:
+
+```bash
+ps -eo pid,etime,cmd | grep "[r]os2 launch"
+```
+
+**What the bag test can and cannot prove.** The bag drives the pose, so the loop
+is open: the controller will keep steering toward the path from wherever the bag
+has put the car, and the goal will never be reached. That is fine — it is not
+what is being tested. Judge it on: does `bt_navigator` accept the goal; does
+`planner_server` return a path through free space in a sane time (the 5 s
+`max_planning_time` applies); does `controller_server` emit continuous, bounded
+`cmd_vel_nav2`; do the recovery behaviours fire when they should and not when
+they should not; and does anything crash, spin at 100 % CPU, or hang the
+lifecycle manager. Closed-loop goal-reaching needs the car and stays deferred.
+
+**Two known gaps to fix before the live version of this test:**
+- `60_nav2_test.sh` never passes `launch_twist_to_ackermann:=True`, so in live
+  (non-`--dry-run`) mode Nav2's `cmd_vel` never reaches `drive` and the car
+  cannot move under Nav2. Harmless for the bag test, fatal for the real one.
+- A live bringup runs the map EKF at the launch default of **10 Hz**
+  (measured: `odometry/global` at 10.002 Hz), not the 30 Hz B was measured at.
+  Pass `map_frequency:=30.0` if you want what section 6 reports.
+
+### Still deferred to when the car is free
+
+**Item 1 (live bringup) and item 2 (the first Nav2 goal)** below. `A` (seeding,
+`bab2172`) and `B` (the motion model, `58a700a`) are both DONE and the offline
+work on `ekf_map` has run out of levers worth pulling.
 
 Runs kept for comparison: `bags/20260805/loc_ekfseed_*` (A's result),
 `loc_ekflocal_*` (B's, current HEAD — now on all three bags).
@@ -351,7 +416,15 @@ all of it:
 §9 "Send a navigation goal" has never been ticked, and it is now unblocked: there
 is a map, a localizer that clears the bar, and a command gate whose R1 handover is
 verified. Remember `launch_twist_to_ackermann:=True` when driving under Nav2 —
-it defaults False because the MPC publishes `drive` directly.
+it defaults False because the MPC publishes `drive` directly, and
+`60_nav2_test.sh` does not pass it.
+
+**Status 2026-08-06 ~11:30: still not done, and no verdict.** A bench bringup
+(car on a table, no battery) got as far as: all eight servers present exactly
+once, `/map` published, both costmaps up, preflight clean. **No goal was sent**
+— planning, control, the BT and the recoveries are untested. Do the bag-based
+version described at the top of this file first; it needs no vehicle and will
+surface the crash-and-hang class of bug before the car is on the ground.
 
 **3. DONE 2026-08-06 — and after three fixes `ekf_map` IS a live option.
 See `LOCALIZER_FOLLOWUPS.md` §6.** As configured it was far *worse* than AMCL
