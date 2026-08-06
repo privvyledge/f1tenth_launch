@@ -1,4 +1,143 @@
-# Next session — the map-frame deliverable is BUILT and VERIFIED
+# Next session — START HERE
+
+**Updated 2026-08-06 ~09:50 EDT.** Item 3 below (the MPC's jerky pose) is done and
+answered NO; see `LOCALIZER_FOLLOWUPS.md` §5. Everything else in this file still
+stands, and `deliverables/20260805/` is still frozen v1 with checksums verified.
+
+## Your first 30 minutes are BAG-ONLY — the car is not available
+
+The operator's coworkers have `gosling1` for roughly an hour from 09:45 EDT. The
+live bringup and the first Nav2 goal (items 1 and 2) are **deferred**, not
+dropped. Offline bag replay on the SSD is still fine and is what to do meanwhile.
+
+**Do this, in this order — both are offline passes on the frozen control bag,
+~4 min each, and both are set up and ready:**
+
+### A. Fix bug-111 — seed `ekf_map`
+
+Verified in the image (`privvyledge/f1tenth:humble-devel-08052026`):
+`robot_localization`'s `ekf_node` **does** expose two seeding paths, and neither
+is `/initialpose`:
+
+| | |
+|---|---|
+| topic | `set_pose`, node-relative -> `/gosling1/set_pose`, `geometry_msgs/PoseWithCovarianceStamped` |
+| service | `set_pose`, `robot_localization/srv/SetPose` |
+| YAML | **none** — there is no `initial_state` parameter in this build, so it cannot be seeded from a config file at all |
+
+`seed_initialpose.py` publishes only to `/initialpose`, which nav2_amcl consumes
+and `robot_localization` ignores. Extend it to publish the same pose to
+`set_pose` as well, reusing the existing sim-time stamp-0 handling (the wall-clock
+trap in `MAP_FRAME_DELIVERY.md` applies identically here). Sequence it after
+`/clock` exists and after `odom->base_link` is available, exactly as the AMCL seed
+already is.
+
+**This gap is not offline-only.** RViz's "2D Pose Estimate" button also publishes
+`/initialpose` and nothing else, so on the car `ekf_map` is equally unseeded and
+equally silent about it. The durable fix belongs in the launch or a small node,
+not only in the offline script.
+
+Verify: `check_map_frame.py` should report `first map pose` at the seed
+(`+0.445, -0.575, -79.82 deg`) instead of the origin, and the full-run and
+`--skip 35` numbers should converge on each other.
+
+### B. Give `ekf_map` a motion model that matches what it is differenced against
+
+This is the highest-value remaining change and it explains why `ekf_map` still
+lost after the `vyaw` fix. The filter estimates `map->base_link`; `map->odom` is
+published as `(map->base_link) o (odom->base_link)^-1`, and that second term comes
+from **`ekf_odom`** — a different filter with a much better motion model (2 IMUs +
+rf2o + VESC at 30 Hz). `ekf_map` meanwhile dead-reckons on `vehicle/vesc_odom`
+velocities alone, since IMUs are excluded from it by design. **Every disagreement
+between the two motion models lands in `map->odom` at 30 Hz even when the
+localizer has said nothing new** — and VESC odometry is the known-bad one here
+(1.6-1.7 m divergence, ~25 deg of yaw drift per 150 s run; see carried-forward
+item 3).
+
+AMCL has no such problem: it looks up the *actual* `odom->base_link` from TF and
+differences its own pose against it, so its correction is consistent by
+construction with the transform the consumer composes.
+
+So: **change `odom0` from `vehicle/vesc_odom` (velocities) to `odometry/local`
+(the odom EKF's own output) fused differentially**, which makes the map EKF's
+prediction identical to the transform it is differenced against. Measure it the
+same way. If that closes most of the gap to AMCL's 15.7 mm step p95, `ekf_map`
+becomes a real option for the MPC; if it does not, the ZOH answer stands and
+`ekf_map` should be left off the map-frame path for good.
+
+After B, the next candidates are `pose0_rejection_threshold` (2.0 Mahalanobis —
+rejections leave it coasting on dead reckoning, then jumping) and `sensor_timeout`
+(0.13 s against an 0.118 s `amcl_pose` interval, so a single dropped scan trips
+it). Do not touch those until A and B are measured.
+
+### How to run either one
+
+The 2026-08-06 container was removed; recreate it and re-stage, because the image
+predates the fixes (see "Container and staging" below). Then:
+
+```bash
+export ROS_DOMAIN_ID=42
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+export MAP_ROOT=/mnt/shared_dir/maps/20260805
+export BAG_ROOT=/mnt/shared_dir/bags/20260805
+cd /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs
+./51_localize_offline.sh --bag $BAG_ROOT/mapping_drive_170025 \
+    --publisher ekf --map-frequency 30.0 --out loc_<name>_mapping_drive_170025
+
+cd ../analysis
+python3 check_map_frame.py $BAG_ROOT/loc_<name>_mapping_drive_170025 \
+    --map $MAP_ROOT/rtabmap_2d_final.yaml \
+    --truth $MAP_ROOT/truth_mapping_drive_170025.csv --skip 35
+```
+
+**Beat this table or the answer does not change** (steady state, `--skip 35`):
+
+| | mean err | step p95 | step max | inside 126 mm |
+|---|---|---|---|---|
+| **AMCL direct — the target** | **74.7 mm** | **15.7 mm** | **59.6 mm** | **85.2 %** |
+| ekf_map as configured | 125.0 mm | 83.5 mm | 920.1 mm | 66.9 % |
+| ekf_map + `vyaw` (current HEAD) | 85.2 mm | 37.3 mm | 288.5 mm | 79.9 % |
+
+Report **`correction step p95` and `max`** every time — smoothness is the
+complaint, not mean error. Always report the unskipped number too; the startup
+transient is real until A lands.
+
+Kept for comparison: `bags/20260805/loc_ekf30_*` (as configured),
+`loc_ekf30nv_*` (`--no-vslam`), `loc_ekfvyaw_*` (with the fix).
+
+## Container and staging — READ BEFORE RUNNING ANYTHING
+
+`privvyledge/f1tenth:humble-devel-08052026` was built 2026-08-05 14:19, which is
+**before** commits `e974a93`, `e28b2b4` and `58d1ae0`. Its
+`/workspaces/f1tenth` is in the container filesystem, not a bind mount, so a
+fresh container starts with a stale workspace — verified on 2026-08-06, it had
+`pose0_relative: true`, `max_particles: 500` and no `fuse_vslam_global`.
+
+`/mnt/shared_dir/handoff/fix_0806.tar.gz` holds the current versions of the six
+changed launch/config files plus the live-run and analysis scripts. Extract it
+over `/workspaces/f1tenth/src/f1tenth_launch` and re-verify; `install/` symlinks
+into `src/`, so no rebuild is needed. **Regenerate that tarball from HEAD** if you
+change anything, and verify what you extracted rather than assuming.
+
+Container creation: the operator's `~/bolus_ws/f1tenth_launch.sh` is `-it --rm`
+and dies with its terminal. For unattended work use the detached recipe in
+`DRIVE_SESSION_HANDOFF.md` "Rule 1". No hardware is needed for A or B, so the
+device/X11 flags do not matter for them — but **do not** reuse the offline
+container for a live bringup; create that one with the operator's script.
+
+## Also in flight
+
+- **`particle_filter` is being measured by a separate Claude**, who will report
+  back. Their brief is item 4 below. Do not duplicate that work. When their number
+  arrives it is directly comparable to the table above only if they scored with
+  `check_map_frame.py --truth truth_mapping_drive_170025.csv` on
+  `mapping_drive_170025`; check that before comparing.
+- Expect them to find the same seeding class of problem if they route through
+  `ekf_map` — `pose0` is `amcl_pose`, so a PF would need rewiring there anyway.
+
+---
+
+# Background — the map-frame deliverable is BUILT and VERIFIED
 
 **Recording is done (2026-08-05 16:54–17:40). Maps are built (18:00–19:55).
 All three runs are localized into one map frame and the derived bags are
