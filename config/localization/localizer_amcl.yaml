@@ -1,5 +1,35 @@
 # Description: https://navigation.ros.org/configuration/packages/configuring-amcl.html
 # Things to tune: alpha*, laser_model_type, robot_model_type, sigma_hit, z_hit
+#
+# TUNING FOLDED IN FROM localizer_amcl_mapframe.yaml, 2026-08-05, ON MEASUREMENT.
+# ------------------------------------------------------------------------------
+# The old values here never converged on the raslab map: scored against RTABMap's
+# optimized graph on mapping_drive_170025 they gave 267 mm mean / 534 mm p95, with
+# AMCL reporting its own sigma as 419 mm / 16.7 deg. The likelihood field was far
+# too flat for a 0.05 m grid with only 1732 occupied cells — sigma_hit 0.4 smeared
+# each beam over 8 cells, z_rand 0.5 put half the probability mass on "noise", and
+# max_beams 90 kept one beam in seven of the X4's ~625.
+#
+# The values below are the ones measured at 64.7 mm mean / 143.5 mm p95, 87.3 % of
+# samples inside the 126 mm bar, converged sigma 75/66 mm and 4.45 deg. That is the
+# configuration the 2026-08-05 map-frame deliverable was produced with
+# (MAP_FRAME_DELIVERY.md); localizer_amcl_mapframe.yaml is kept unchanged as its
+# provenance.
+#
+# THE PARTICLE COUNT AND update_min_d ARE PART OF THE PACKAGE — do not fold in the
+# likelihood parameters alone. Measured: sharpening sigma_hit / z_hit / z_rand /
+# max_beams while leaving the old 100-500 particles and 0.2 m update gate makes the
+# filter WORSE (345 mm mean, sigma still 150 mm / 10.2 deg) — indistinguishable from
+# having no localizer at all. A sharper likelihood field needs enough particles to
+# sample it and enough updates to exploit it.
+#
+# CPU on the Orin Nano, measured from /proc during a 1.0x replay of the control bag
+# (same 8.5 Hz scan rate as live): mean 4.1 %, peak 20.4 % OF ONE CORE, 21 MB RSS.
+# The pre-fold config cost 1.8 %. The cost of this accuracy is ~2 % of one of six
+# cores, which is why the particle count was raised rather than left as a CPU-budget
+# compromise. See scripts/live_runs/LOCALIZER_FOLLOWUPS.md.
+#
+# NOT folded in, because they are replay-specific: use_sim_time, set_initial_pose.
 /**: # amcl:
   ros__parameters:
     use_sim_time: False
@@ -9,6 +39,9 @@
       y: 0.0
       z: 0.0
       yaw: 0.0
+    # Motion model. odom->base_link comes from the 30 Hz EKF fusing VESC + rf2o +
+    # two IMUs, which is good dead reckoning between updates — keep the process
+    # noise low and let the measurement do the correcting.
     alpha1: 0.05  # 0.3
     alpha2: 0.05  # 0.3
     alpha3: 0.05  # 0.3
@@ -21,33 +54,37 @@
     do_beamskip: false
     global_frame_id: "map"
     lambda_short: 0.1
-    laser_likelihood_max_dist: 4.0  # 2.0, 5.0
+    laser_likelihood_max_dist: 2.0  # was 4.0; beyond ~1 m nothing contributes at sigma_hit 0.15
     laser_max_range: -1.0 # -1.0, 12.0, 100.0
     laser_min_range: -1.0
     laser_model_type: "likelihood_field" # beam, likelihood_field, or likelihood_field_prob
-    max_beams: 90 # 360
-    max_particles: 500  # 2000
-    min_particles: 100  # 500
+    max_beams: 200  # was 90, of the X4's ~625
+    max_particles: 4000  # was 500
+    min_particles: 1000  # was 100
     odom_frame_id: "odom"
-    pf_err: 0.05
+    pf_err: 0.02  # was 0.05
     pf_z: 0.99
+    # No random-particle injection. Recovery from a kidnap is not currently wanted;
+    # raise recovery_alpha_slow/fast (0.001 / 0.1) if that changes.
     recovery_alpha_fast: 0.0  # 0.0, 0.1
     recovery_alpha_slow: 0.0  # 0.0, 0.001
     resample_interval: 1  # 1, 3
     robot_model_type: "nav2_amcl::DifferentialMotionModel" # nav2_amcl::DifferentialMotionModel, nav2_amcl::OmniMotionModel
     save_pose_rate: 0.5  # 0.5, 0.1
-    sigma_hit: 0.4  # 0.2. For noisy scans. Test values higher or lower than 0.2
+    # 0.15 m is 3 map cells: wide enough for the grid's own +-25 mm quantisation and
+    # the wall thickness, narrow enough that a 0.1 m pose error costs likelihood.
+    sigma_hit: 0.15  # was 0.4
     # tf_broadcast is overridden by localization.launch.py: true only when map_tf_publisher:='amcl'.
     # The launch file, not this file, decides which node owns map->odom. Keep this false so the
     # YAML never implies AMCL is the map-frame broadcaster (matches localizer_pf.yaml).
     tf_broadcast: false
     transform_tolerance: 1.0 # 0.2
-    update_min_a: 0.5  # -1.0 (disabled); motion-triggered to avoid continuous updates
-    update_min_d: 0.2  # -1.0 (disabled); motion-triggered to avoid continuous updates
-    z_hit: 0.35  # 0.5. For noisy scans. Test values higher or lower than 0.5
-    z_max: 0.05
-    z_rand: 0.5
-    z_short: 0.05
+    update_min_a: 0.1  # was 0.5
+    update_min_d: 0.05  # was 0.2; motion-triggered, but do not throw away the evidence
+    z_hit: 0.80  # was 0.35
+    z_max: 0.0  # unused by likelihood_field; zeroed so it cannot imply a beam model
+    z_rand: 0.20  # was 0.5
+    z_short: 0.0  # unused by likelihood_field
     scan_topic: lidar/scan_filtered # /lidar/scan_filtered
     map_topic: map
     first_map_only: false

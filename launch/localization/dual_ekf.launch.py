@@ -43,6 +43,7 @@ def generate_launch_description():
     map_node_name = LaunchConfiguration('map_node_name')  # ekf_filter_node, ukf_filter_node
     log_level = LaunchConfiguration('log_level')
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration')
+    fuse_vslam_global = LaunchConfiguration('fuse_vslam_global')
 
     # declare launch arguments
     stdout_linebuf_envvar = SetEnvironmentVariable(
@@ -112,6 +113,14 @@ def generate_launch_description():
             'gravitational_acceleration', default_value='9.80665',
             description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
+    # Only meaningful for the map EKF: see ekf_map.launch.py. Default off,
+    # matching localize_on_startup, so a fresh VSLAM origin is never fused as an
+    # absolute map-frame anchor.
+    declare_fuse_vslam_global = DeclareLaunchArgument(
+            'fuse_vslam_global', default_value='False',
+            description='Fuse visual_slam/vis/slam_odometry into ekf_map as an absolute '
+                        'map-frame anchor. Only valid when VSLAM is localized in a saved map.')
+
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
         PushRosNamespace(condition=IfCondition(use_namespace), namespace=namespace),
@@ -155,6 +164,7 @@ def generate_launch_description():
                     'namespace': '',
                     'publish_tf': publish_map_tf,
                     'gravitational_acceleration': gravitational_acceleration,
+                    'fuse_vslam_global': fuse_vslam_global,
                 }.items()
         )
     ])
@@ -181,6 +191,7 @@ def generate_launch_description():
     ld.add_action(declare_map_node_name)
     ld.add_action(declare_log_level_cmd)
     ld.add_action(declare_gravitational_acceleration)
+    ld.add_action(declare_fuse_vslam_global)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(kf_bringup_group)

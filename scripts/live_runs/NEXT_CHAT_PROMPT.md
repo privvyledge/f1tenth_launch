@@ -74,53 +74,46 @@ points at those exact files. Do not rebuild the map or re-record.
 Full provenance — commit, config, seed, MD5s — is in `MAP_FRAME_DELIVERY.md`
 under "Version and freeze status".
 
-## Start here — the operator assigned these three to this session (2026-08-05 21:36)
+## The three assigned items are DONE (2026-08-05 22:40) — read `LOCALIZER_FOLLOWUPS.md`
 
-**1. Measure the RTABMap localizer.** Still untested, as it has been since the
-map-build handoff. It was originally disabled on an *assumption* that it is too
-slow, never a measurement. Localize `mapping_drive_170025` against
-`rtabmap_final_nf.db` in localization mode and report two numbers: accuracy
-against `truth_mapping_drive_170025.csv` (same method as
-`check_map_frame.py --truth`, so it is directly comparable to AMCL's 65 mm mean
-/ 144 mm p95), and CPU on the Orin Nano's 6 cores. If it holds up it also keeps
-the 2D and 3D maps in one frame, and it can feed `rtabmap/localization_pose`
-into `ekf_map` as that file already intends.
+All three were worked and measured. **v1 is untouched and still stands**: nothing
+found here produced a better `map->odom`, so there is no v2 and no consumer needs
+telling.
 
-**2. The two `ekf_map.yaml` items.** Both were found by reading the config, not
-by a failure; the map-frame deliverable routed around them by broadcasting from
-AMCL directly. Neither has been changed — `ekf_map.yaml` is untouched.
+1. **RTABMap localizer — measured, does not work.** It had never been *able* to
+   work: its TF remap was written `SetRemap(src=['/tf','/tf_static'], dst=[...])`,
+   which launch concatenates into the single rule `-r /tf/tf_static:=tftf_static`,
+   so it ran with an empty TF tree (bug-107, **fixed**). With TF fixed it still
+   accepts zero loop closures: `rtabmap_final_nf.db` has an **empty visual
+   vocabulary** (bug-108) and against `rtabmap_final.db` every candidate fails
+   geometric verification (`Not enough inliers 0/15`). It publishes a perfectly
+   steady identity `map->odom` while failing — 344 mm mean error, all of it
+   un-removed odometry drift. Cost while achieving nothing: ~1 core and ~1 GB,
+   against AMCL's 3-4 % of one core. Reviving it is a `Vis/*` tuning job.
+2. **Both `ekf_map.yaml` items — resolved.** `pose0_relative` is now `false`.
+   `odom1` (VSLAM `slam_odometry`) is switched by the launch instead of the file:
+   new `fuse_vslam_global` arg, default off, set from `use_gpu AND
+   localize_on_startup`, plumbed `localization.launch.py -> dual_ekf ->
+   ekf_map.launch.py`. Verified in the container both ways.
+3. **AMCL tuning — folded in, all of it.** The partial fold-in the last session
+   proposed was measured and is *harmful*: sharpening the likelihood field while
+   keeping 100-500 particles scores 345 mm, worse than the 267 mm it replaced.
+   But the particle count turned out to cost **4.1 % of one core**, not the
+   assumed CPU problem — so the whole tuned configuration went into
+   `localizer_amcl.yaml` and was re-measured as the file the car will load:
+   **63.9 mm mean / 147.4 mm p95 / 88.4 % inside the bar**.
+   `localizer_amcl_mapframe.yaml` is left byte-for-byte unchanged as v1's
+   provenance.
 
-- **`pose0_relative: true` on `amcl_pose`.** robot_localization treats the first
-  measurement as the origin, which discards the absolute map pose in a filter
-  whose `world_frame` is `map`. This one looks straightforwardly wrong.
-- **`odom1` = `visual_slam/vis/slam_odometry`, `differential: false,
-  relative: false`** — i.e. an absolute map-frame anchor. **This is only wrong
-  under one startup mode.** Isaac VSLAM does persist a map
-  (`visual_slam_map_path`, `load_map`/`save_map`), so when it is localized into
-  a matching saved map `slam_odometry` genuinely is in a global frame and the
-  config is correct. It is wrong when VSLAM starts fresh — which is the default,
-  since `localize_on_startup` defaults to `False`, and is what these bags
-  recorded (VSLAM started at yaw ~0, ~54° off the real `odom` frame on
-  `mapping_drive_170025`). So decide it as a function of startup mode rather
-  than editing it flat. See bug-104.
+### What that leaves for the next session
 
-**3. Fold the AMCL tuning back into the live config, if it survives review.**
-`config/localization/localizer_amcl_mapframe.yaml` was created as a *separate*
-file rather than an edit to `localizer_amcl.yaml`, deliberately: the live values
-are defensible for driving on a Jetson and changing them alters on-car
-behaviour. The operator has now asked for the fold-in to be considered here.
-
-What the live config actually gets wrong on this map — it never converged,
-reporting its own sigma as 419 mm / 16.7°:
-- `sigma_hit: 0.4` smears each beam over 8 of the map's 0.05 m cells
-- `z_rand: 0.5` puts half the probability mass on "this reading is noise"
-- `max_beams: 90` of the X4's ~625, against only 1732 occupied cells
-
-`sigma_hit`, `z_hit`/`z_rand` and `max_beams` are close to free and are the ones
-worth folding in. **The particle count is not free** — the offline file runs
-1000–4000 against the live 100–500, and `update_min_d` 0.05 vs 0.2 raises the
-update rate five-fold. Benchmark on the Orin before moving those; the live
-numbers are a CPU-budget decision, not an oversight.
+- **Run the new `localizer_amcl.yaml` on the car.** Everything above is bag
+  replay. Confirm AMCL converges from its startup pose and `map->odom` is steady
+  while driving, and that `ekf_map` comes up with the new `fuse_vslam_global`
+  plumbing on a real bringup.
+- Optional: revive the RTABMap localizer by tuning `Vis/*` against
+  `rtabmap_final.db`. Only worth it if the 2D+3D single-frame property is wanted;
+  AMCL already clears the accuracy bar at a fraction of the cost.
 
 ## Also open
 

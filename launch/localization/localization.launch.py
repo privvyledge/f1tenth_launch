@@ -514,6 +514,16 @@ def launch_setup(context, *args, **kwargs):
                 'publish_map_tf': 'True' if map_tf_publisher_str.lower() == 'ekf' else 'False',
                 'map_frequency': map_frequency,
                 'gravitational_acceleration': gravitational_acceleration,
+                # ekf_map's odom1 (visual_slam/vis/slam_odometry) is fused as an
+                # ABSOLUTE map-frame anchor, which is only true when VSLAM was
+                # started localized into a saved map. That needs the GPU path AND
+                # localize_on_startup; otherwise VSLAM's origin is wherever the car
+                # woke up (~54 deg off odom on the 2026-08-05 bags) and fusing it
+                # absolutely drags map->odom. See ekf_map.yaml and bug-104.
+                'fuse_vslam_global': 'True' if (
+                        use_gpu.perform(context).lower() == 'true'
+                        and localize_on_startup.perform(context).lower() == 'true'
+                ) else 'False',
             }.items()
     )
 

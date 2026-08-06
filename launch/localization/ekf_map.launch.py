@@ -33,6 +33,7 @@ def generate_launch_description():
     frequency = LaunchConfiguration('frequency')
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration')
+    fuse_vslam_global = LaunchConfiguration('fuse_vslam_global')
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -108,6 +109,24 @@ def generate_launch_description():
             'gravitational_acceleration', default_value='9.80665',
             description='Gravitational acceleration (m/s^2). Calibrate per robot.')
 
+    declare_fuse_vslam_global = DeclareLaunchArgument(
+            'fuse_vslam_global', default_value='False',
+            description='Fuse visual_slam/vis/slam_odometry as an ABSOLUTE map-frame '
+                        'anchor (ekf_map.yaml odom1). Only true when Isaac VSLAM was '
+                        'started localized into a saved map that matches this '
+                        'environment; a fresh VSLAM origin is not the map frame and '
+                        'fusing it as absolute drags map->odom.')
+
+    # ekf_map.yaml keeps odom1 configured for the localized-into-a-saved-map case,
+    # because that is the only case in which its differential/relative settings are
+    # right. When VSLAM starts fresh (the default: localize_on_startup=False) the
+    # topic is pointed at a name nobody publishes, so the input is inert. The
+    # disabled name is deliberately self-describing — it shows up as such in
+    # `ros2 param dump` rather than looking like a typo'd real topic.
+    odom1_topic = PythonExpression([
+        "'visual_slam/vis/slam_odometry' if '", fuse_vslam_global,
+        "'.lower() == 'true' else 'visual_slam/vis/slam_odometry__NOT_FUSED'"])
+
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
         PushRosNamespace(
@@ -138,6 +157,7 @@ def generate_launch_description():
                         'frequency': frequency,
                         'publish_tf': publish_tf,
                         'gravitational_acceleration': gravitational_acceleration,
+                        'odom1': odom1_topic,
                     }
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
@@ -160,6 +180,7 @@ def generate_launch_description():
                         'frequency': frequency,
                         'publish_tf': publish_tf,
                         'gravitational_acceleration': gravitational_acceleration,
+                        'odom1': odom1_topic,
                     }
                 ],
                 arguments=['--ros-args', '--log-level', log_level],
@@ -190,6 +211,7 @@ def generate_launch_description():
     ld.add_action(declare_frequency_la)
     ld.add_action(declare_node_name)
     ld.add_action(declare_gravitational_acceleration)
+    ld.add_action(declare_fuse_vslam_global)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(kf_bringup_group)

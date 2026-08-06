@@ -274,7 +274,20 @@ def generate_launch_description():
         # todo: switch to f1tenth_launch/launch/mapping/rtabmap.launch.py
         GroupAction(
                 actions=[
-                    SetRemap(src=['/tf', '/tf_static'], dst=['tf', 'tf_static']),
+                    # One SetRemap per topic. The list form
+                    # SetRemap(src=['/tf', '/tf_static'], dst=['tf', 'tf_static'])
+                    # does NOT declare two remaps: launch concatenates each list
+                    # into a single substitution, producing the nonsense rule
+                    # `-r /tf/tf_static:=tftf_static`. Both real remaps are then
+                    # missing, so every node here listens on the ROOT /tf and
+                    # /tf_static and sees an empty TF tree under a namespace.
+                    # Masked in the mapping path (mapping.launch.py wraps this
+                    # include in its own correct pair) but fatal in the
+                    # localization path, where localization.launch.py includes
+                    # this file directly — that is why the RTABMap localizer had
+                    # never once produced a map->odom. See bug-107.
+                    SetRemap(src=['/tf'], dst=['tf']),
+                    SetRemap(src=['/tf_static'], dst=['tf_static']),
                     IncludeLaunchDescription(
                             PythonLaunchDescriptionSource(PathJoinSubstitution(
                                     [FindPackageShare('rtabmap_launch'), 'launch', 'rtabmap.launch.py']

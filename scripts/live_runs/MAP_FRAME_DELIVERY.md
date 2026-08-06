@@ -254,7 +254,13 @@ over 8 cells, `z_rand` 0.5 puts half the mass on noise, and `max_beams` 90 keeps
 one beam in seven of the X4's ~625. Retuned (`sigma_hit` 0.15, `z_hit`/`z_rand`
 0.80/0.20, 200 beams, 1000-4000 particles, `update_min_d` 0.05) it converges to
 75 mm / 4.5 deg. The RTABMap localizer, which the earlier handoff also wanted
-measured, was not needed once AMCL cleared the bar; it remains untested.
+measured, was not needed once AMCL cleared the bar. It has since been measured
+(`LOCALIZER_FOLLOWUPS.md`) and does not work at all.
+
+**The tuning in `localizer_amcl_mapframe.yaml` has since been folded into the
+live `localizer_amcl.yaml`**, after measuring that the particle count costs 4.1 %
+of one core rather than the assumed CPU problem. **This file is unchanged** — it
+is this deliverable's provenance and must keep matching what is written here.
 
 ---
 
@@ -313,14 +319,27 @@ playback is comfortable and the 25 GB of camera data is never touched.
 
 ## Still open
 
-1. **`ekf_map.yaml`'s `pose0_relative: true`** discards AMCL's absolute pose.
-   Almost certainly not intended for a filter whose `world_frame` is `map`.
-2. **`ekf_map.yaml`'s `odom1`** treats `visual_slam/vis/slam_odometry` as an
-   absolute map-frame anchor when it is not in the map frame.
+> **Items 1, 2 and 4 were worked on 2026-08-05 ~22:00-22:40 and are resolved or
+> answered — see `LOCALIZER_FOLLOWUPS.md`. None of it changed this deliverable:
+> nothing beat 64.7 mm, so there is no v2 and consumers need no notification.**
+
+1. ~~**`ekf_map.yaml`'s `pose0_relative: true`** discards AMCL's absolute pose.~~
+   **Fixed**: `pose0_relative: false`.
+2. ~~**`ekf_map.yaml`'s `odom1`** treats `visual_slam/vis/slam_odometry` as an
+   absolute map-frame anchor when it is not in the map frame.~~ **Fixed**: the
+   input is now switched by the launch (`fuse_vslam_global`, default off, set
+   from `use_gpu` and `localize_on_startup`) rather than by editing the file,
+   because the config is correct in the localized-into-a-saved-map case.
 3. **`rtabmap_2d_overfiltered.yaml` points at `image: rtabmap_2d_final.pgm`** —
    it names the wrong PGM, so loading it silently gets the good grid with the
    wrong origin. Cosmetic today because that file is marked do-not-use.
-4. **The RTABMap localizer is still unmeasured.** No longer blocking anything.
+4. ~~**The RTABMap localizer is still unmeasured.**~~ **Measured, and it does not
+   work.** Two separate blockers: its TF remap was malformed so it ran with an
+   empty TF tree (bug-107, fixed), and even fixed it accepts zero loop closures —
+   `rtabmap_final_nf.db` has an empty visual vocabulary (bug-108) and against
+   `rtabmap_final.db` every candidate fails geometric verification. It costs ~1
+   full core and ~1 GB while doing so, against nav2_amcl's 3-4 % of one core.
+   AMCL remains the localizer.
 5. **Waypoint generation** is now unblocked: all three trajectories are in one
    map frame, and it is pure post-processing on `pose_map`.
 6. Everything already carried forward in `NEXT_CHAT_PROMPT.md` (udev fix on the

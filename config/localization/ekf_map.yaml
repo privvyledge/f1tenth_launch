@@ -35,7 +35,17 @@
                     false, false, false,
                     false, false, false ]
     pose0_differential: false  # true
-    pose0_relative: true
+    # MUST be false in a world_frame: map filter. `relative` makes
+    # robot_localization subtract the FIRST measurement from every later one,
+    # i.e. it re-origins the map frame onto wherever AMCL happened to be when it
+    # first published. That throws away the one thing amcl_pose contributes: the
+    # absolute pose on the grid. On the 2026-08-05 runs the start pose was
+    # (+0.445, -0.575, -79.8 deg), so `relative: true` would have offset the
+    # whole map frame by 0.73 m and 80 deg — every Nav2 goal in map coordinates
+    # wrong by that much, with a filter that looks perfectly healthy.
+    # (This is why the map-frame deliverable broadcast map->odom from AMCL
+    # directly instead of routing it through this filter. See bug-104.)
+    pose0_relative: false
     pose0_queue_size: 2
     pose0_rejection_threshold: 2.0
     pose0_nodelay: false
@@ -63,6 +73,24 @@
     odom0_differential: false
     odom0_relative: true
 
+    # ONLY VALID WHEN VSLAM IS LOCALIZED INTO A SAVED MAP.
+    # slam_odometry is loop-closure-corrected and absolute, so differential:
+    # false / relative: false (an absolute global anchor) is correct *if* the
+    # frame it is absolute in is the map frame — which it is only when Isaac
+    # VSLAM started by relocalizing into a saved map that matches this
+    # environment and start pose (visual_slam_map_path + load_map +
+    # localize_on_startup).
+    #
+    # When VSLAM starts fresh — the default, since localize_on_startup defaults
+    # to False — its origin is wherever the car happened to be powered up, in
+    # whatever yaw it woke with. On mapping_drive_170025 that was ~54 deg off
+    # the real odom frame. Fused as an absolute map anchor it drags the map
+    # frame with it.
+    #
+    # So this input is switched by the LAUNCH, not by editing the file: the
+    # `fuse_vslam_global` argument (localization.launch.py -> dual_ekf ->
+    # ekf_map.launch.py) zeroes odom1_config unless VSLAM startup localization
+    # is actually on. Default off. See bug-104.
     odom1: visual_slam/vis/slam_odometry  # global/map odometry
     odom1_config: [true,  true,  false,  # true, true,
                    false, false, true,
