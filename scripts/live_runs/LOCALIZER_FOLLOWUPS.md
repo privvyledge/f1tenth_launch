@@ -309,10 +309,85 @@ since `localization.launch.py` swallows `PackageNotFoundError` silently.
 
 ---
 
+## 5. `ekf_map` as the broadcaster — measured 2026-08-06, and it is NOT the fix
+
+§4 predicted that routing `map->odom` through `ekf_map` would smooth away the
+8.5 Hz staircase the MPC is complaining about, since "smoothing AMCL's jumps is
+exactly what that filter is for". **Measured, that is wrong.** Same control
+(`mapping_drive_170025`), same map, same truth, same seed; `map_frequency` raised
+from the `localization.launch.py` default of 10.0 to 30.0 so the output matches
+`odometry/local`.
+
+Steady state, first 35 s dropped (see the seeding defect below):
+
+| | mean err | p95 | **step p95** | **step max** | inside 126 mm | yaw err |
+|---|---|---|---|---|---|---|
+| **AMCL direct (v1)** | **74.7 mm** | 143.9 mm | **15.7 mm** | **59.6 mm** | **85.2 %** | 1.96 deg |
+| `ekf_map`, as configured | 125.0 mm | 356.8 mm | 83.5 mm | 920.1 mm | 66.9 % | 3.87 deg |
+| `ekf_map`, `--no-vslam` | 152.9 mm | 406.0 mm | 72.1 mm | 503.2 mm | 52.2 % | 6.73 deg |
+| `ekf_map` + the `vyaw` fix below | 85.2 mm | 182.8 mm | 37.3 mm | 288.5 mm | 79.9 % | 2.70 deg |
+
+**`ekf_map` is less smooth than the thing it was supposed to smooth** — 5.3x the
+correction-step p95 as configured, still 2.4x after fixing a real defect in it.
+It is also less accurate. Whole-run numbers are worse again (222.3 mm as
+configured, 191.6 mm fixed) because of the startup transient.
+
+So **do not route the MPC's global pose through `ekf_map` expecting smoothness.**
+The remaining lever for the jerkiness complaint is the offline smoothing already
+proposed for LUCIO in §4, which needs no filter at all. The MPC, consuming live,
+has no fix from this direction today.
+
+### Two real defects found on the way
+
+**bug-111 — `ekf_map` is never seeded, and nothing says so.** `seed_initialpose.py`
+seeds `nav2_amcl` through `/initialpose`; `robot_localization` does not listen
+there (it seeds via its own `set_pose`). So with `map_tf_publisher:=ekf` the
+filter starts from a zero state: `first map pose x=+0.000 y=+0.001 yaw=+0.05 deg`
+against a true start of `(+0.445, -0.575, -79.82 deg)`. It spends **~30 s slewing
+in from the origin at ~740 mm / 82 deg of error** while publishing a perfectly
+steady 30 Hz `map->odom`. Same silent-failure shape as the RTABMap localizer in
+§1. Live, that is the first half-minute of every run.
+
+`check_map_frame.py` gained **`--skip SEC`** so a seeded localizer and an
+unseeded one can be compared on tracking quality instead of on startup. Report
+both numbers; the transient is real.
+
+**bug-112 — the map EKF had no angular-rate input at all.** `odom0`
+(`vehicle/vesc_odom`) had `odom0_config` index 11 (`vyaw`) set `false`, and IMUs
+are excluded from this filter by design. Its only heading information was
+therefore AMCL's absolute yaw at 8.5 Hz, so it could not propagate heading
+between scans — it lagged through turns and snapped on each update, producing
+precisely the staircase it existed to remove.
+
+Confirmed by subtraction: `51_localize_offline.sh --no-vslam` removes the VSLAM
+inputs, and with neither `vyaw` nor `odom2`'s differential increments the
+steady-state yaw error **triples** (3.87 -> 6.73 deg) and translation error goes
+125 -> 153 mm. VSLAM's differential odometry had been silently standing in for
+the missing yaw rate. **Fixed** (`vyaw: true`), worth 125.0 -> 85.2 mm and step
+p95 83.5 -> 37.3 mm — a large improvement that still does not reach AMCL direct.
+
+Neither defect touches v1: it was produced with `map_tf_publisher:=amcl`, which
+uses none of this. **`deliverables/20260805/` is unchanged and still stands.**
+
+### If someone wants to take `ekf_map` further
+
+In order, and only if there is a reason to prefer a fused pose over AMCL's:
+seed it (fixes the 30 s transient); then look at why the remaining 289 mm
+correction steps exist at all — `pose0_rejection_threshold: 2.0` Mahalanobis and
+`sensor_timeout: 0.13` against an 8.5 Hz (0.118 s) `amcl_pose` are both marginal
+and are the next things to measure. The 2026-08-06 runs are kept for comparison:
+`bags/20260805/loc_ekf30_*` (as configured), `loc_ekf30nv_*` (no VSLAM),
+`loc_ekfvyaw_*` (with the fix).
+
+---
+
 ## What changed in the repo
 
 | file | change |
 |---|---|
+| `config/localization/ekf_map.yaml` | `odom0_config` `vyaw` false -> **true** (bug-112) |
+| `scripts/analysis/check_map_frame.py` | new `--skip SEC`, to separate startup transient from tracking |
+| `scripts/live_runs/51_localize_offline.sh` | new `--map-frequency` (the launch default 10.0 is below the 30 Hz it smooths) and `--no-vslam` |
 | `launch/mapping/3d_mapping.launch.py` | split the concatenated `/tf` + `/tf_static` `SetRemap` (bug-107) |
 | `config/localization/ekf_map.yaml` | `pose0_relative` true -> false; `odom1` documented as launch-switched |
 | `launch/localization/ekf_map.launch.py` | new `fuse_vslam_global` arg; `odom1` overridden from it |

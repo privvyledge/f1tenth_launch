@@ -63,10 +63,28 @@
     pose1_nodelay: false
 
     odom0: vehicle/vesc_odom
+    # vyaw (index 11) MUST be true. This filter has no other angular-rate
+    # source: IMUs are deliberately absent (see the note below), so with vyaw
+    # off its only heading information was amcl_pose's absolute yaw at 8.5 Hz.
+    # Between scans the filter could not propagate heading at all — it lagged
+    # through every turn and snapped when the next AMCL pose landed, which is
+    # exactly the jerkiness ekf_map was supposed to remove.
+    #
+    # Measured 2026-08-06 on mapping_drive_170025 vs RTABMap's optimized graph,
+    # steady state (first 35 s skipped, see bug-111):
+    #   vyaw false  ->  125.0 mm mean, correction step p95 83.5 mm, max 920 mm
+    #   vyaw true   ->   85.2 mm mean, correction step p95 37.3 mm, max 289 mm
+    # Corroborated by removing the VSLAM inputs entirely (--no-vslam): with
+    # neither vyaw nor VSLAM's differential increments, yaw error triples to
+    # 6.73 deg. VSLAM had been silently covering for this. See bug-112.
+    #
+    # NOTE this still does NOT beat AMCL broadcasting map->odom directly
+    # (74.7 mm, step p95 15.7 mm, max 59.6 mm). ekf_map is not currently the
+    # smoother it was assumed to be; see LOCALIZER_FOLLOWUPS.md §5.
     odom0_config: [ false, false, false,  # false, false,
                     false, false, false,  # , , true
                     true, true, true,
-                    true, true, false,
+                    true, true, true,
                     false, false, false ]
     odom0_queue_size: 10
     odom0_nodelay: false

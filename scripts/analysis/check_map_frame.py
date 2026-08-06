@@ -162,9 +162,27 @@ def main():
                     help="CSV from rtabmap_ground_truth.py: the real map->odom(t) "
                          "for the mapping bag, against which localizer error is "
                          "actually measurable")
+    ap.add_argument("--skip", type=float, default=0.0, metavar="SEC",
+                    help="Drop the first SEC seconds of map->odom before scoring. "
+                         "For comparing a SEEDED localizer against an UNSEEDED one: "
+                         "nav2_amcl accepts an /initialpose seed and starts "
+                         "converged, whereas ekf_map has no seed path here and "
+                         "starts from its own zero state, so it spends ~30 s "
+                         "slewing in from the origin. Averaging that transient in "
+                         "compares startup behaviour, not tracking quality. Report "
+                         "the unskipped number too — the transient is real.")
     args = ap.parse_args()
 
     mo, ob, amcl = collect(args.bag, args.ns)
+
+    if args.skip > 0 and len(mo):
+        keep = (mo[:, 0] - mo[0, 0]) >= args.skip
+        dropped = len(mo) - int(keep.sum())
+        mo = mo[keep]
+        print(f"  [--skip {args.skip:g}s] dropped {dropped} of "
+              f"{dropped + len(mo)} map->odom samples")
+        if len(mo) == 0:
+            sys.exit("  --skip dropped every sample")
 
     print(f"== {os.path.basename(args.bag.rstrip('/'))}")
     if len(ob) == 0:

@@ -113,7 +113,11 @@ Ordered. 1 and 2 are the ones that matter.
 all of it:
 - the folded `localizer_amcl.yaml`: does AMCL converge from its startup pose, and
   is `map->odom` steady at driving speed (not just on a 1 m/s replay)?
-- `ekf_map` with the new `fuse_vslam_global` plumbing and `pose0_relative: false`;
+- `ekf_map` with the new `fuse_vslam_global` plumbing, `pose0_relative: false` and
+  the `vyaw` fix (bug-112). Note it is **not** the map-frame broadcaster — AMCL is,
+  and measurement says keep it that way (`LOCALIZER_FOLLOWUPS.md` §5). What to
+  watch live is `odometry/global`, and that it does not need ~30 s to converge
+  from startup (bug-111 is unfixed);
 - `/dev/ydlidar -> ttyUSB0` after the 17:45 reboot, still unconfirmed.
 
 **2. Send a Nav2 goal. The car has never driven autonomously.** `testing_checklist.md`
@@ -122,18 +126,29 @@ is a map, a localizer that clears the bar, and a command gate whose R1 handover 
 verified. Remember `launch_twist_to_ackermann:=True` when driving under Nav2 —
 it defaults False because the MPC publishes `drive` directly.
 
-**3. The MPC's "jerky global pose" — it is the ZOH, and `ekf_map` is the fix.**
+**3. DONE 2026-08-06 — and `ekf_map` is NOT the fix. See `LOCALIZER_FOLLOWUPS.md` §5.**
+Measured on the same control: `ekf_map` broadcasting at 30 Hz is **less smooth than
+AMCL direct**, not more — correction step p95 **83.5 mm vs 15.7 mm**, max **920 mm
+vs 59.6 mm**, and less accurate too (125.0 vs 74.7 mm steady state). Two real
+defects came out of it: `ekf_map` is **never seeded** (starts at the origin, ~30 s
+at ~740 mm / 82 deg, silently — bug-111), and it had **no angular-rate input at
+all** (`odom0_config` `vyaw` was false, IMUs excluded by design — bug-112,
+**fixed**, worth 125.0 -> 85.2 mm and step p95 83.5 -> 37.3 mm, still short of
+AMCL). v1 is untouched: it never used this path. **The live lever for the MPC's
+jerkiness is gone; what remains is the offline smoothing for LUCIO below.**
+The original reasoning, now superseded, was:
+
+
 The consumer complaint is expected behaviour, not a defect: v1's `map->odom` is a
 **piecewise-constant** correction at 8.5 Hz (the scan rate) applied to smooth
 30 Hz odometry. Measured steps: **p95 14.6 mm, max 59.6 mm**. Differentiate that
 for velocity and the steps become spikes. Three responses, in order:
-- **Measure `ekf_map` as the broadcaster** — `51_localize_offline.sh --publisher ekf`
-  already supports it, ~4 min per pass. This is what `ekf_map` is *for*, and it was
-  unusable until today's two fixes. **Raise `map_frequency` from its 10.0 default
-  to 30.0** so the output matches `odometry/local`. Score with
-  `check_map_frame.py --truth` and report **`correction step p95/max` explicitly** —
-  smoothness, not mean error, is the complaint.
-- **Offline smoothing for LUCIO.** They consume a finished bag, not a live stream;
+- ~~**Measure `ekf_map` as the broadcaster.**~~ **Done — it is worse on both axes.**
+  `51_localize_offline.sh` gained `--map-frequency` (the launch default is 10.0,
+  *below* the 30 Hz it is meant to smooth) and `--no-vslam`; `check_map_frame.py`
+  gained `--skip`. Results and the two defects: `LOCALIZER_FOLLOWUPS.md` §5.
+- **Offline smoothing for LUCIO — now the ONLY remaining response to the
+  jerkiness complaint.** They consume a finished bag, not a live stream;
   smoothing `map->odom` over the localizer's own corrections removes the steps with
   no filter tuning. A legitimate `v2` under the freeze protocol. (Being forwarded
   to that consumer directly.)

@@ -8,11 +8,19 @@
 #   --map <yaml>       occupancy grid to localize against
 #                      (default: $MAP_ROOT/rtabmap_2d_final.yaml)
 #   --publisher        who broadcasts map->odom: amcl (default) or ekf
+#   --map-frequency    ekf_map update/publish rate, Hz (default 30.0; only
+#                      meaningful with --publisher ekf). localization.launch.py
+#                      defaults this to 10.0, which is BELOW the 30 Hz
+#                      odometry/local it is meant to smooth — at 10 Hz the
+#                      filter adds its own staircase instead of removing AMCL's.
 #   --init-x/-y/-yaw   seed pose of base_link IN THE MAP FRAME (see below)
 #   --rate             playback rate (default 1.0 — only a handful of topics
 #                      are replayed, so real time is comfortable)
 #   --out <name>       output bag name (default: loc_<bagname>)
 #   --keep-vslam       also replay the VSLAM odometry topics (ekf_map inputs)
+#   --no-vslam         with --publisher ekf, do NOT replay them, leaving ekf_map
+#                      on amcl_pose + vesc_odom only. Isolates whether VSLAM's
+#                      differential odom2 is what makes the fused map->odom jump.
 #
 # WHY THIS EXISTS
 # ---------------
@@ -60,6 +68,7 @@ source ./00_env.sh
 BAG=""
 MAP=""
 PUBLISHER=amcl
+MAP_FREQUENCY=30.0
 RATE=1.0
 OUT=""
 # The shared physical start pose, in the map frame. See the header.
@@ -67,6 +76,7 @@ INIT_X=0.4451
 INIT_Y=-0.5750
 INIT_YAW=-1.3931
 KEEP_VSLAM=0
+NO_VSLAM=0
 LAUNCH_ONLY=0
 AMCL_PARAMS_OVERRIDE=""
 
@@ -75,6 +85,7 @@ while (( $# )); do
     --bag)        BAG="$2"; shift ;;
     --map)        MAP="$2"; shift ;;
     --publisher)  PUBLISHER="$2"; shift ;;
+    --map-frequency) MAP_FREQUENCY="$2"; shift ;;
     --rate)       RATE="$2"; shift ;;
     --out)        OUT="$2"; shift ;;
     --init-x)     INIT_X="$2"; shift ;;
@@ -82,6 +93,7 @@ while (( $# )); do
     --init-yaw)   INIT_YAW="$2"; shift ;;
     --params)     AMCL_PARAMS_OVERRIDE="$2"; shift ;;
     --keep-vslam) KEEP_VSLAM=1 ;;
+    --no-vslam)   NO_VSLAM=1 ;;
     --launch-only) LAUNCH_ONLY=1 ;;
     -h|--help)    sed -n '2,50p' "$0"; exit 0 ;;
     *) die "unknown option: $1" ;;
@@ -120,6 +132,7 @@ printf '  %-16s %s\n' \
   "bag"        "$BAG" \
   "map"        "$MAP" \
   "publisher"  "$PUBLISHER" \
+  "map freq"   "$([[ "$PUBLISHER" == ekf ]] && echo "$MAP_FREQUENCY Hz" || echo 'n/a (amcl)')" \
   "rate"       "$RATE" \
   "seed x,y"   "$INIT_X, $INIT_Y" \
   "seed yaw"   "$INIT_YAW rad" \
@@ -139,7 +152,7 @@ PLAY_TOPICS=(
   "$(ns_topic odometry/local)"
   "$(ns_topic vehicle/vesc_odom)"
 )
-if (( KEEP_VSLAM )) || [[ "$PUBLISHER" == ekf ]]; then
+if (( KEEP_VSLAM )) || { [[ "$PUBLISHER" == ekf ]] && (( ! NO_VSLAM )); }; then
   # ekf_map takes odom1/odom2 from VSLAM. Note the caveat in MAP_BUILD_HANDOFF:
   # slam_odometry is NOT in the map frame despite claiming frame_id odom, and
   # ekf_map.yaml treats it as an absolute global anchor.
@@ -213,6 +226,7 @@ ros2 launch f1tenth_launch localization.launch.py \
     launch_laserscan_odometry:=False \
     launch_icp_odometry:=False \
     map_tf_publisher:="$PUBLISHER" \
+    map_frequency:="$MAP_FREQUENCY" \
     odom_tf_publisher:=bag \
     autostart:=True \
     log_level:=warn &
