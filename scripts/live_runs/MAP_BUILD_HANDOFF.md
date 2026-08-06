@@ -18,9 +18,9 @@ aimed at a downstream consumer; read that for field-by-field detail.
 
 | artifact | what it is |
 |---|---|
-| `slamtoolbox_2d_final.pgm/.yaml` | 2D grid, 264x320 (13.2 x 16.0 m), 2766 occupied cells. **Best 2D map.** |
-| `slamtoolbox_2d_final_posegraph.posegraph/.data` | pose graph — **required** for slam_toolbox localization mode |
-| `rtabmap_2d_final.pgm/.yaml` | 2D grid from RTABMap, 265x199, 1732 occupied cells |
+| `rtabmap_2d_final.pgm/.yaml` | 2D grid from RTABMap, 265x199 (13.3 x 10.0 m), 1732 occupied cells. **Use this one.** |
+| `slamtoolbox_2d_final.pgm/.yaml` | 2D grid, 264x320, 2766 occupied cells — **rejected on inspection, not usable** (see below) |
+| `slamtoolbox_2d_final_posegraph.posegraph/.data` | pose graph; only meaningful if the slam_toolbox map is ever salvaged |
 | `rtabmap_2d_overfiltered.pgm/.yaml` | the old over-filtered grid; kept only as a before/after. **Do not use.** |
 | `rtabmap_final_nf.db` | RTABMap database, 399 poses / 813 links — the real 3D deliverable |
 | `cloud_clean.pcd` / `.ply` | 285 288 pts, range-limited + noise-filtered. **Preferred cloud.** |
@@ -31,6 +31,23 @@ The 2D RTABMap grid and both clouds all come from `rtabmap_final_nf.db`, so they
 share one optimized pose graph and one `map` origin. `rtabmap_final.db` (118 MB)
 is the earlier build with the old grid parameters; its 3D content is equivalent
 but its cached 2D grids are the bad ones.
+
+### Which 2D grid to use — the SLAM Toolbox one was rejected
+
+**Use `rtabmap_2d_final.*` for costmaps and localization.** The operator checked
+both as 2D costmaps on 2026-08-05 and found the SLAM Toolbox grid unusable.
+Its preview shows why: smeared and doubled walls along the bottom edge, plus
+speckle scattered through what should be open free space — pose-graph drift
+rasterised into the map. Its higher occupied-cell count (2766 vs 1732) is partly
+that noise, so **do not rank these two by cell count**; look at the previews.
+The post-fix RTABMap grid is a clean, closed four-wall room.
+
+Consequence for localization: **slam_toolbox localization mode is off the table**
+for this map, since it needs that pose graph. Localize with AMCL
+(`localizer_amcl.yaml`) or `particle_filter` (`localizer_pf.yaml`) against
+`rtabmap_2d_final.yaml` instead. RTABMap's own localization mode against
+`rtabmap_final_nf.db` is a third option and keeps the 2D and 3D maps in one
+frame.
 
 ## What the drive actually covered — read this before planning
 
@@ -65,7 +82,8 @@ So the actual next task is:
 ### 1. Localize the two trajectory bags against the existing map
 
 For each of `loop_laps_173558` and `figure8_172338`: replay the bag, run a
-localizer against `slamtoolbox_2d_final.yaml`, and let it produce `map→odom`.
+localizer against **`rtabmap_2d_final.yaml`** (not the SLAM Toolbox grid — it was
+rejected, see above), and let it produce `map→odom`.
 The bags already carry `odom→base_link` at 30 Hz from the live EKF, so the
 localizer only has to supply the missing edge — it does not need to re-derive
 odometry. That single transform is what expresses each bag's trajectory in the

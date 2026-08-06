@@ -10,9 +10,9 @@ the artifacts, the environment, four fixed defects, and the next task.
 
 ## Start here
 
-The next job is **localizing `loop_laps_173558` and `figure8_172338` against the
-existing map**, so all three trajectories share one `map` frame. It is a
-localization job, not a mapping job:
+The next job is **localizing `loop_laps_173558` and `figure8_172338` against
+`rtabmap_2d_final.yaml`**, so all three trajectories share one `map` frame. It
+is a localization job, not a mapping job:
 
 - **A map does not publish `map→odom` — a localizer does.** The `.pgm`/`.yaml`
   and `.db` are static files. `map→odom` comes from AMCL, slam_toolbox
@@ -43,8 +43,11 @@ full 39-topic set including actuator commands and VESC state. Maps and waypoints
 are built from these **offline** — nothing further is needed from the car.
 
 Maps built so far, in `/mnt/f1tenth_ssd/shared_dir/maps/20260805/` (has its own
-`README.md`): `slamtoolbox_2d_final.*` + pose graph (best 2D),
-`rtabmap_2d_final.*`, `rtabmap_final_nf.db` and `cloud_clean.pcd` (3D).
+`README.md`): **`rtabmap_2d_final.*` is the 2D map to use**, with
+`rtabmap_final_nf.db` and `cloud_clean.pcd` for 3D. The SLAM Toolbox grid
+(`slamtoolbox_2d_final.*`) was **checked as a costmap and rejected** — smeared
+walls and speckle through the free space. Do not use it, and do not rank the two
+by occupied-cell count; the noise inflates it.
 
 Also on disk from earlier in the day: `mapping_drive_145639` (practice; missing
 `imu` and `imu/mag`, and it clipped steering — prefer the three above),
