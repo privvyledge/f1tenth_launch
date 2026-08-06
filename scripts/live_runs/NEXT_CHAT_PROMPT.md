@@ -107,13 +107,67 @@ telling.
 
 ### What that leaves for the next session
 
-- **Run the new `localizer_amcl.yaml` on the car.** Everything above is bag
-  replay. Confirm AMCL converges from its startup pose and `map->odom` is steady
-  while driving, and that `ekf_map` comes up with the new `fuse_vslam_global`
-  plumbing on a real bringup.
-- Optional: revive the RTABMap localizer by tuning `Vis/*` against
-  `rtabmap_final.db`. Only worth it if the 2D+3D single-frame property is wanted;
-  AMCL already clears the accuracy bar at a fraction of the cost.
+Ordered. 1 and 2 are the ones that matter.
+
+**1. Live tests — everything above is bag replay.** One bringup on the car covers
+all of it:
+- the folded `localizer_amcl.yaml`: does AMCL converge from its startup pose, and
+  is `map->odom` steady at driving speed (not just on a 1 m/s replay)?
+- `ekf_map` with the new `fuse_vslam_global` plumbing and `pose0_relative: false`;
+- `/dev/ydlidar -> ttyUSB0` after the 17:45 reboot, still unconfirmed.
+
+**2. Send a Nav2 goal. The car has never driven autonomously.** `testing_checklist.md`
+§9 "Send a navigation goal" has never been ticked, and it is now unblocked: there
+is a map, a localizer that clears the bar, and a command gate whose R1 handover is
+verified. Remember `launch_twist_to_ackermann:=True` when driving under Nav2 —
+it defaults False because the MPC publishes `drive` directly.
+
+**3. The MPC's "jerky global pose" — it is the ZOH, and `ekf_map` is the fix.**
+The consumer complaint is expected behaviour, not a defect: v1's `map->odom` is a
+**piecewise-constant** correction at 8.5 Hz (the scan rate) applied to smooth
+30 Hz odometry. Measured steps: **p95 14.6 mm, max 59.6 mm**. Differentiate that
+for velocity and the steps become spikes. Three responses, in order:
+- **Measure `ekf_map` as the broadcaster** — `51_localize_offline.sh --publisher ekf`
+  already supports it, ~4 min per pass. This is what `ekf_map` is *for*, and it was
+  unusable until today's two fixes. **Raise `map_frequency` from its 10.0 default
+  to 30.0** so the output matches `odometry/local`. Score with
+  `check_map_frame.py --truth` and report **`correction step p95/max` explicitly** —
+  smoothness, not mean error, is the complaint.
+- **Offline smoothing for LUCIO.** They consume a finished bag, not a live stream;
+  smoothing `map->odom` over the localizer's own corrections removes the steps with
+  no filter tuning. A legitimate `v2` under the freeze protocol. (Being forwarded
+  to that consumer directly.)
+- **Do NOT rebuild the map at 0.025 m for accuracy.** Corrected in
+  `MAP_FRAME_DELIVERY.md`: the arithmetic says it buys ~1 mm, because quantisation
+  (sigma 14.4 mm) is nowhere near the dominant term in 64.7 mm.
+
+**4. `particle_filter` — worth measuring, second.** Owned by a separate claude.
+Brief for them: smoothness should improve (`mcl_hz: 40.0` is decoupled from the
+scan rate, so it predicts between scans and emits a weighted mean rather than
+AMCL's 8.5 Hz jumps); accuracy should NOT be expected to improve (same LiDAR, same
+grid, same information). **First step is confirming the package is actually
+installed** — `localization.launch.py` swallows `PackageNotFoundError` silently,
+and this session is a lesson in what "never been run" is worth. Score with
+`check_map_frame.py --truth truth_mapping_drive_170025.csv` so the number is
+directly comparable to AMCL's 64.7 mm, and add a `--publisher pf` path to
+`51_localize_offline.sh`.
+
+**5. The VSLAM map, deliberately, once.** Nothing saves one today (`save_map`
+defaults False). `localize_on_startup` is already gated on the map directory being
+non-empty (`isaac_ros_visual_slam_realsense.launch.py:227`), but existence is not
+correctness — gosling1's stale Sep 2025 map would have passed that gate and failed
+every relocalization. **And `fuse_vslam_global:=True` needs more than "VSLAM is
+localized in a saved map": it needs VSLAM's map to be CO-REGISTERED with the
+RTABMap grid.** That has been asserted but never measured, and the two maps come
+from different mappers and different sensors. So: one session that drives,
+`save_map:=True`, re-runs with `localize_on_startup:=True` to prove relocalization,
+and scores VSLAM's map-frame pose against the same truth CSV to settle whether the
+frames agree. Until then `fuse_vslam_global` has no verified-correct `True` setting
+and should stay off.
+
+**6. Optional: revive the RTABMap localizer** by tuning `Vis/*` against
+`rtabmap_final.db`. Only worth it if the 2D+3D single-frame property is wanted;
+AMCL already clears the accuracy bar at a fraction of the cost.
 
 ## Also open
 

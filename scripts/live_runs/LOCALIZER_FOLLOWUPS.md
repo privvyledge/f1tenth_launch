@@ -261,6 +261,54 @@ validation run, and the frozen deliverable is untouched.
 
 ---
 
+## 4. Follow-on, decided 2026-08-05 23:45 after the consumers reported back
+
+Two consumer complaints arrived: the MPC's global pose is **jerky**, and LUCIO's is
+**less accurate than they would like**. They have different causes and only one of
+them is a defect-shaped problem.
+
+### Jerkiness is the zero-order hold, and it is expected
+
+The delivered `pose_map` is **AMCL broadcasting `map->odom` directly**, composed
+with the EKF's 30 Hz `odom->base_link` — `ekf_map` was deliberately routed around
+because of the two defects fixed in §2. `map->odom` is therefore **piecewise
+constant at the 8.5 Hz scan rate**: measured steps p95 **14.6 mm**, max **59.6 mm**.
+A smooth 30 Hz curve with 8.5 Hz stair-steps in it; differentiated for velocity,
+the steps become spikes. That is what the MPC is seeing.
+
+Fix, in order: measure `ekf_map` as the broadcaster (`--publisher ekf`, with
+`map_frequency` raised from 10.0 to 30.0) — smoothing AMCL's jumps is exactly what
+that filter is for, and it only became usable today; and for LUCIO specifically,
+smooth `map->odom` offline over the localizer's own corrections, which needs no
+filter tuning at all and would be a legitimate `v2` under the freeze protocol.
+
+### Accuracy is NOT floored by the grid — correcting earlier guidance
+
+`MAP_FRAME_DELIVERY.md` used to say the first lever for better than 65 mm was
+rebuilding the grid at 0.025 m. **That was wrong and has been corrected in place.**
+Quantisation over a 0.05 m cell is uniform with sigma = 50/sqrt(12) = **14.4 mm**;
+against a 64.7 mm total that leaves 63.1 mm of everything-else, so halving the cell
+predicts **63.5 mm** — about 1 mm for a full map rebuild. Even the pessimistic
+reading (treating the +-25 mm bound as the sigma) only gives 65 -> 61 mm. The error
+is dominated by the localizer, whose own converged sigma is 75/66 mm. Do not
+rebuild the map for accuracy.
+
+And the honest caveat still applies: 65 mm is **agreement between two estimators
+sharing one LiDAR and one map**, so LUCIO's independent pixel-motion check should
+land before anyone spends effort chasing the number down.
+
+### `particle_filter`: measure it, expect smoothness not accuracy
+
+`localizer_pf.yaml` runs `mcl_hz: 40.0` decoupled from the odom rate, so it
+predicts through the motion model between scans and emits a weighted mean —
+structurally smoother than AMCL's 8.5 Hz resampled jumps. Accuracy should not be
+expected to improve: same LiDAR, same grid, same information, same floor. It is
+also the last localizer here that has never been measured, and §1 is a lesson in
+what that is worth — so step one is confirming the package is installed at all,
+since `localization.launch.py` swallows `PackageNotFoundError` silently.
+
+---
+
 ## What changed in the repo
 
 | file | change |

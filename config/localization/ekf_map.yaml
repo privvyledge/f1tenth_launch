@@ -87,6 +87,14 @@
     # the real odom frame. Fused as an absolute map anchor it drags the map
     # frame with it.
     #
+    # AND EVEN THEN IT IS NOT AUTOMATICALLY RIGHT. Relocalizing into a saved VSLAM
+    # map puts the pose in *VSLAM's* map frame, which is only the nav frame if that
+    # map is CO-REGISTERED with the RTABMap grid. Those are built by different
+    # mappers from different sensors; co-registration has been asserted in an
+    # earlier handoff but never measured. Treat fuse_vslam_global:=True as
+    # unproven until someone scores VSLAM's map-frame pose against the same ground
+    # truth the localizers are scored against.
+    #
     # So this input is switched by the LAUNCH, not by editing the file: the
     # `fuse_vslam_global` argument (localization.launch.py -> dual_ekf ->
     # ekf_map.launch.py) zeroes odom1_config unless VSLAM startup localization

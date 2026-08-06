@@ -115,7 +115,10 @@ def generate_launch_description():
                         'anchor (ekf_map.yaml odom1). Only true when Isaac VSLAM was '
                         'started localized into a saved map that matches this '
                         'environment; a fresh VSLAM origin is not the map frame and '
-                        'fusing it as absolute drags map->odom.')
+                        'fusing it as absolute drags map->odom. NOTE: being localized '
+                        'in a saved VSLAM map is NECESSARY BUT NOT SUFFICIENT — that '
+                        'map must also be CO-REGISTERED with the nav grid, which has '
+                        'been asserted but never measured. Keep this False until it is.')
 
     # ekf_map.yaml keeps odom1 configured for the localized-into-a-saved-map case,
     # because that is the only case in which its differential/relative settings are

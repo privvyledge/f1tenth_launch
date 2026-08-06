@@ -168,10 +168,22 @@ external evidence this cannot provide, and is worth running.
 
 ### Known floors and residuals
 
-- **Map resolution.** The grid is 0.05 m/cell, so cell quantisation alone is
-  ~+-25 mm before any localizer error. If a future consumer needs materially
-  better than ~65 mm, the first lever is rebuilding the grid at 0.025 m
-  (`Grid/CellSize`), not tuning the localizer.
+- **Map resolution — and why it is NOT the lever.** The grid is 0.05 m/cell, so
+  cell quantisation alone is ~+-25 mm before any localizer error.
+  **Corrected 2026-08-05 23:45:** this file previously said that a consumer
+  needing materially better than 65 mm should first rebuild the grid at 0.025 m
+  (`Grid/CellSize`). The arithmetic does not support that. Quantisation over a
+  0.05 m cell is a uniform error of sigma = 50/sqrt(12) = **14.4 mm**, which
+  against a 64.7 mm total leaves **63.1 mm** of everything-else. Halving the cell
+  size takes quantisation to 7.2 mm and the total to **63.5 mm** — a ~1 mm
+  improvement for a full map rebuild. Even treating the +-25 mm bound itself as
+  the sigma (the pessimistic reading) only predicts 65 -> 61 mm.
+  The error is dominated by the localizer, not the grid: AMCL's own converged
+  sigma is 75/66 mm, the same order as the total. **Do not rebuild the map for
+  accuracy.** If 65 mm is genuinely not enough, the levers are the localizer and
+  the sensor geometry — and note the headline is agreement between two estimators
+  sharing one LiDAR, so an independent check (LUCIO's pixel-motion comparison)
+  should come before any of it.
 - **`map->odom` is post-dated by 1.0 s.** nav2_amcl stamps the transform with
   `scan_time + transform_tolerance`, which is how it is supposed to work and
   what a live tf2 consumer would also see. Measured cost of the resulting
