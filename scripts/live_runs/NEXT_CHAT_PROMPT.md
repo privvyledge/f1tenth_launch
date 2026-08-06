@@ -10,7 +10,17 @@ the artifacts, the environment, four fixed defects, and the next task.
 
 ## Start here
 
-The next job is **localizing `loop_laps_173558` and `figure8_172338` against
+**The deliverable is a derived bag per run**, carrying either `map→odom` on
+`/gosling1/tf` or a `map`-frame pose topic, for an external consumer (LUCIO
+pixel→world calibration) that cannot access this repo and cannot drive the car.
+Their written spec is `REQUEST_f1tenth_map_frame_pose.md` in
+`.../CAPS People/LUSCIO_ROS/`; the requirements are summarised in
+`MAP_BUILD_HANDOFF.md` §2. Two that will bite if missed: **keep the original
+header stamps byte-exact** (the cross-machine camera merge is on header stamp,
+chrony-synced to ~1 µs), and **all three runs must share the one map** built
+from `mapping_drive`.
+
+Getting there means **localizing `loop_laps_173558` and `figure8_172338` against
 `rtabmap_2d_final.yaml`**, so all three trajectories share one `map` frame. It
 is a localization job, not a mapping job:
 
@@ -20,9 +30,15 @@ is a localization job, not a mapping job:
   Nothing needs re-mapping to get it.
 - The bags already carry `odom→base_link` at 30 Hz from the live EKF, so a
   localizer only has to supply the missing edge.
-- The hard part is the **initial pose**: every bag starts at its own identity
-  origin, i.e. wherever the car was parked that run, so the offsets between the
-  three are unknown until estimated. `50_localization_test.sh` is the entry point.
+- **Broadcast it from the global EKF** (`ekf_map`, `map_tf_publisher:='ekf'`),
+  which already fuses `amcl_pose` and `rtabmap/localization_pose` — operator's
+  call. `particle_filter` is out until its known bugs are fixed. The RTABMap
+  localizer was disabled on an *assumption* that it is slow and has never been
+  measured: test its accuracy and CPU, and if it holds up feed it into the EKF.
+- The hard part is the **initial pose**: each bag zeroes position but **not
+  heading** (EKF starts at −0.951 / −0.411 / −0.436 rad), and the physical start
+  pose differs per run, so the offsets are unknown until estimated.
+  `50_localization_test.sh` is the entry point.
 
 Full reasoning, including why a "fused map" would mean RTABMap multi-session
 mapping rather than post-hoc alignment, is in `MAP_BUILD_HANDOFF.md`.

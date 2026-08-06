@@ -98,15 +98,80 @@ car was parked; or let `particle_filter`'s coarse-to-fine global localization
 `lidar/scan_filtered` against the map. Verify by checking that the resulting
 map-frame path stays inside the mapped free space and that the loop closes.
 
-Note `mapping_drive_170025` is the easy case: its map was built from its own
-odometry starting at identity, so `map` and `odom` coincide at t=0 for that bag.
+`mapping_drive_170025` is the easy case: its map was built from its own
+odometry with RTABMap's `map→odom` starting at identity, so the `map` and `odom`
+*frames* coincide for that bag. **That does not mean the car starts at
+identity** — position is zeroed but heading is not. Measured first pose of
+`odometry/local`:
 
-### 2. Then, waypoints
+| bag | first x,y | first yaw |
+|---|---|---|
+| `mapping_drive_170025` | (−0.008, −0.004) | **−0.951 rad (−54.5°)** |
+| `figure8_172338` | (−0.002, −0.005) | **−0.411 rad (−23.5°)** |
+| `loop_laps_173558` | (−0.005, −0.003) | **−0.436 rad (−25.0°)** |
+
+`visual_slam/tracking/odometry` and `vehicle/vesc_odom` both start at yaw ~0.000
+in every run, so the EKF's non-zero start is real and run-specific — it is not a
+shared absolute heading you can lean on for alignment.
+
+### 1a. Who broadcasts `map→odom` — operator's decision
+
+**Use the global EKF (`ekf_map`, `launch_ekf_map`), not a localizer directly.**
+`config/localization/ekf_map.yaml` already fuses `pose0=amcl_pose` and
+`pose1=rtabmap/localization_pose`, so the EKF is the intended fusion point and
+`map_tf_publisher:='ekf'` makes it the broadcaster.
+
+- **`particle_filter` is out for now** — it has known bugs that need fixing
+  first. Separate task; do not block this on it.
+- **The RTABMap localizer has never actually been tested.** It was disabled on
+  the *assumption* it would be too slow, which was never measured. Test it:
+  accuracy against the map, and CPU. If it holds up, feed
+  `rtabmap/localization_pose` into `ekf_map` as designed. Since it localizes
+  against `rtabmap_final_nf.db`, it also keeps the 2D and 3D maps in one frame.
+- **Watch total CPU.** The Orin Nano has 6 cores and ~7 GB RAM, and this is a
+  bag replay plus a localizer plus the EKF. Measure before concluding.
+
+### 2. Deliver derived bags for the LUCIO consumer — the real reason this matters
+
+This is not an internal nicety. Other sessions doing pixel→world drift
+compensation **cannot access this repo and cannot drive the car**, so they need
+a self-contained, synchronized bag from us. Their written request is
+`REQUEST_f1tenth_map_frame_pose.md` (LUSCIO_ROS). Verified against the bags:
+
+Deliver **per run**, either shape:
+
+1. a **TF-only derived bag** carrying `map→odom` on `/gosling1/tf`, played
+   alongside the original (they compose it with the original `odom→base_link`); or
+2. a **derived bag with a pose topic** — `nav_msgs/Odometry` or
+   `geometry_msgs/PoseStamped`, `frame_id: map`, `child_frame_id: base_link`.
+
+Hard requirements, and the reasons they are hard:
+
+- **Preserve the original header stamps exactly.** The cross-machine merge with
+  the camera bags is on header stamp, with chrony holding velox1 to 0.4–1.6 µs.
+  Re-stamping destroys the only thing making the merge work.
+- **One `map` frame across all three runs** — the map from `mapping_drive`, with
+  all three localized into it. Per-run maps cannot be pooled and lose ~2/3 of the
+  calibration value.
+- **≥20 Hz over the camera overlap window.** Already satisfied by the source:
+  `odometry/local` is **30.0 Hz inside every window**, and all three windows fall
+  fully inside their bags (verified 2026-08-05).
+- **State the frame explicitly.** For this vehicle the pose is **`base_link`,
+  which is the rear axle** — `base_link→rear_axle` is the identity transform in
+  `vehicle/static_transformations.launch.py`. Not `base_footprint` (33 mm below
+  in z) and not `front_axle` (+256 mm x). They flagged a ~0.13 m frame mistake as
+  invisible to every check on our side, so say it in writing with the delivery.
+
+Their accuracy bar: a degree-3 pixel→world fit already reaches 126 mm RMS, so a
+pose source drifting ~0.5 m is 4x too coarse. That is the standard the localized
+output has to beat — not message counts.
+
+### 3. Then, waypoints
 
 Once all three trajectories are in the `map` frame, generating waypoints is a
 pure post-processing step on the pose streams — no robot, no replay.
 
-### 3. Optional — a genuinely fused map
+### 4. Optional — a genuinely fused map
 
 Merging all three bags into one map *is* a real technique, but it is RTABMap
 **multi-session mapping**, not "align the maps afterwards": append each bag as a
@@ -116,6 +181,30 @@ and recovers the transforms between the three runs. Worth doing only if step 1
 shows the current map's coverage is too thin where the other two bags drove.
 Given the extents above, it probably is not.
 
+### Two findings handed back to us by the LUCIO analysis
+
+Both came from their independent pass over the same bags; both are worth acting
+on and are not blocked by anything above.
+
+1. **The odometry *topics* mislabel their frames.** All four declare
+   `frame_id: odom, child_frame_id: base_link`, yet they start at different
+   initial yaws (table above) — so they sit in mutually rotated frames all
+   claiming the same name, with VSLAM ~54° off the real `odom` frame on
+   `mapping_drive_170025`. Anything that reads
+   `visual_slam/tracking/odometry` or `odom/rf2o` and trusts `header.frame_id`
+   places the car in the wrong frame. **Any cross-localizer comparison must
+   rigidly align (e.g. Umeyama) first**, or it measures naming convention rather
+   than accuracy. This is a topic-level hazard, not a TF-tree one.
+2. **`vehicle/vesc_odom` diverges 1.6–1.7 m after alignment while its path
+   length matches the others to within 0.2%.** Right distance, wrong shape,
+   which points at the steering-angle→yaw calibration rather than the
+   speed/ERPM gain. That is consistent with the known asymmetric steering
+   calibration (`steering_angle_to_servo_offset: 0.56`, physical range
+   [−0.257, +0.343] rad) and the `MAX_STEERING` 0.25 workaround. It feeds the
+   EKF, so it is likely dragging `odometry/local` as well — and it will bite
+   Nav2 and MPC. Fold this into the recalibration already scheduled for the
+   weekend of 2026-08-08.
+
 ### Not a factor: multiple `odom→base_link` publishers
 
 This was raised as a possible cause of map quality problems. It does not apply
@@ -123,8 +212,14 @@ to `mapping_drive_170025`: `/gosling1/tf` carries **4403 messages containing
 exactly 4403** `odom→base_link` transforms — 1:1, 30.0 Hz, matching
 `/gosling1/odometry/local`'s 4403 messages exactly. Two publishers would show
 ~8800 transforms on that edge. There are 12 static transforms, all distinct
-pairs. The bag has a single publisher. If another session observed duplicates it
-was in the live stack or a different bag; do not go looking for it here.
+pairs. The bag has a single publisher.
+
+The LUCIO analysis reached the same conclusion independently and went further:
+the TF transforms are **bit-identical** to `odometry/local` (same stamps, zero
+positional and angular difference), so the single publisher *is* the EKF. Their
+earlier speculation about a TF-tree conflict was retracted in that document.
+Do not re-investigate. The useful consequence: because TF's `odom→base_link` is
+exactly the EKF, a `map→odom` from any localizer composes directly onto it.
 
 ---
 
