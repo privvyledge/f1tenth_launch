@@ -1,0 +1,95 @@
+# AMCL tuned for OFFLINE map-frame localization of the 2026-08-05 drive bags
+# against rtabmap_2d_final (265x199 @ 0.05 m, 1732 occupied cells).
+#
+# Not a replacement for localizer_amcl.yaml. That file is tuned for live driving
+# on a Jetson, where 500 particles and 90 beams are a CPU budget decision. This
+# is a bag replay with the whole machine to itself and a 126 mm accuracy target,
+# so the trade is the other way round.
+#
+# WHY THE STOCK CONFIG MISSED
+# ---------------------------
+# Measured on the control bag (mapping_drive_170025, whose true map->odom is
+# identity by construction) with localizer_amcl.yaml:
+#     translation error  mean 267 mm  p95 534 mm  max 590 mm
+#     yaw error          mean 8.9 deg          max 23.2 deg
+#     AMCL's own final sigma  419 mm / 16.7 deg
+# The filter was not lost — it was never converged. Its own covariance says so.
+# The likelihood field it was scoring against is extremely flat:
+#   - sigma_hit 0.4 m smears each beam over 8 map cells, on a map whose cells
+#     are 0.05 m. Nearly every hypothesis scores nearly the same.
+#   - z_rand 0.5 puts half the probability mass on "this reading is noise",
+#     flattening it further.
+#   - max_beams 90 of the YDLidar's ~625 throws away 85% of the constraint on a
+#     map with only 1732 occupied cells to lock onto.
+# Every one of those is a reasonable live-driving default and wrong here.
+/**: # amcl:
+  ros__parameters:
+    use_sim_time: True          # bag replay; the launch file also sets this
+    set_initial_pose: False     # seed_initialpose.py publishes it on /initialpose
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    # Motion model. The bag's odom->base_link is the live EKF fusing VESC +
+    # rf2o + two IMUs at 30 Hz, which is genuinely good dead reckoning over the
+    # seconds between updates — so keep the process noise low and let the
+    # measurement do the correcting rather than diffusing the cloud.
+    alpha1: 0.05
+    alpha2: 0.05
+    alpha3: 0.05
+    alpha4: 0.05
+    alpha5: 0.05
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    global_frame_id: "map"
+
+    laser_model_type: "likelihood_field"
+    # 0.15 m is 3 map cells: wide enough to absorb the grid's own quantisation
+    # (+-25 mm) and the wall thickness, narrow enough that a 0.1 m pose error
+    # actually costs likelihood. 0.4 m did not.
+    sigma_hit: 0.15
+    z_hit: 0.80
+    z_rand: 0.20
+    z_max: 0.0
+    z_short: 0.0
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_max_range: -1.0
+    laser_min_range: -1.0
+    # ~1 beam in 3 of the X4's ~625. The scan is 8.5 Hz and this is offline;
+    # there is no reason to be stingy on a map this sparse.
+    max_beams: 200
+    do_beamskip: false
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+
+    max_particles: 4000
+    min_particles: 1000
+    pf_err: 0.02
+    pf_z: 0.99
+    resample_interval: 1
+    # No random-particle injection. The seed is a strong analytic prior and the
+    # run never needs to relocalize; injection would only add noise.
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+
+    # Update on nearly every scan. The stock 0.2 m / 0.5 rad gate was sized to
+    # save CPU while driving; here it discards most of the 40-56 m of evidence
+    # each run provides.
+    update_min_d: 0.05
+    update_min_a: 0.1
+
+    save_pose_rate: 0.5
+    # Overridden by localization.launch.py from map_tf_publisher; kept false so
+    # this file never implies AMCL owns map->odom on its own.
+    tf_broadcast: false
+    transform_tolerance: 1.0
+
+    scan_topic: lidar/scan_filtered
+    map_topic: map
+    first_map_only: false
