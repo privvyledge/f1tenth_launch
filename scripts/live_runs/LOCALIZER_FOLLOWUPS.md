@@ -552,6 +552,66 @@ fewer poses.
 
 Run kept for comparison: `bags/20260805/loc_ekflocal_mapping_drive_170025`.
 
+### It generalizes — checked on the other two bags
+
+`mapping_drive_170025` is the only run with a truth CSV (it is the run the map was
+built from, so it is the only one with an optimized graph to score against). But
+**smoothness needs no truth**, and smoothness is the complaint, so the other two
+runs were scored on correction step alone against the existing v1 AMCL runs
+(`loc2_*`):
+
+| bag | AMCL step p95 / max | `ekf_map` step p95 / max | rate |
+|---|---|---|---|
+| `figure8_172338` | 16.6 / 84.9 mm | **14.4** / 736.7 mm | 8.6 -> 29.9 Hz |
+| `loop_laps_173558` | 17.5 / 65.4 mm | **15.9** / 268.5 mm | 8.6 -> 29.8 Hz |
+
+So the p95 result holds on all three runs, and on these two `ekf_map` is
+*slightly smoother than AMCL* while emitting at 3.5x the rate. Both paths stay
+100 % inside mapped free space.
+
+### But the seed is NOT reliable — bug-115, and it is the reason for those step maxima
+
+`figure8_172338` came out **unseeded**: `first map pose` is
+`(+0.001, +0.002, +0.15 deg)`, the origin, against a seed of
+`(+0.445, -0.575, -79.82)`. Its 736.7 mm step max is the filter being dragged
+from the origin to the truth once AMCL converges — the bug-111 signature,
+recurring. `loop_laps_173558` seeded correctly the same afternoon
+(`+0.446, -0.575, -79.73`), as did `mapping_drive_170025`. **Two out of three.**
+
+So bug-111's fix is real but racy. `seed_initialpose.py` publishes on a plain
+volatile publisher and repeats `--times` at 1 s intervals; nothing confirms the
+filter accepted it. Two candidate mechanisms, not yet separated:
+
+- **Subscription matching.** The seed can land before `ekf_map`'s `set_pose`
+  subscription is matched, and a dropped seed is invisible — the same failure the
+  script's own comment already documents for AMCL.
+- **`reset_on_time_jump: true`.** On bag start the clock jumps backwards and
+  robot_localization resets the filter. If the reset lands *after* the seed, it
+  wipes it. On `mapping_drive_170025` the ordering was benign (jump at 302.7 s,
+  seed at 306.5 s); on `figure8_172338` it may not have been.
+
+The second mechanism is **offline-only** — live has no backwards clock jump — so
+this may not affect the car at all. Separating them means re-running `figure8`
+with full launch logging and reading the order of the reset and the seed. Not
+done. **Until it is, check `first map pose` on every offline run that seeds**; it
+is one line of `check_map_frame.py` output and it is the only thing that catches
+this.
+
+### Verified live on the car, 2026-08-06 ~11:20
+
+Bench bringup on `gosling1` (`map_tf_publisher:=ekf`), car on a table.
+Publishing one `/gosling1/initialpose` — what RViz's "2D Pose Estimate" sends —
+moved `odometry/global` from a drifting `(0.250, 1.028)` to
+`(0.4449997, -0.5749999)`, the seed to seven decimal places, and `amcl_pose`
+started publishing at the same moment. **So the remap works on hardware, and one
+pose estimate really does seed the localizer and the filter together.** The AMCL
+pose then converged elsewhere `(0.335, 1.246)`, which is expected: on a bench the
+scan does not match the floor-level map.
+
+Note this makes the RViz button do two things at once. That is the intent, but it
+is new behaviour — pressing it mid-run now jumps `odometry/global` as well as
+relocating AMCL.
+
 ### Live caveat: this input now comes from the other EKF
 
 `odom0` is `odometry/local`, which is `ekf_odom`'s output. Any configuration that

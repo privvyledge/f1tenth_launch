@@ -14,7 +14,32 @@ pulling, and everything measured so far is bag replay. The car was free from
 the priority over anything else in this file.**
 
 Runs kept for comparison: `bags/20260805/loc_ekfseed_*` (A's result),
-`loc_ekflocal_*` (B's, current HEAD).
+`loc_ekflocal_*` (B's, current HEAD — now on all three bags).
+
+### Read this before the next live session
+
+- **bug-115 — the seed is racy.** B's cross-bag pass caught `figure8_172338`
+  starting at the origin despite the seeder reporting success; the other two
+  bags seeded fine. 2 of 3. Might be offline-only (`reset_on_time_jump` versus a
+  bag's backwards clock jump) or might be a subscription-matching race that also
+  bites live. Not separated. **Check `first map pose` against the seed on every
+  run** — it is one line of `check_map_frame.py` and it is the only detector.
+- **bug-116 — always check for an already-running stack before a bringup.** A
+  1h40m-old `teleop.launch.py` was still up on gosling1 on 2026-08-06; a bringup
+  on top of it put **two `vesc_driver_node`s on one serial port**, which is what
+  the `Out-of-sync with VESC, discarding N bytes` flood is. Strong candidate for
+  the same root cause as bug-068's dead-stick. Also: `kill -9` on a `ros2 launch`
+  parent **orphans every child**, and SIGINT to a launch started with
+  `docker exec -d` (no pty) does not reliably stop it — use the pty recipe.
+- On **one clean** bringup the stack is correct: every nav2 server singleton,
+  `odometry/local`, `odometry/global` and `vehicle/ackermann_cmd` all at exactly
+  one publisher. The duplication above was operational, not a launch defect.
+- `60_nav2_test.sh` does **not** pass `launch_twist_to_ackermann:=True`, so in
+  its live (non-`--dry-run`) mode Nav2's `cmd_vel` never reaches `drive`. Add it
+  before expecting the car to move under Nav2.
+- The bench run used `map_frequency`'s launch default of **10.0 Hz**
+  (`odometry/global` measured at 10.002 Hz). The 30 Hz that B was measured at is
+  not what a live bringup gives you — pass `map_frequency:=30.0` if you want it.
 
 **Watch this on the first live run:** the seeding fix is verified on bags but not
 on hardware, and it changes live behaviour. RViz's "2D Pose Estimate" button now
