@@ -95,12 +95,13 @@ becomes a real option for the MPC; if it does not, the ZOH answer stands and
 After B, the next candidates are `pose0_rejection_threshold` (2.0 Mahalanobis —
 rejections leave it coasting on dead reckoning, then jumping) and `sensor_timeout`
 (0.13 s against an 0.118 s `amcl_pose` interval, so a single dropped scan trips
-it). Do not touch those until A and B are measured.
+it). Do not touch those until B is measured.
 
 ### How to run either one
 
-The 2026-08-06 container was removed; recreate it and re-stage, because the image
-predates the fixes (see "Container and staging" below). Then:
+A container may already be up — check `docker ps` for `f1t_offline_0806b`. If not,
+recreate it and re-stage, because the image predates the fixes (see "Container and
+staging" below). Then:
 
 ```bash
 export ROS_DOMAIN_ID=42
@@ -130,16 +131,17 @@ python3 check_map_frame.py $BAG_ROOT/loc_<name>_mapping_drive_170025 \
 ekf+vyaw+seed **69.6 mm**.)
 
 Report **`correction step p95` and `max`** every time — smoothness is the
-complaint, not mean error. Always report the unskipped number too; the startup
-transient is real until A lands.
+complaint, not mean error. Report the unskipped number too: since A landed the
+two should agree, and a gap between them means the seed did not take.
 
 Kept for comparison: `bags/20260805/loc_ekf30_*` (as configured),
-`loc_ekf30nv_*` (`--no-vslam`), `loc_ekfvyaw_*` (with the fix).
+`loc_ekf30nv_*` (`--no-vslam`), `loc_ekfvyaw_*` (vyaw only), `loc_ekfseed_*`
+(vyaw + seeding = current HEAD, the one to beat).
 
 ## Container and staging — READ BEFORE RUNNING ANYTHING
 
 `privvyledge/f1tenth:humble-devel-08052026` was built 2026-08-05 14:19, which is
-**before** commits `e974a93`, `e28b2b4` and `58d1ae0`. Its
+**before** commits `e974a93`, `e28b2b4`, `58d1ae0` and `bab2172`. Its
 `/workspaces/f1tenth` is in the container filesystem, not a bind mount, so a
 fresh container starts with a stale workspace — verified on 2026-08-06, it had
 `pose0_relative: true`, `max_particles: 500` and no `fuse_vslam_global`.
