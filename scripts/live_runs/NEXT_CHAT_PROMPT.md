@@ -35,9 +35,13 @@ is a localization job, not a mapping job:
   call. `particle_filter` is out until its known bugs are fixed. The RTABMap
   localizer was disabled on an *assumption* that it is slow and has never been
   measured: test its accuracy and CPU, and if it holds up feed it into the EKF.
-- The hard part is the **initial pose**: each bag zeroes position but **not
-  heading** (EKF starts at −0.951 / −0.411 / −0.436 rad), and the physical start
-  pose differs per run, so the offsets are unknown until estimated.
+- The **initial pose has a strong analytic prior** — do not run blind global
+  localization. The operator hand-placed the car at the same tile-aligned start
+  pose for all three runs, so `map→odom` is a pure rotation by
+  `Δ = yaw_mapping − yaw_k`: **0°**, **−30.96°** (figure8), **−29.51°**
+  (loop_laps). Seed AMCL/the map EKF with these and refine. Naive scan matching
+  against the map cannot validate them — it fails its own ground-truth control.
+  Details and the evidence: `MAP_BUILD_HANDOFF.md` §1.
   `50_localization_test.sh` is the entry point.
 
 Full reasoning, including why a "fused map" would mean RTABMap multi-session

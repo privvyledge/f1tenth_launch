@@ -90,13 +90,46 @@ odometry. That single transform is what expresses each bag's trajectory in the
 shared `map` frame, which *is* the consistency you want. `50_localization_test.sh`
 is the existing entry point.
 
-The one real difficulty: because each bag starts at its own identity origin,
-each needs an **initial pose in the map frame**. Options, cheapest first:
-seed `/initialpose` with a guess if the operator can recall roughly where the
-car was parked; or let `particle_filter`'s coarse-to-fine global localization
-(`global_loc_*` in `localizer_pf.yaml`) find it; or scan-match the bag's first
-`lidar/scan_filtered` against the map. Verify by checking that the resulting
-map-frame path stays inside the mapped free space and that the loop closes.
+Each bag needs an **initial pose in the map frame**. There is a strong prior
+available — use it, do not run blind global localization.
+
+**The operator hand-placed the car at the same physical start pose for all three
+runs, aligned to the floor tiles, repeatable to a few mm/cm.** Combined with the
+measured initial yaws, that makes `map→odom` analytically derivable rather than
+something to search for. Each bag's odom origin sits at that same physical
+point (initial positions are all ~0 to within 8 mm), so the only difference
+between the runs' odom frames is the EKF's initial heading. Since `map ≡ odom`
+for `mapping_drive_170025`, for run *k*:
+
+> `map→odom_k` = pure rotation about the common start point by
+> `Δ = yaw_mapping − yaw_k`, zero translation.
+
+| bag | Δ |
+|---|---|
+| `mapping_drive_170025` | 0 (identity, by construction) |
+| `figure8_172338` | −0.5404 rad (**−30.96°**) |
+| `loop_laps_173558` | −0.5151 rad (**−29.51°**) |
+
+**Seed AMCL / the map EKF with these and let the localizer refine.** They are a
+prior, not the answer — the placement is human-accurate and the pure-rotation
+model assumes exactly zero translation offset.
+
+**Do not try to validate this by naive scan matching against `rtabmap_2d_final`
+— that was attempted and it does not work.** Sweeping Δ and scoring LiDAR
+endpoints against the map's occupied cells (distance transform) failed its own
+ground-truth control: `mapping_drive_170025`, whose true Δ is 0 by construction,
+best-fit at **−2.29°** using the whole run and at **−68.75°** using only the
+first 15 s. The map is too sparse (1732 occupied cells at 0.05 m) for endpoint
+distance to constrain rotation from a small viewpoint span — mean endpoint
+distance stays 0.19–0.38 m across the entire sweep, i.e. the objective is nearly
+flat. The method cannot recover a known-zero answer, so it cannot adjudicate the
+other two runs either. It neither confirms nor refutes the table above.
+
+Validate instead by: the localizer's own converged covariance; whether the
+map-frame path stays in free space and the loop closes; and LUCIO's independent
+cross-machine check (pixel-motion onset vs odom-velocity onset), which is an
+external measurement rather than a self-consistency test. If accuracy is
+marginal, see the 0.025 m rebuild note in §2.
 
 `mapping_drive_170025` is the easy case: its map was built from its own
 odometry with RTABMap's `map→odom` starting at identity, so the `map` and `odom`
