@@ -1,18 +1,26 @@
 # Next session — START HERE
 
-**Updated 2026-08-06 ~09:50 EDT.** Item 3 below (the MPC's jerky pose) is done and
-answered NO; see `LOCALIZER_FOLLOWUPS.md` §5. Everything else in this file still
-stands, and `deliverables/20260805/` is still frozen v1 with checksums verified.
+**Updated 2026-08-06 ~11:00 EDT.** Item 3 below (the MPC's jerky pose) was
+answered NO in `LOCALIZER_FOLLOWUPS.md` §5 — **and then reopened and answered YES
+in §6**: with B's fix `ekf_map` matches AMCL on smoothness and beats it on
+accuracy. `deliverables/20260805/` is still frozen v1 with checksums verified.
 
-## Your first 30 minutes are BAG-ONLY — the car is not available
+## Both offline tasks are DONE. Go to items 1 and 2 — the live tests.
 
-The operator's coworkers have `gosling1` for roughly an hour from 09:45 EDT. The
-live bringup and the first Nav2 goal (items 1 and 2) are **deferred**, not
-dropped. Offline bag replay on the SSD is still fine and is what to do meanwhile.
+**A is DONE** (seeding, commit `bab2172`) and **B is DONE** (the motion model,
+below). The offline work on `ekf_map` has run out of untested levers worth
+pulling, and everything measured so far is bag replay. The car was free from
+~10:45 EDT, so **item 1 (live bringup) and item 2 (the first Nav2 goal) are now
+the priority over anything else in this file.**
 
-**A is DONE (commit `996d33c`). Start at B** — an offline pass on the frozen
-control bag, ~4 min, set up and ready. Kept for comparison:
-`bags/20260805/loc_ekfseed_*` is A's verified result.
+Runs kept for comparison: `bags/20260805/loc_ekfseed_*` (A's result),
+`loc_ekflocal_*` (B's, current HEAD).
+
+**Watch this on the first live run:** the seeding fix is verified on bags but not
+on hardware, and it changes live behaviour. RViz's "2D Pose Estimate" button now
+resets `ekf_map` as well as relocating AMCL — that is the intent, but it is the
+first time that button does two things. Expect `odometry/global` to jump when
+someone presses it mid-run.
 
 ### A. Fix bug-111 — seed `ekf_map`  ✅ DONE 2026-08-06 ~10:15, commit `996d33c`
 
@@ -68,36 +76,45 @@ Verify: `check_map_frame.py` should report `first map pose` at the seed
 
 </details>
 
-### B. Give `ekf_map` a motion model that matches what it is differenced against
+### B. Give `ekf_map` a motion model that matches what it is differenced against  ✅ DONE 2026-08-06 ~10:55
 
-This is the highest-value remaining change and it explains why `ekf_map` still
-lost after the `vyaw` fix. The filter estimates `map->base_link`; `map->odom` is
-published as `(map->base_link) o (odom->base_link)^-1`, and that second term comes
-from **`ekf_odom`** — a different filter with a much better motion model (2 IMUs +
-rf2o + VESC at 30 Hz). `ekf_map` meanwhile dead-reckons on `vehicle/vesc_odom`
-velocities alone, since IMUs are excluded from it by design. **Every disagreement
-between the two motion models lands in `map->odom` at 30 Hz even when the
-localizer has said nothing new** — and VESC odometry is the known-bad one here
-(1.6-1.7 m divergence, ~25 deg of yaw drift per 150 s run; see carried-forward
-item 3).
+**It worked, and it closed the whole smoothness gap.** `odom0` changed from
+`vehicle/vesc_odom` (velocities) to **`odometry/local` fused differentially**, so
+the map EKF's prediction is the same increments as the `odom->base_link` its
+correction is differenced against. Full write-up: `LOCALIZER_FOLLOWUPS.md` §6,
+bug-114. Run kept: `bags/20260805/loc_ekflocal_mapping_drive_170025`.
 
-AMCL has no such problem: it looks up the *actual* `odom->base_link` from TF and
-differences its own pose against it, so its correction is consistent by
-construction with the transform the consumer composes.
+Steady state (`--skip 35`), same control, same map, same truth, same seed:
 
-So: **change `odom0` from `vehicle/vesc_odom` (velocities) to `odometry/local`
-(the odom EKF's own output) fused differentially**, which makes the map EKF's
-prediction identical to the transform it is differenced against. Measure it the
-same way. If that closes most of the gap to AMCL's 15.7 mm step p95, `ekf_map`
-becomes a real option for the MPC; if it does not, the ZOH answer stands and
-`ekf_map` should be left off the map-frame path for good.
+| | mean err | **step p95** | **step max** | inside 126 mm |
+|---|---|---|---|---|
+| AMCL direct — the target | 74.7 mm | 15.7 mm | 59.6 mm | 85.2 % |
+| ekf_map + `vyaw` + seed (previous HEAD) | 84.3 mm | 38.7 mm | 280.2 mm | 80.5 % |
+| **ekf_map + `odometry/local` (now HEAD)** | **74.6 mm** | **18.2 mm** | **64.0 mm** | **87.7 %** |
 
-After B, the next candidates are `pose0_rejection_threshold` (2.0 Mahalanobis —
-rejections leave it coasting on dead reckoning, then jumping) and `sensor_timeout`
-(0.13 s against an 0.118 s `amcl_pose` interval, so a single dropped scan trips
-it). Do not touch those until B is measured.
+Whole run, unskipped: **62.3 mm mean, step p95 16.2 mm, 90.3 % inside the bar** —
+beating AMCL's 64.7 mm / 87.3 %. The seed took: `first map pose`
+`(+0.446, -0.576, -79.67 deg)` against the seed `(+0.445, -0.575, -79.82)`. The
+unskipped mean being *lower* than the skipped one is the seed being nearly exact,
+not a gap — a failed seed makes the unskipped number much worse, as 191.6 vs
+85.2 mm did before A.
 
-### How to run either one
+`ekf_map` is now a real option for the MPC — AMCL's smoothness, slightly better
+accuracy, and a steady 30 Hz instead of the 8.5 Hz scan rate. **It is still not
+the default broadcaster**: `map_tf_publisher` stays `amcl`, because this is one
+bag replay. Switching the default is a decision for after the live test.
+
+One residual, not chased: whole-run step max is 235.6 mm while the skipped run's
+is 64.0 mm, so a single ~236 mm correction happens inside the first 35 s and
+nowhere else — almost certainly AMCL's first real correction away from the seed.
+A startup transient on a filter that is smooth in tracking.
+
+`pose0_rejection_threshold` (2.0 Mahalanobis) and `sensor_timeout` (0.13 s against
+an 0.118 s `amcl_pose` interval) remain untouched, deliberately. With the motion
+model fixed they may not be worth touching at all — a filter that is no longer
+fighting its own prediction rejects fewer poses.
+
+### How to re-run either one (both are already done — this is for a re-measure)
 
 A container may already be up — check `docker ps` for `f1t_offline_0806b`. If not,
 recreate it and re-stage, because the image predates the fixes (see "Container and
@@ -118,17 +135,18 @@ python3 check_map_frame.py $BAG_ROOT/loc_<name>_mapping_drive_170025 \
     --truth $MAP_ROOT/truth_mapping_drive_170025.csv --skip 35
 ```
 
-**Beat this table or the answer does not change** (steady state, `--skip 35`):
+The full history, steady state (`--skip 35`):
 
 | | mean err | step p95 | step max | inside 126 mm |
 |---|---|---|---|---|
 | **AMCL direct — the target** | **74.7 mm** | **15.7 mm** | **59.6 mm** | **85.2 %** |
 | ekf_map as configured | 125.0 mm | 83.5 mm | 920.1 mm | 66.9 % |
 | ekf_map + `vyaw` | 85.2 mm | 37.3 mm | 288.5 mm | 79.9 % |
-| **ekf_map + `vyaw` + seed (current HEAD)** | **84.3 mm** | **38.7 mm** | **280.2 mm** | **80.5 %** |
+| ekf_map + `vyaw` + seed | 84.3 mm | 38.7 mm | 280.2 mm | 80.5 % |
+| **+ `odom0` = `odometry/local` (current HEAD)** | **74.6 mm** | **18.2 mm** | **64.0 mm** | **87.7 %** |
 
-(Full-run means, which A's fix changes most: AMCL 64.7 mm, ekf+vyaw 191.6 mm,
-ekf+vyaw+seed **69.6 mm**.)
+(Full-run means: AMCL 64.7 mm, ekf+vyaw 191.6 mm, ekf+vyaw+seed 69.6 mm,
+current HEAD **62.3 mm**.)
 
 Report **`correction step p95` and `max`** every time — smoothness is the
 complaint, not mean error. Report the unskipped number too: since A landed the
@@ -136,7 +154,7 @@ two should agree, and a gap between them means the seed did not take.
 
 Kept for comparison: `bags/20260805/loc_ekf30_*` (as configured),
 `loc_ekf30nv_*` (`--no-vslam`), `loc_ekfvyaw_*` (vyaw only), `loc_ekfseed_*`
-(vyaw + seeding = current HEAD, the one to beat).
+(vyaw + seeding), `loc_ekflocal_*` (**current HEAD**).
 
 ## Container and staging — READ BEFORE RUNNING ANYTHING
 
@@ -285,11 +303,16 @@ Ordered. 1 and 2 are the ones that matter.
 all of it:
 - the folded `localizer_amcl.yaml`: does AMCL converge from its startup pose, and
   is `map->odom` steady at driving speed (not just on a 1 m/s replay)?
-- `ekf_map` with the new `fuse_vslam_global` plumbing, `pose0_relative: false` and
-  the `vyaw` fix (bug-112). Note it is **not** the map-frame broadcaster — AMCL is,
-  and measurement says keep it that way (`LOCALIZER_FOLLOWUPS.md` §5). What to
-  watch live is `odometry/global`, and that it does not need ~30 s to converge
-  from startup (bug-111 is unfixed);
+- `ekf_map` with the new `fuse_vslam_global` plumbing, `pose0_relative: false`,
+  the `vyaw` fix (bug-112), the `initialpose` seed (bug-111) and the
+  `odometry/local` motion model (bug-114). It is **still not** the map-frame
+  broadcaster — AMCL is — but that is now a "one bag replay is not enough"
+  decision, not a measurement against it (`LOCALIZER_FOLLOWUPS.md` §6). What to
+  watch live is `odometry/global`: that it starts at the seed rather than the
+  origin, and that it tracks `amcl_pose` smoothly at driving speed. **If it does,
+  switching `map_tf_publisher` to `ekf` is the decision to make** — it buys a
+  steady 30 Hz global pose instead of the localizer's 8.5 Hz staircase, which is
+  the MPC's original complaint;
 - `/dev/ydlidar -> ttyUSB0` after the 17:45 reboot, still unconfirmed.
 
 **2. Send a Nav2 goal. The car has never driven autonomously.** `testing_checklist.md`
@@ -298,17 +321,21 @@ is a map, a localizer that clears the bar, and a command gate whose R1 handover 
 verified. Remember `launch_twist_to_ackermann:=True` when driving under Nav2 —
 it defaults False because the MPC publishes `drive` directly.
 
-**3. DONE 2026-08-06 — and `ekf_map` is NOT the fix. See `LOCALIZER_FOLLOWUPS.md` §5.**
-Measured on the same control: `ekf_map` broadcasting at 30 Hz is **less smooth than
-AMCL direct**, not more — correction step p95 **83.5 mm vs 15.7 mm**, max **920 mm
-vs 59.6 mm**, and less accurate too (125.0 vs 74.7 mm steady state). Two real
-defects came out of it: `ekf_map` is **never seeded** (starts at the origin, ~30 s
-at ~740 mm / 82 deg, silently — bug-111), and it had **no angular-rate input at
-all** (`odom0_config` `vyaw` was false, IMUs excluded by design — bug-112,
-**fixed**, worth 125.0 -> 85.2 mm and step p95 83.5 -> 37.3 mm, still short of
-AMCL). v1 is untouched: it never used this path. **The live lever for the MPC's
-jerkiness is gone; what remains is the offline smoothing for LUCIO below.**
-The original reasoning, now superseded, was:
+**3. DONE 2026-08-06 — and after three fixes `ekf_map` IS a live option.
+See `LOCALIZER_FOLLOWUPS.md` §6.** As configured it was far *worse* than AMCL
+direct (step p95 83.5 mm vs 15.7, max 920 vs 59.6, 125.0 vs 74.7 mm mean). Three
+real defects came out of it, all fixed: no angular-rate input at all
+(`odom0_config` `vyaw` false, IMUs excluded by design — bug-112, worth
+125.0 -> 85.2 mm); never seeded, starting at the origin for ~30 s at ~740 mm /
+82 deg, silently (bug-111); and a motion model that did not match the transform
+its correction is differenced against (bug-114, the big one). It now scores
+**74.6 mm / step p95 18.2 mm / max 64.0 mm** against AMCL's **74.7 / 15.7 /
+59.6**, and beats it whole-run (62.3 mm, 90.3 % inside the bar). v1 is untouched:
+it never used this path, and a ~2 mm improvement is not worth a v2. **So the live
+lever for the MPC's jerkiness is back — a steady 30 Hz `map->odom` instead of an
+8.5 Hz staircase — pending the live test in item 1.** The offline smoothing for
+LUCIO below is still the right answer for that consumer, which reads a finished
+bag. The original reasoning, now superseded, was:
 
 
 The consumer complaint is expected behaviour, not a defect: v1's `map->odom` is a
