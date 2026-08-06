@@ -407,7 +407,14 @@ AMCL already clears the accuracy bar at a fraction of the cost.
    of 2026-08-08). Temporarily 0.25. Related: `vehicle/vesc_odom` diverges
    1.6–1.7 m with correct path length, which points at the same calibration —
    and these runs show ~25° of odom yaw drift per 150 s.
-4. **Verify `/dev/ydlidar → ttyUSB0` survived the 17:45 reboot** on gosling1.
+4. ~~**Verify `/dev/ydlidar → ttyUSB0` survived the 17:45 reboot** on gosling1.~~
+   **DONE 2026-08-06 ~10:55 — it did.** `/dev/ydlidar -> ttyUSB0` and
+   `/dev/sensors/vesc -> ../ttyACM0`, which is the correct split (bug-073 is the
+   case where `ydlidar` points at a **ttyACM**). RealSense D435i enumerates.
+   Still unverified live, since this is device presence, not a working driver.
+   Note the **DualSense was not connected** at that check (`/dev/input/js*`
+   absent) — with no joystick the command gate's heartbeat never arrives and the
+   gate stays closed, so a bringup started in that state will not actuate.
 5. **`rtabmap_2d_overfiltered.yaml` names the wrong PGM** (`rtabmap_2d_final.pgm`
    with the overfiltered origin). Cosmetic; that file is marked do-not-use.
 
