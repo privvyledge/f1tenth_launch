@@ -166,6 +166,16 @@ Their accuracy bar: a degree-3 pixel→world fit already reaches 126 mm RMS, so 
 pose source drifting ~0.5 m is 4x too coarse. That is the standard the localized
 output has to beat — not message counts.
 
+**Risk worth sizing early: the map's own resolution is a floor.** Both grids are
+**0.05 m/cell**, so cell quantisation alone is ~±25 mm before any localizer
+error, against a 126 mm target — and `rtabmap_2d_final` has only 1732 occupied
+cells, i.e. fairly sparse geometry for a scan matcher to lock onto. If the
+localized pose does not clear the bar comfortably, the first lever is rebuilding
+the grid at **0.025 m** (`Grid/CellSize`, and the SLAM Toolbox `resolution`)
+rather than tuning the localizer. Decide this by measuring, not by assuming;
+note the loop-closure residuals on these runs were 0.36–1.17 m, so map-frame
+accuracy of ~0.1 m is a claim that needs evidence before it is promised to LUCIO.
+
 ### 3. Then, waypoints
 
 Once all three trajectories are in the `map` frame, generating waypoints is a
