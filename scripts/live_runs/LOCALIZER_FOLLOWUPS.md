@@ -339,14 +339,45 @@ has no fix from this direction today.
 
 ### Two real defects found on the way
 
-**bug-111 — `ekf_map` is never seeded, and nothing says so.** `seed_initialpose.py`
-seeds `nav2_amcl` through `/initialpose`; `robot_localization` does not listen
-there (it seeds via its own `set_pose`). So with `map_tf_publisher:=ekf` the
-filter starts from a zero state: `first map pose x=+0.000 y=+0.001 yaw=+0.05 deg`
-against a true start of `(+0.445, -0.575, -79.82 deg)`. It spends **~30 s slewing
-in from the origin at ~740 mm / 82 deg of error** while publishing a perfectly
-steady 30 Hz `map->odom`. Same silent-failure shape as the RTABMap localizer in
-§1. Live, that is the first half-minute of every run.
+**bug-111 — `ekf_map` was never seeded, and nothing said so. FIXED.**
+`seed_initialpose.py` seeds `nav2_amcl` through `/initialpose`;
+`robot_localization` does not listen there (it seeds via its own `set_pose`). So
+with `map_tf_publisher:=ekf` the filter started from a zero state:
+`first map pose x=+0.000 y=+0.001 yaw=+0.05 deg` against a true start of
+`(+0.445, -0.575, -79.82 deg)`. It spent **~30 s slewing in from the origin at
+~740 mm / 82 deg of error** while publishing a perfectly steady 30 Hz
+`map->odom`. Same silent-failure shape as the RTABMap localizer in §1. Live, that
+was the first half-minute of every run — RViz's "2D Pose Estimate" also publishes
+`/initialpose` and nothing else.
+
+**The fix is a remap, not a bridge node.** `set_pose` is
+`geometry_msgs/PoseWithCovarianceStamped` — the same type as `/initialpose` — and
+robot_localization's own header describes it as *"usually published from rviz"*.
+The library always intended the RViz pose tool to seed it; only the topic name
+differed. `ekf_map.launch.py` now remaps `set_pose` -> `initialpose` under a new
+`seed_from_initialpose` argument (default `True`), so one operator pose estimate
+seeds the global localizer and the filter together, offline and live alike.
+Deliberately **not** applied to `ekf_odom`, whose `world_frame` is `odom` — a
+map-frame pose would be wrong there. It is opt-out because `set_pose` *resets*
+the filter, which is right for an on-demand relocalization and wrong for anything
+publishing `initialpose` periodically.
+
+Verified on the control: `first map pose x=+0.446 y=-0.576 yaw=-79.78 deg`
+against the seed `(+0.445, -0.575, -79.82)` — **1 mm and 0.04 deg**. The transient
+is gone, and full-run and `--skip 35` numbers now agree instead of differing by
+100 mm.
+
+| | full-run mean | steady mean | step p95 | step max | bar (steady) |
+|---|---|---|---|---|---|
+| **AMCL direct** | **64.7 mm** | **74.7 mm** | **15.7 mm** | **59.6 mm** | **85.2 %** |
+| ekf as configured | 222.3 mm | 125.0 mm | 83.5 mm | 920.1 mm | 66.9 % |
+| ekf + `vyaw` | 191.6 mm | 85.2 mm | 37.3 mm | 288.5 mm | 79.9 % |
+| **ekf + `vyaw` + seed** | **69.6 mm** | 84.3 mm | 38.7 mm | 280.2 mm | 80.5 % |
+
+**Accuracy is now near parity; smoothness is still 2.5x worse**, and smoothness
+was the entire reason for considering `ekf_map`. So the recommendation does not
+move: AMCL stays the map-frame broadcaster. What remains untested is the
+structural cause below.
 
 `check_map_frame.py` gained **`--skip SEC`** so a seeded localizer and an
 unseeded one can be compared on tracking quality instead of on startup. Report
@@ -369,15 +400,47 @@ p95 83.5 -> 37.3 mm — a large improvement that still does not reach AMCL direc
 Neither defect touches v1: it was produced with `map_tf_publisher:=amcl`, which
 uses none of this. **`deliverables/20260805/` is unchanged and still stands.**
 
-### If someone wants to take `ekf_map` further
+### The structural reason it still loses — and the one untested lever
 
-In order, and only if there is a reason to prefer a fused pose over AMCL's:
-seed it (fixes the 30 s transient); then look at why the remaining 289 mm
-correction steps exist at all — `pose0_rejection_threshold: 2.0` Mahalanobis and
-`sensor_timeout: 0.13` against an 8.5 Hz (0.118 s) `amcl_pose` are both marginal
-and are the next things to measure. The 2026-08-06 runs are kept for comparison:
-`bags/20260805/loc_ekf30_*` (as configured), `loc_ekf30nv_*` (no VSLAM),
-`loc_ekfvyaw_*` (with the fix).
+`ekf_map` does not estimate `map->odom`. It estimates `map->base_link`, and
+`map->odom` is published as `(map->base_link) o (odom->base_link)^-1`. That second
+term comes from **`ekf_odom`** — a different filter with a much better motion
+model (2 IMUs + rf2o + VESC at 30 Hz). `ekf_map` meanwhile dead-reckons on
+`vehicle/vesc_odom` velocities alone, since IMUs are excluded from it by design.
+**Every disagreement between the two motion models lands in `map->odom` at 30 Hz
+even when the localizer has said nothing new** — and VESC odometry is the
+known-bad one (1.6-1.7 m divergence, ~25 deg of yaw drift per 150 s run).
+
+AMCL has no such problem: it looks up the *actual* `odom->base_link` from TF and
+differences its own pose against it, so its correction is consistent by
+construction with the transform the consumer composes.
+
+**Untested lever:** change `odom0` from `vehicle/vesc_odom` (velocities) to
+`odometry/local` (the odom EKF's own output) fused differentially, making the map
+EKF's prediction identical to the transform it is differenced against. If that
+closes most of the remaining gap to AMCL's 15.7 mm step p95, `ekf_map` becomes a
+real option for the MPC; if not, the ZOH answer stands and this path should be
+left off the map-frame route for good. Only after that are
+`pose0_rejection_threshold` (2.0 Mahalanobis — rejections leave it coasting on
+dead reckoning, then jumping) and `sensor_timeout` (0.13 s against an 0.118 s
+`amcl_pose` interval, so one dropped scan trips it) worth touching.
+
+Runs kept for comparison: `bags/20260805/loc_ekf30_*` (as configured),
+`loc_ekf30nv_*` (no VSLAM), `loc_ekfvyaw_*` (vyaw only),
+`loc_ekfseed_*` (vyaw + seeding, current HEAD).
+
+### Note for the `particle_filter` work
+
+`localizer_pf.yaml` has its own coarse-to-fine global initialization, triggered by
+`/initialpose` or automatically after `global_loc_timeout` (5 s). The remap above
+covers the first case — a PF seeded from `/initialpose` seeds `ekf_map` at the
+same moment. It does **not** cover the second: if the PF self-localizes with
+nobody publishing `/initialpose`, `ekf_map` is unseeded again and bug-111 returns
+in full. Forwarding a localizer's first converged fix to `set_pose` needs a
+convergence criterion and a latch (`set_pose` resets the filter, so it must fire
+exactly once) — that is real logic and would be the first actual node in this
+otherwise pure-launch package. Do not write it speculatively; wait for the PF
+measurements and see whether the auto-init path is even used.
 
 ---
 
@@ -386,6 +449,7 @@ and are the next things to measure. The 2026-08-06 runs are kept for comparison:
 | file | change |
 |---|---|
 | `config/localization/ekf_map.yaml` | `odom0_config` `vyaw` false -> **true** (bug-112) |
+| `launch/localization/ekf_map.launch.py` | new `seed_from_initialpose` arg (default True): remaps `set_pose` -> `initialpose` so one pose estimate seeds the localizer and the filter together (bug-111) |
 | `scripts/analysis/check_map_frame.py` | new `--skip SEC`, to separate startup transient from tracking |
 | `scripts/live_runs/51_localize_offline.sh` | new `--map-frequency` (the launch default 10.0 is below the 30 Hz it smooths) and `--no-vslam` |
 | `launch/mapping/3d_mapping.launch.py` | split the concatenated `/tf` + `/tf_static` `SetRemap` (bug-107) |

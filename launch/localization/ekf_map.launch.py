@@ -34,6 +34,7 @@ def generate_launch_description():
     node_name = LaunchConfiguration('node_name')  # ekf_filter_node, ukf_filter_node
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration')
     fuse_vslam_global = LaunchConfiguration('fuse_vslam_global')
+    seed_from_initialpose = LaunchConfiguration('seed_from_initialpose')
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -120,6 +121,16 @@ def generate_launch_description():
                         'map must also be CO-REGISTERED with the nav grid, which has '
                         'been asserted but never measured. Keep this False until it is.')
 
+    declare_seed_from_initialpose = DeclareLaunchArgument(
+            'seed_from_initialpose', default_value='True',
+            description='Remap this filter\'s `set_pose` input onto `initialpose`, so a '
+                        'single operator pose estimate (RViz, or seed_initialpose.py '
+                        'offline) seeds BOTH the global localizer and this filter. '
+                        'Without it robot_localization is never seeded and spends ~30 s '
+                        'slewing in from the map origin while looking healthy (bug-111). '
+                        'Set False only if something publishes initialpose repeatedly '
+                        'rather than on demand, since set_pose resets the filter.')
+
     # ekf_map.yaml keeps odom1 configured for the localized-into-a-saved-map case,
     # because that is the only case in which its differential/relative settings are
     # right. When VSLAM starts fresh (the default: localize_on_startup=False) the
@@ -129,6 +140,30 @@ def generate_launch_description():
     odom1_topic = PythonExpression([
         "'visual_slam/vis/slam_odometry' if '", fuse_vslam_global,
         "'.lower() == 'true' else 'visual_slam/vis/slam_odometry__NOT_FUSED'"])
+
+    # BUG-111. robot_localization seeds its state from a `set_pose` topic (and a
+    # matching service); it does NOT listen on `initialpose`. Nothing published
+    # `set_pose`, so this filter always started from a zero state and had to slew
+    # in from the map origin — measured at ~30 s of ~740 mm / 82 deg error on
+    # mapping_drive_170025, while publishing a perfectly steady 30 Hz map->odom
+    # the whole time. RViz's "2D Pose Estimate" button publishes `initialpose`
+    # only, so this was equally broken on the car and equally silent.
+    #
+    # The two topics are the SAME type (geometry_msgs/PoseWithCovarianceStamped)
+    # and robot_localization's own header describes set_pose as "usually
+    # published from rviz" — so the fix is the topic name, not a bridge node.
+    # Remapped here, one /initialpose seeds AMCL and this filter together,
+    # offline (seed_initialpose.py) and live (RViz) alike.
+    #
+    # Deliberately NOT applied to ekf_odom: its world_frame is `odom`, so seeding
+    # it with a map-frame pose would be wrong.
+    #
+    # `set_pose` RESETS the filter, which is why this is opt-out. It is correct
+    # for an operator relocalization, but if some other node ever publishes
+    # `initialpose` periodically rather than on demand, set this False.
+    set_pose_topic = PythonExpression([
+        "'initialpose' if '", seed_from_initialpose,
+        "'.lower() == 'true' else 'set_pose'"])
 
     # Specify actions/nodes
     kf_bringup_group = GroupAction([
@@ -167,6 +202,7 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    ('set_pose', set_pose_topic),
                     *remappings
                 ]
         ),
@@ -190,6 +226,7 @@ def generate_launch_description():
                 remappings=[
                     ('odometry/filtered', 'odometry/global'),
                     ('accel/filtered', 'accel/global'),
+                    ('set_pose', set_pose_topic),
                     *remappings
                 ]
         ),
@@ -215,6 +252,7 @@ def generate_launch_description():
     ld.add_action(declare_node_name)
     ld.add_action(declare_gravitational_acceleration)
     ld.add_action(declare_fuse_vslam_global)
+    ld.add_action(declare_seed_from_initialpose)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(kf_bringup_group)

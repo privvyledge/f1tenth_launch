@@ -10,10 +10,35 @@ The operator's coworkers have `gosling1` for roughly an hour from 09:45 EDT. The
 live bringup and the first Nav2 goal (items 1 and 2) are **deferred**, not
 dropped. Offline bag replay on the SSD is still fine and is what to do meanwhile.
 
-**Do this, in this order — both are offline passes on the frozen control bag,
-~4 min each, and both are set up and ready:**
+**A is DONE (commit `996d33c`). Start at B** — an offline pass on the frozen
+control bag, ~4 min, set up and ready. Kept for comparison:
+`bags/20260805/loc_ekfseed_*` is A's verified result.
 
-### A. Fix bug-111 — seed `ekf_map`
+### A. Fix bug-111 — seed `ekf_map`  ✅ DONE 2026-08-06 ~10:15, commit `996d33c`
+
+Fixed with a **remap, not a node**: `set_pose` is the same message type as
+`/initialpose`, and robot_localization's header calls it *"usually published from
+rviz"* — the library always meant the RViz pose tool to seed it, only the topic
+name differed. `ekf_map.launch.py` gained `seed_from_initialpose` (default
+`True`) which remaps `set_pose` -> `initialpose`. One pose estimate now seeds the
+localizer and the filter together, offline and live. Not applied to `ekf_odom`
+(its `world_frame` is `odom`; a map-frame pose would be wrong there).
+
+Verified: `first map pose` is now `(+0.446, -0.576, -79.78 deg)` against the seed
+`(+0.445, -0.575, -79.82)` — 1 mm / 0.04 deg, and the full-run mean dropped
+191.6 -> **69.6 mm**. **Smoothness did not improve** (step p95 38.7 mm vs AMCL's
+15.7 mm), so AMCL remains the broadcaster and **B below is still the open
+question.**
+
+Still open in this area, and NOT to be written speculatively: if the
+`particle_filter`'s automatic global initialization converges without anyone
+publishing `/initialpose`, `ekf_map` is unseeded again. Forwarding a localizer's
+first converged fix to `set_pose` needs a convergence criterion and a
+fire-exactly-once latch — real logic, and it would be the **first actual node in
+this otherwise pure-launch package**, so it is a deliberate decision for the
+operator, not a default. Wait for the PF measurements first.
+
+<details><summary>Original brief for A, kept for the API details</summary>
 
 Verified in the image (`privvyledge/f1tenth:humble-devel-08052026`):
 `robot_localization`'s `ekf_node` **does** expose two seeding paths, and neither
@@ -40,6 +65,8 @@ not only in the offline script.
 Verify: `check_map_frame.py` should report `first map pose` at the seed
 (`+0.445, -0.575, -79.82 deg`) instead of the origin, and the full-run and
 `--skip 35` numbers should converge on each other.
+
+</details>
 
 ### B. Give `ekf_map` a motion model that matches what it is differenced against
 
@@ -96,7 +123,11 @@ python3 check_map_frame.py $BAG_ROOT/loc_<name>_mapping_drive_170025 \
 |---|---|---|---|---|
 | **AMCL direct — the target** | **74.7 mm** | **15.7 mm** | **59.6 mm** | **85.2 %** |
 | ekf_map as configured | 125.0 mm | 83.5 mm | 920.1 mm | 66.9 % |
-| ekf_map + `vyaw` (current HEAD) | 85.2 mm | 37.3 mm | 288.5 mm | 79.9 % |
+| ekf_map + `vyaw` | 85.2 mm | 37.3 mm | 288.5 mm | 79.9 % |
+| **ekf_map + `vyaw` + seed (current HEAD)** | **84.3 mm** | **38.7 mm** | **280.2 mm** | **80.5 %** |
+
+(Full-run means, which A's fix changes most: AMCL 64.7 mm, ekf+vyaw 191.6 mm,
+ekf+vyaw+seed **69.6 mm**.)
 
 Report **`correction step p95` and `max`** every time — smoothness is the
 complaint, not mean error. Always report the unskipped number too; the startup
