@@ -1,5 +1,17 @@
 # Offline map build — handoff
 
+> **SUPERSEDED IN PART, 2026-08-05 ~21:10 EDT. Read `MAP_FRAME_DELIVERY.md`.**
+> "What's next" is done: all three bags are localized into one map frame and the
+> derived bags are built and verified. Two claims in §1 below were **wrong** and
+> are struck through in place:
+> * `map` does not coincide with `odom` at the START of the mapping run — it
+>   coincides at the END. True `map->odom` at t=0 is
+>   `(+0.4545, -0.5746, -25.33 deg)`, not identity.
+> * The `Δ` table (-30.96 / -29.51 deg) is therefore off by 25.33 deg each; the
+>   measured values are **-56.35** and **-54.91 deg**.
+> The map-build sections (artifacts, the SLAM Toolbox rejection, the four fixed
+> defects, the environment) are unaffected and still current.
+
 **Written 2026-08-05 ~19:55 EDT.** Everything below was measured by rebuilding
 maps from `mapping_drive_170025` on `gosling1`, not inferred from launch files.
 
@@ -98,28 +110,43 @@ runs, aligned to the floor tiles, repeatable to a few mm/cm.** Combined with the
 measured initial yaws, that makes `map→odom` analytically derivable rather than
 something to search for. Each bag's odom origin sits at that same physical
 point (initial positions are all ~0 to within 8 mm), so the only difference
-between the runs' odom frames is the EKF's initial heading. Since `map ≡ odom`
-for `mapping_drive_170025`, for run *k*:
+between the runs' odom frames is the EKF's initial heading. ~~Since `map ≡ odom`
+for `mapping_drive_170025`~~ — **this premise is false, see below** — for run
+*k*:
 
 > `map→odom_k` = pure rotation about the common start point by
 > `Δ = yaw_mapping − yaw_k`, zero translation.
 
-| bag | Δ |
-|---|---|
-| `mapping_drive_170025` | 0 (identity, by construction) |
-| `figure8_172338` | −0.5404 rad (**−30.96°**) |
-| `loop_laps_173558` | −0.5151 rad (**−29.51°**) |
+| bag | ~~Δ (wrong)~~ | Δ measured 2026-08-05 21:00 |
+|---|---|---|
+| `mapping_drive_170025` | ~~0 (identity)~~ | **−25.33°** at t=0, → 0° at the end |
+| `figure8_172338` | ~~−30.96°~~ | **−56.35°** at t=0, → −33.1° at the end |
+| `loop_laps_173558` | ~~−29.51°~~ | **−54.91°** at t=0, → −39.1° at the end |
 
-**Seed AMCL / the map EKF with these and let the localizer refine.** They are a
-prior, not the answer — the placement is human-accurate and the pure-rotation
-model assumes exactly zero translation offset.
+**`map` coincides with `odom` at the END of the mapping run, not the start.**
+RTABMap optimized that graph from the end of the trajectory. Its own optimized
+poses (`scripts/analysis/rtabmap_ground_truth.py`, reading `Admin.opt_poses`
+from `rtabmap_final.db`) put the true `map→odom` at t=0 at
+`(+0.4545, −0.5746, −25.33°)`, decaying to exactly zero at the last keyframe.
+Every Δ above inherits that same 25.33° error.
+
+The pure-rotation model is also not quite right: Δ is not constant within a run.
+It sweeps by ~25° over ~150 s as the localizer removes the vehicle's yaw drift.
+
+**Seed the shared physical start pose in the map frame instead — one value for
+all three runs: `(+0.445, −0.575, −79.82°)`** — and let AMCL produce Δ. Seeding
+at the origin costs ~28 s of convergence during which every pose misses the
+126 mm bar. See `MAP_FRAME_DELIVERY.md`.
 
 **Do not try to validate this by naive scan matching against `rtabmap_2d_final`
 — that was attempted and it does not work.** Sweeping Δ and scoring LiDAR
-endpoints against the map's occupied cells (distance transform) failed its own
-ground-truth control: `mapping_drive_170025`, whose true Δ is 0 by construction,
-best-fit at **−2.29°** using the whole run and at **−68.75°** using only the
-first 15 s. The map is too sparse (1732 occupied cells at 0.05 m) for endpoint
+endpoints against the map's occupied cells (distance transform) appeared to fail
+its own ground-truth control: `mapping_drive_170025` best-fit at **−2.29°**
+using the whole run and at **−68.75°** using only the first 15 s. *(2026-08-05
+21:00: the control itself was wrong — that run's true Δ is not 0, it sweeps
+from −25.33° to 0°. So the sweep was never adjudicated either way. The
+conclusion below still holds on its own terms — a flat objective cannot
+constrain rotation — but this is no longer evidence for it.)* The map is too sparse (1732 occupied cells at 0.05 m) for endpoint
 distance to constrain rotation from a small viewpoint span — mean endpoint
 distance stays 0.19–0.38 m across the entire sweep, i.e. the objective is nearly
 flat. The method cannot recover a known-zero answer, so it cannot adjudicate the
@@ -131,11 +158,11 @@ cross-machine check (pixel-motion onset vs odom-velocity onset), which is an
 external measurement rather than a self-consistency test. If accuracy is
 marginal, see the 0.025 m rebuild note in §2.
 
-`mapping_drive_170025` is the easy case: its map was built from its own
+~~`mapping_drive_170025` is the easy case: its map was built from its own
 odometry with RTABMap's `map→odom` starting at identity, so the `map` and `odom`
-*frames* coincide for that bag. **That does not mean the car starts at
-identity** — position is zeroed but heading is not. Measured first pose of
-`odometry/local`:
+*frames* coincide for that bag.~~ **Wrong — they coincide at the END of the run,
+see above.** The rest of this paragraph does still hold: position is zeroed at
+t=0 but heading is not. Measured first pose of `odometry/local`:
 
 | bag | first x,y | first yaw |
 |---|---|---|
