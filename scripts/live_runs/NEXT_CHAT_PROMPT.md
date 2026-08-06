@@ -1,6 +1,117 @@
 # Next session — START HERE
 
-**Updated 2026-08-06 ~15:40 EDT.** The bag-driven Nav2 test below is **DONE**:
+**Updated 2026-08-06 ~18:55 EDT.** Read this top section first; everything
+below the `---` is the older Nav2 handoff, still valid.
+
+## Done today (18:19–18:45): the yaw drift is fixed and verified
+
+Committed as `3d17391` on `perf/config-tuning` (not pushed). `imu0_config` yaw
+→ `false` in `config/localization/ekf_odom.yaml`. Measured on the floor, on
+battery, car parked, three windows: `odometry/local` drift **+0.04 / +0.01 /
++0.17 °/min** against the **−13.94 °/min** baseline. The VESC quaternion still
+free-runs at ~−14 °/min but is no longer fused; yaw comes from Isaac VSLAM and
+rf2o. **`imu_corrector` and the Autoware `gyro_bias_estimator` are both
+unnecessary** — do not wire Autoware in. Detail in `MPC_BENCH_HANDOFF.md`.
+
+The MPC run in the same window failed. Stack-side analysis is in
+`/mnt/f1tenth_ssd/shared_dir/handoff/MPC_RUN_FINDINGS_from_f1tenth_launch.md`
+(the MPC agent owns the node itself). Short version: it tracked fine for ~200 s
+(`idx` 4→249, `cte` < 0.094 m, 0.83 m/s), then stalled at `idx=249` commanding
+max acceleration at 0.15 m/s and tripped its own `no_progress` guard. **Two
+leads, both on our side:**
+
+1. **Steering asymmetry vs. the route.** `vesc.yaml`'s
+   `servo = -1.4·angle + 0.56` clamped to `[0.08, 0.92]` gives **−14.7° left /
+   +19.7° right**. The loaded route is almost entirely left-turning and
+   **27–33 % of it demands more left steer than the servo can deliver**
+   (worst −18.7°). 0 % exceeds the right limit. The MPC is configured ±23°, so
+   it never sees the wall — it commanded `delta=-23.0deg` in 170 of ~200 logged
+   control lines. Fix cheaply by telling the MPC `min_steer:=-14.7 /
+   max_steer:=+19.7`; fix properly by recalibrating
+   `steering_angle_to_servo_offset` toward 0.5.
+2. **Possible low-speed deadband.** `vel_cmd` 0.15 m/s × `speed_to_erpm_gain`
+   3750 = **562 ERPM**, likely below where the motor turns from rest.
+   Unverified.
+
+## Two process failures worth not repeating
+
+- **I stopped another agent's container** (`mpc_claude_0806`) after reading it
+  as idle. Only stop containers you created, by name, after
+  `docker exec <c> ps -eo pid,etimes,cmd`.
+- **`--rm` destroyed the stack log.** jetson-containers runs with `--rm`, so
+  the teardown erased the only record of `command_gate`/mux state during the
+  MPC stall — which is exactly why lead (1) vs (2) is unresolved. **Copy logs
+  to `/mnt/f1tenth_ssd/shared_dir/` before any teardown**; the bind mount
+  survives `--rm`.
+
+## The real problem to fix next: bring-up takes 8–15 min for a 2-min test
+
+Measured today: 18:19 first command → 18:27:32 first measurement = **8.5 min**,
+of which the actual test was 60 s. Where it went, and what to do:
+
+| cost | ~time | fix |
+|---|---|---|
+| tar of the worktree over the OneDrive mount (one failed run: "file changed as we read it") | ~2 min | copy to local disk first, or keep a git clone **on the SSD** and `git pull` there |
+| host xauth + container recreate because the running one had no X11 mounts | ~2 min | **fold the xauth build into `~/bolus_ws/f1tenth_launch.sh`** so it cannot be forgotten (that script lives in the separate build repo) |
+| re-stage HEAD + verify the symlink resolved | ~1 min | unavoidable while the image ships an older `f1tenth_launch`; cheap once staging is rsync |
+| `ros2 launch` → all nodes up (bringup `TimerAction` 10 s + 15 s, camera +6 s, LiDAR +2 s) | ~1.5 min | irreducible today; the timers are hardcoded, not launch args |
+| my own health checks (`ros2 topic hz` × 9, node list) | ~2 min | script it into one pass |
+
+**The single biggest win is not tearing the container down between tests.** The
+container + staging cost is one-time; only `ros2 launch` (~90 s) needs to
+repeat. Target for a warm container: **~2 min to first measurement.**
+
+Note for the yaw test specifically: **the camera and VSLAM are required** — with
+`imu0` yaw disabled, VSLAM is what holds the heading. You cannot skip the
+RealSense to save the 6 s delay. AMCL / `map_server` / `ekf_map` *can* be
+skipped for a parked odom-frame yaw check.
+
+**The operator has asked for this to become a skill** (deferred): ask what to
+bring up and what the goal is, then run it — rather than re-deriving the
+sequence each session.
+
+## Exact sequence that worked today
+
+```bash
+# HOST, before the container — jetson-containers only adds the X11 mounts when
+# DISPLAY is set in ITS environment, and over ssh it is not (bug-130).
+export VEHICLE_NAME=gosling1 DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority
+rm -f /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+chmod 644 /tmp/.docker.xauth
+mkfifo /tmp/yaw_run.fifo
+setsid bash -c 'sleep infinity > /tmp/yaw_run.fifo' </dev/null >/dev/null 2>&1 &
+setsid script -qfc "bash $HOME/bolus_ws/f1tenth_launch.sh" /dev/null \
+    < /tmp/yaw_run.fifo > $HOME/yaw_container.log 2>&1 &
+
+# verify INSIDE the container — env alone does NOT catch this
+docker exec $C bash -c 'ls -l /tmp/.X11-unix/X0 /tmp/.docker.xauth'
+
+# stage HEAD (image ships an older copy) — --symlink-install means install/ points at src/
+docker exec $C bash -c 'cd /workspaces/f1tenth/src/f1tenth_launch && tar xzf /mnt/shared_dir/handoff/<tarball>'
+
+# launch + measure
+docker exec -d $C bash -c 'cd /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs && \
+  ./71_mpc_stack.sh --domain 42 --map /mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml -y > /tmp/stack.log 2>&1'
+docker exec $C bash -c 'source /opt/ros/humble/setup.bash; export ROS_DOMAIN_ID=42; \
+  cd /workspaces/f1tenth/src/f1tenth_launch && python3 scripts/live_runs/yaw_drift.py 60'
+```
+
+Build the staging tarball by copying the worktree to local disk **first** — a
+`tar` straight off the OneDrive path fails with "file changed as we read it".
+
+Healthy baseline for the rate check: VESC core/odom 50 Hz, VESC IMU 100 Hz,
+`lidar/scan_filtered` 8.5 Hz, RealSense color 30 Hz, camera IMU 200 Hz, VSLAM
+30 Hz, `odometry/local` and `odometry/global` 30 Hz. `amcl_pose` and `map` read
+0 Hz — they are latched; assert AMCL's **lifecycle state** instead.
+
+Reading `yaw_drift.py`: if *every* source reports the same large drift, **the
+car moved** — check the gyro std (parked ≈0.0015 rad/s; a driven car showed
+0.31). One window today read −563 °/min because the MPC was driving it.
+
+---
+
+**Older handoff (2026-08-06 ~15:40 EDT).** The bag-driven Nav2 test below is **DONE**:
 Nav2 plans, controls and recovers correctly, and it turned up two real defects,
 both fixed and re-measured. Full write-up: **`NAV2_OFFLINE_RESULTS.md`**.
 `deliverables/20260805/` is still frozen v1 with checksums verified.
