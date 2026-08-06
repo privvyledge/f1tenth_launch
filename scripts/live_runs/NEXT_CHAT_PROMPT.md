@@ -31,6 +31,13 @@ Runs kept for comparison: `bags/20260805/loc_ekfseed_*` (A's result),
   the same root cause as bug-068's dead-stick. Also: `kill -9` on a `ros2 launch`
   parent **orphans every child**, and SIGINT to a launch started with
   `docker exec -d` (no pty) does not reliably stop it — use the pty recipe.
+  When sweeping up afterwards, note that two nodes evade the obvious
+  name-greps: `joy_teleop` runs as `python3 .../joy_teleop/joy_teleop`, and the
+  EKFs run as `robot_localization/ekf_node` (the *node* name `ekf_odom_node` is
+  only a `--ros-args` value). Both survived a sweep on 2026-08-06 that looked
+  complete. Verify a teardown by publisher count on a topic the stack owns, not
+  by `ros2 node list` — that disagreed with the publisher counts in **both**
+  directions during the same session.
 - On **one clean** bringup the stack is correct: every nav2 server singleton,
   `odometry/local`, `odometry/global` and `vehicle/ackermann_cmd` all at exactly
   one publisher. The duplication above was operational, not a launch defect.
