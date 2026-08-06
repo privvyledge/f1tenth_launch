@@ -40,6 +40,40 @@ mapped free space.
 Source bags and maps are unchanged, in
 `/mnt/f1tenth_ssd/shared_dir/{bags,maps}/20260805/`.
 
+## HARD CONSTRAINT: `deliverables/20260805/` is v1 and is FROZEN
+
+Other Claudes on other machines — LUCIO (pixel→world) and the MPC project
+(waypoints) — are consuming those exact files right now, and quoting the
+accuracy numbers in `MAP_FRAME_DELIVERY.md`. **They cannot see this repo and
+will not be told if the ground moves under them.**
+
+All three tasks below can plausibly produce a better `map->odom`. That is a good
+outcome and it is *not* permission to regenerate v1 in place.
+
+- **Never write into `deliverables/20260805/`.** It is `chmod a-w` on gosling1,
+  but that stops nothing: the container runs as uid 0 and root writes straight
+  through it (tested). The rule is the protection, not the bits.
+  `make_map_frame_bag.py` also refuses to overwrite an existing output — do not
+  work around it with `rm -rf`.
+- **`md5sum -c MD5SUMS.txt`** in that directory before trusting or re-quoting
+  anything. That is how a silent change gets caught.
+- A better result goes to **`deliverables/20260805_v2/`**, with v1 left intact
+  and readable until every consumer has moved.
+- **Beat v1 on the same control before claiming an improvement**:
+  `mapping_drive_170025` scored against
+  `maps/20260805/truth_mapping_drive_170025.csv`. v1 is **mean 64.7 mm /
+  p95 143.5 mm / 87.3% inside 126 mm**. Anything that does not clearly beat that
+  is churn.
+- **Run `verify_map_frame_bag.py` on v2.** Passing it is what "delivered" means.
+- **Then tell the operator, so the consumers can be told in writing** what
+  changed and by how much. A silent swap is worse than no swap.
+
+The same applies to `maps/20260805/` and `bags/20260805/`: v1's provenance
+points at those exact files. Do not rebuild the map or re-record.
+
+Full provenance — commit, config, seed, MD5s — is in `MAP_FRAME_DELIVERY.md`
+under "Version and freeze status".
+
 ## Start here — the operator assigned these three to this session (2026-08-05 21:36)
 
 **1. Measure the RTABMap localizer.** Still untested, as it has been since the

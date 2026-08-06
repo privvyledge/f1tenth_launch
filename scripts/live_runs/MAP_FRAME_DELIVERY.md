@@ -6,6 +6,65 @@ This is the document to hand to the LUCIO consumer along with the bags.
 
 ---
 
+## Version and freeze status — read before regenerating anything
+
+**This is `v1`, and `deliverables/20260805/` is FROZEN.** Consumers on other
+machines are working against these exact files and against the numbers in this
+document. If either changes underneath them, their analyses silently shift and
+nothing tells them.
+
+| | |
+|---|---|
+| version | **v1** |
+| frozen | 2026-08-05 21:40 EDT |
+| built from commit | `ffa58c5` (branch `perf/config-tuning`) |
+| localizer | nav2_amcl, `config/localization/localizer_amcl_mapframe.yaml` |
+| broadcaster | AMCL direct (`map_tf_publisher:=amcl`) |
+| map | `maps/20260805/rtabmap_2d_final.yaml` |
+| seed | `(+0.4451, -0.5750, -1.3931 rad)`, identical for all three runs |
+| source bags | `bags/20260805/{mapping_drive_170025,figure8_172338,loop_laps_173558}` |
+| intermediate | `bags/20260805/loc2_*` (the raw localization captures) |
+
+MD5 of the delivered `.mcap` files:
+
+```
+34357ec79bf29858eb909c7a0600944b  mapframe_figure8_172338/mapframe_figure8_172338_0.mcap
+9320714b46decd7b6acb7636d835dbc1  mapframe_loop_laps_173558/mapframe_loop_laps_173558_0.mcap
+46d9d3c8440c4d390301de0ac5bec2aa  mapframe_mapping_drive_170025/mapframe_mapping_drive_170025_0.mcap
+```
+
+The directory is `chmod a-w` on `gosling1`, but **do not rely on that**: the
+container runs as uid 0, and root bypasses the permission bits entirely. Tested
+2026-08-05 21:41 — a `touch` into the "read-only" directory succeeded. The bits
+are a visual cue only.
+
+What actually protects this is (a) the rule, written here and in
+`NEXT_CHAT_PROMPT.md`, and (b) `MD5SUMS.txt`, which makes any change
+**detectable**. Before trusting a copy of these bags:
+
+```bash
+cd /mnt/shared_dir/deliverables/20260805 && md5sum -c MD5SUMS.txt
+```
+
+### If a better localizer comes along
+
+Likely: the RTABMap localizer is still unmeasured, and the two `ekf_map.yaml`
+items are unresolved. Any of those could produce a better `map->odom`. When it
+does:
+
+1. **Write to a NEW directory** — `deliverables/20260805_v2/` — never in place.
+   `make_map_frame_bag.py` refuses to overwrite an existing output for exactly
+   this reason; do not work around it with `rm -rf`.
+2. **Leave v1 intact and readable** until every consumer has moved.
+3. **Re-run `verify_map_frame_bag.py`** on v2. Passing verification is what
+   "delivered" means here; it is not optional for a second version.
+4. **Quantify the improvement against the same control** — `mapping_drive_170025`
+   scored against `truth_mapping_drive_170025.csv`. v1 is mean 64.7 mm /
+   p95 143.5 mm. A v2 that does not clearly beat that is churn, not progress.
+5. **Tell the consumers, in writing, what changed and by how much.** They cannot
+   see this repo. A silent swap is worse than no swap: their fits would move and
+   they would have no reason to suspect why.
+
 ## What you get
 
 `/mnt/f1tenth_ssd/shared_dir/deliverables/20260805/` on `gosling1`
