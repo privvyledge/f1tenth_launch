@@ -2,12 +2,47 @@
   # general parameters shared by all vesc-related nodes
   ros__parameters:
     # erpm (electrical rpm) = speed_to_erpm_gain * speed (meters / second) + speed_to_erpm_offset
+    # Measured 2026-08-07 on this car (scripts/analysis/fit_actuators.py, see
+    # scripts/live_runs/SYSID_RESULTS.md): measured ERPM regressed against
+    # ERPM-independent ground speed gives 3757.8 (mapping_drive_170025, R2 0.95)
+    # and 4022 / 3830 (figure8_172338 from rf2o / VSLAM, R2 0.99) across six
+    # bags spanning 3687-4022. 3750 sits at the low end of that spread, within
+    # ~7 % of the best-conditioned estimates, so it is left alone for now --
+    # unlike the steering gain below, this inherited value is corroborated
+    # rather than corrected. Worth revisiting from the Stage 4b ERPM staircase,
+    # which measures it deliberately rather than incidentally.
     speed_to_erpm_gain: 3750.0 # 4614.0, 3850.0
+    # Keep at 0.0. ackermann_to_vesc applies this offset unconditionally
+    # (erpm = gain * speed + offset), so a nonzero value makes a commanded
+    # 0.0 m/s produce nonzero ERPM and the car creeps whenever asked to stop.
+    # It is NOT a deadband feedforward, however much it looks like one.
     speed_to_erpm_offset: 0.0
 
     # servo value (0 to 1) =  steering_angle_to_servo_gain * steering angle (radians) + steering_angle_to_servo_offset
-    steering_angle_to_servo_gain: -1.4 # -1.2135, -0.8600
-    steering_angle_to_servo_offset: 0.5600 # 0.5304
+    # Measured 2026-08-07 (scripts/analysis/fit_actuators.py; full detail and
+    # per-bag numbers in scripts/live_runs/SYSID_RESULTS.md). The servo ->
+    # road-wheel slope is fitted in servo units against TF-corrected gyro-z
+    # through the kinematic bicycle model, so it inherits nothing from the old
+    # constants: gain is 1/a where a is rad per servo unit.
+    #
+    # Averaged over the two bags that both turn both directions AND never hit
+    # the servo clamp -- mapping_drive_170025 (a = -0.8783, s0 = 0.5591) and
+    # figure8_172338 (a = -0.8688, s0 = 0.5610), 2026-08-05, 147 s and 155 s.
+    # They agree to 1.1 %. loop_laps_173558 gives -1.2431 but is one-sided
+    # (323 left samples), so it is the spread bound, not an input.
+    #
+    # The previous -1.4 over-steered by ~18-23 % (achieved/commanded k = 1.22),
+    # in the direction the LUCIO side independently found (k = 1.177) from
+    # different code, a different yaw reference, and a different regressor.
+    #
+    # NOTE the offset lands back on 0.56, its inherited value -- measured
+    # 0.5591/0.5610. An earlier pass on shorter bags gave 0.5419, biased by
+    # those bags spending 17-20 % of their samples pinned at the right-hand
+    # servo clamp; these two bags never saturate at all. So the offset was
+    # right all along and only the gain was ever wrong.
+    # Both still to be confirmed by the Stage 0 bench sweep.
+    steering_angle_to_servo_gain: -1.1448 # was -1.4 (unmeasured, from another car)
+    steering_angle_to_servo_offset: 0.5600 # measured 0.5591/0.5610 - confirms the inherited value
 
     port: "/dev/sensors/vesc"
     duty_cycle_min: 0.0
@@ -20,6 +55,14 @@
     speed_max: 15000.0 # 23250.0
     position_min: 0.0
     position_max: 0.0
+    # STILL INHERITED FROM ANOTHER CAR -- not measured on this one. These are
+    # the clamp vesc_driver applies (ackermann_to_vesc itself does not clamp).
+    # Measured 2026-08-07: servo_max is the RIGHT-hand lock (median yaw while
+    # pinned there is -0.86 rad/s, clockwise), and it is the limited direction.
+    # servo_min was never reached in either archived bag, so there is no
+    # evidence at all here about the left bound. Widening these is what gates
+    # the Stage 0 bench sweep from exploring the real mechanical travel -- the
+    # gain/offset above do not, since that sweep publishes servo values directly.
     servo_min: 0.08  # 0.15, 0.08
     servo_max: 0.92  # 0.85, 0.92
 
