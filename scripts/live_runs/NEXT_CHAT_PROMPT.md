@@ -1,8 +1,127 @@
 # Next session — START HERE
 
-**Updated 2026-08-07 09:40 EDT.** Read this first block, then the
-2026-08-06 21:35 block below it. Everything from "## The job this session: the
-first LIVE Nav2 goal" onward is older and partly superseded.
+**Updated 2026-08-07 12:25 EDT.** Read this first block, then the
+2026-08-07 09:40 block, then the 2026-08-06 21:35 block. Everything from
+"## The job this session: the first LIVE Nav2 goal" onward is older and partly
+superseded.
+
+## Status after the 2026-08-07 midday session (MPC bench bring-up ×3)
+
+Brought the car up three times for a separate MPC-owning agent, answered a
+drivetrain question from its bags, then shut down. **No tracked code changed
+this session** — all of it was operations plus `.wolf/` (git-ignored).
+
+### Robot state as left
+
+- **Powered ON.** All three containers left running (warm):
+  `jetson_container_20260807_085244` (the one to use),
+  `mpc_claude_0806`, `pf_sweep_claude_0807`.
+- **Stack is DOWN**; zero ROS processes on the host. `xhost -local:` reverted.
+- Relaunch is one command — the HEAD config is already staged in that container:
+  ```bash
+  ssh gosling1 'DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority xhost +local:'
+  ssh gosling1 'docker exec -d jetson_container_20260807_085244 /mnt/shared_dir/start_mpc_stack.sh'
+  ```
+  Domain **42**, map `/mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml`,
+  Nav2 and `twist_to_ackermann` off so `/gosling1/drive` is free for the MPC.
+
+### Three traps that cost time — do not re-derive them
+
+1. **Always `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` before any ROS CLI.**
+   Probe scripts that omitted it fell back to FastRTPS and reported TF and the
+   entire node list as EMPTY on a perfectly healthy stack. That produced a false
+   "TF is dead" conclusion.
+2. **The camera-0 Hz X11 failure is a cookie for display `:10`**, not a missing
+   mount. `/tmp/.docker.xauth` was bind-mounted and `/tmp/.X11-unix/X0` present,
+   but the cookie belonged to the SSH-forwarded `localhost:10.0` of the shell
+   that created the container. You cannot repair it on a running container: the
+   mount is read-only (EACCES from inside), `docker cp` says "device or resource
+   busy", and host-side `xauth nmerge` creates a **new inode** the bind mount
+   never sees (host 53 B, container still 54 B). Use `xhost +local:` on the host
+   and launch with `XAUTHORITY` **unset**; revert with `xhost -local:`.
+3. **Teardown needs the process group, from inside the container.** `kill -INT`
+   on the launch PID alone does nothing, and `use_respawn:=True` resurrects
+   nodes until the launch process itself exits. Sequence: `kill -INT -$PGID`,
+   then TERM/KILL the launch and its wrapper script, then sweep leftover
+   `joy_node` / `component_container` / `ydlidar` PIDs. Host `ssh` cannot signal
+   them at all — they run as root inside the container.
+
+### bug-147 — Isaac VSLAM aborts and does NOT respawn (open)
+
+`visual_slam_container` died with **SIGABRT (exit −6)** on 1 of 3 launches,
+~30 s after `cuVSLAM tracker was successfully initialized`. It did **not**
+respawn. Camera color and both infra streams stayed at 30 Hz through the abort,
+so it had input; the crash is internal.
+
+**It fails silently from every angle you would normally check:**
+`ros2 topic list` still shows `visual_slam/tracking/odometry` as a stale DDS
+entry (0 Hz), and `odometry/local` keeps publishing a healthy **30.00 Hz** on
+the remaining EKF inputs. With `odom1` gone and `imu0` yaw disabled, heading
+falls back to **rf2o alone**. Assert VSLAM by *rate* plus `ps`, never presence:
+
+```bash
+ps -eo etime,cmd | grep "[v]isual_slam_container"
+grep -c "visual_slam_container.*process has died" <launch log>
+```
+
+A restart cleared it both times.
+
+### Drivetrain finding delivered to the MPC agent (scripts on the SSD)
+
+From the 2026-08-06 stand-side bags (`run/stackside_20260806_202339` = loop,
+`run/stackside_20260806_203218_figure8`). Scripts saved at
+`/mnt/shared_dir/{vesc_stops,vesc_stops2,erpm,zeroruns}.py`.
+
+Of the five sub-second stops: **3 are drive dropout, 1 is genuine brake
+overshoot, 1 is a commanded decel.** The discriminating trace is commanded vs
+actual ERPM (`cmd_erpm = 3750 × cmd_speed` vs `state.speed`), not current — in
+the dropouts the command stays at 2500→1200 ERPM while actual collapses to zero
+with `current_motor` at exactly 0.00 A. **Not a current limit** (current falls
+to zero rather than pinning; `voltage_input` flat 12.00–12.40 V whole bag).
+**Not brake overshoot** (command positive, duty positive-decaying).
+
+Caveat that nearly caused an overclaim: exact-zero `current_motor` is *not*
+unique to stops (3.8 % of the loop bag, and ~0.5 s zero-runs recur where no stop
+happens). The ERPM divergence is the evidence; it does not depend on trusting
+the current reading.
+
+**Reusable number:** drive resumes at **cmd 0.20–0.26 m/s (753–962 ERPM), on
+the ground** — a measured ground breakaway, just under the 0.25–0.30 m/s
+extrapolated from stand tests.
+
+## The job for the next session
+
+Three operator decisions from 2026-08-07 12:24 EDT, to implement:
+
+1. **CycloneDDS peers — comment out `192.168.2.193` (gosling3) ONLY.** Do not
+   delete it, and **leave `192.168.2.194` (DigitalStorm) active** even though it
+   is currently down. File is
+   `/mnt/f1tenth_ssd/shared_dir/cyclonedds_config_static.xml`, owned by the
+   build repo. **Set expectations honestly: this will NOT silence the spam.**
+   `.194` is the address actually flooding the logs, and it stays in by
+   instruction — so expect reduced, not eliminated, noise.
+   See `CYCLONEDDS_PEERS.md`.
+2. **Use `/mnt/shared_dir/cyclonedds_offline_lo.xml` for local-only runs**
+   (approved). It is lo-only with a single `localhost` peer and zero peer noise;
+   containers are on host networking so the MPC process and the stack still see
+   each other. **Cost:** anything not in the list is silently invisible — remote
+   RViz from DigitalStorm sees nothing, with no error. Local-only runs only.
+3. **Do NOT touch the `lo` interface entry** (approved). It took VSLAM frame
+   stalls from 0.1373/s to 0.0294/s.
+
+Then: **investigate bug-147.** The suggested experiment is ~5 launches on the
+current static config vs ~5 on `cyclonedds_offline_lo.xml`, counting
+`visual_slam_container.*process has died` per log. At a ~1-in-3 abort rate that
+is roughly the minimum per arm to see a difference worth believing. If the rate
+is unchanged, DDS config is ruled out and the suspect is cuVSLAM itself.
+
+**One correction to carry forward:** the earlier framing that
+`Delta ... [34.1 ms] is above threshold [34.0 ms]` warnings indicate frame
+jitter is weak. A 30 fps camera has a nominal period of **33.33 ms** against a
+**34.0 ms** threshold — ~2 % headroom — so those fire on trivial jitter and are
+near baseline. The single **219 ms** delta is the only genuinely anomalous one.
+Do not justify a DDS change as a VSLAM fix; justify it as log hygiene (this
+noise once buried a real YDLidar failure in a 381,976-line log).
 
 ## Status after the 2026-08-07 morning session (desk work only, no driving)
 

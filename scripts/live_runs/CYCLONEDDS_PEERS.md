@@ -9,6 +9,29 @@ selected via `CYCLONEDDS_URI`. Apply this there at merge time.
 Written 2026-08-05 after the noise buried a real YDLidar failure during a live
 recording session.
 
+## Operator decision, 2026-08-07 — apply a PARTIAL Fix A
+
+- Comment out **`192.168.2.193` (gosling3) only**. Do not delete the line.
+- **Leave `192.168.2.194` (DigitalStorm) active** even though it is down.
+- Adopt `cyclonedds_offline_lo.xml` for **local-only** runs (see below).
+- Leave the `lo` interface entry alone.
+
+**Expect reduced, not eliminated, noise.** `.194` is the address observed
+flooding the logs on 2026-08-07 and it stays in by instruction, so the `tev`
+thread keeps retrying it. Do not report this change as "the spam is fixed".
+
+**Reachability re-measured 2026-08-07 12:15 EDT** — the table below is stale in
+one row: `.140` (gosling5) is now **UP**, not down. Only `.193` and `.194` are
+unreachable today. The list changed on its own within two days, which is the
+argument for Fix B (render from a reachability probe) over hand-editing.
+
+**Local-only runs:** `/mnt/f1tenth_ssd/shared_dir/cyclonedds_offline_lo.xml` is
+lo-only with a single `localhost` peer and produces zero peer noise. Containers
+run on host networking, so same-host processes (e.g. an external MPC node) still
+discover each other. The cost is the static-peer trap in its strongest form:
+anything not in the list is invisible with no error, so remote RViz sees
+nothing. Use it only when nothing off-robot needs the topics.
+
 ## Symptom
 
 Every ROS process writes a continuous stream of:
