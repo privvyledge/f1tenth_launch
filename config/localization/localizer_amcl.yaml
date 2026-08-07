@@ -34,11 +34,23 @@
   ros__parameters:
     use_sim_time: False
     set_initial_pose: True # True: use pose below, False: Use RViz 2D Pose Estimate
+    # The map frame is NOT aligned with the car's parking spot. On the raslab map
+    # (rtabmap_2d_final) the physical origin of the recorded runs sits at
+    # (+0.445, -0.575, -79.8 deg) — see the pose0 comment in ekf_map.yaml, and
+    # re-measured live 2026-08-06 when AMCL settled at (0.378, -0.581, -86.5 deg)
+    # from a car parked on that spot.
+    #
+    # This was (0,0,0,0), i.e. ~0.73 m and 80 deg from the truth, and AMCL cannot
+    # walk that off while the car sits still: update_min_d/update_min_a below gate
+    # the filter on MOTION, so parked it never runs a laser update and amcl_pose
+    # never republishes. The symptom is a car that has never moved rendering
+    # displaced and rotated in the map, with a filter that looks perfectly healthy
+    # — and re-seeding it by hand via /initialpose appears to do nothing at all.
     initial_pose:
-      x: 0.0
-      y: 0.0
+      x: 0.445
+      y: -0.575
       z: 0.0
-      yaw: 0.0
+      yaw: -1.3928  # radians = -79.8 deg
     # Motion model. odom->base_link comes from the 30 Hz EKF fusing VESC + rf2o +
     # two IMUs, which is good dead reckoning between updates — keep the process
     # noise low and let the measurement do the correcting.
