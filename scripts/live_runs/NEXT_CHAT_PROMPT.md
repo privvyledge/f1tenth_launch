@@ -1,5 +1,334 @@
 # Next session — START HERE
 
+**Updated 2026-08-07 09:40 EDT.** Read this first block, then the
+2026-08-06 21:35 block below it. Everything from "## The job this session: the
+first LIVE Nav2 goal" onward is older and partly superseded.
+
+## Status after the 2026-08-07 morning session (desk work only, no driving)
+
+The car drove under Nav2 on 2026-08-06 and `testing_checklist.md` §9 is ticked.
+This session did no driving; it closed out the `twist_to_ackermann` follow-up
+and one config inconsistency. **Committed and pushed on `perf/config-tuning`.**
+
+### bug-140 is fully closed — upstream, in the launch file, and on the robot
+
+- **Upstream:** commit `4770ecc` on `privvyledge/trajectory_following_ros2`,
+  branch `refactor/unify-backends`, is **pushed**. It replaces
+  `atan2(WHEELBASE, radius)` with `atan(WHEELBASE / radius)` and turns the
+  hardcoded ±0.4 rad saturation into a validated `max_steering_angle`
+  parameter (upstream default still 0.4), with sign/saturation regression tests.
+- **This repo:** `launch/vehicle/vehicle.launch.py` now passes
+  `max_steering_angle: 0.25`, which closes the "second, separate defect" noted
+  further down. 0.4 rad drives servo to `-1.4*0.4 + 0.56 = 0.0`, under the 0.08
+  minimum, so the VESC clips at full left; 0.25 < the 0.257 rad left lock.
+- **On the robot:** the container running that morning
+  (`jetson_container_20260807_085244`) had **silently reverted to the buggy
+  `atan2`** — the 2026-08-06 in-container edit and its `.bak` were both gone.
+  `/workspaces` is a container layer, **not** a bind mount, and the Jetson
+  cannot resolve github.com, so the commit cannot reach the car by `git fetch`.
+  Patched it there as commit `121806d` and verified the running node:
+  `angular.z = -1.0` (right) → `steering_angle -0.25` (was `+0.4`, full left),
+  `angular.z = +0.3` → `+0.15241` = `atan(0.256 / 1.6667)` exactly.
+
+**Every fresh container needs this re-applied** until the image carries it (an
+image concern, owned by the build repo — the usual workflow copies the repo over
+anyway):
+
+```bash
+/mnt/shared_dir/apply_twist_fix.sh <container-name>   # idempotent, ~2 s
+# patch: /mnt/shared_dir/handoff/0001-twist-to-ackermann-fix.patch
+```
+
+Python + `--symlink-install`, so no rebuild — but restart the node. Check state
+with `grep -n 'math.atan(self.WHEELBASE'`.
+
+### wheelbase unified to 0.256 m — UNVERIFIED ON HARDWARE, watch it
+
+`config/vehicle/vesc.yaml` said `.25` ("about 25cm") while every other consumer
+used the measured **0.256**: the `base_link`→`front_axle` and both front-wheel
+static TFs, `twist_to_ackermann`, `ackermann_to_twist`, and the `min_turning_r`
+derivation in `nav2_params.yaml`. It is now 0.256 everywhere.
+
+This is a **live behaviour change that has not been driven**: `vesc_odom`
+computes `omega = v*tan(delta)/L`, so its kinematic yaw rate was ~2.4 % high
+relative to the frames it is fused into. `vehicle/vesc_odom` is `odom0` in
+`ekf_odom.yaml`, and VESC IMU yaw is disabled (bug-129), so this source carries
+real weight. **On the next drive, re-run `scripts/live_runs/yaw_drift.py`
+(60 s, parked) and re-score `check_map_frame.py` against a known bag** before
+reading anything else as a regression. If it looks worse, this one-line change
+is the first suspect.
+
+### The robot's `f1tenth_launch` must be re-staged — this is a real trap
+
+The container gets `f1tenth_launch` from a staged tarball, and the image ships
+an older copy. A container staged from the **old** tarball will run the patched
+`twist_to_ackermann` at its **upstream default of 0.4 rad**, not 0.25 — sign
+correct, but back to clipping the servo at full left. `handoff/head_1912.tar.gz`
+was already known stale (it silently reverts the AMCL seed) and is now stale by
+two more commits.
+
+**A fresh tarball is staged: `/mnt/shared_dir/handoff/head_0940.tar.gz`**, built
+from the pushed HEAD of `perf/config-tuning`. Use it and delete the old one.
+Verify after staging, do not assume:
+
+```bash
+grep -n "max_steering_angle" src/f1tenth_launch/launch/vehicle/vehicle.launch.py   # -> 0.25
+grep -n "wheelbase"          src/f1tenth_launch/config/vehicle/vesc.yaml           # -> 0.256
+grep -n "initial_pose" -A4   src/f1tenth_launch/config/localization/localizer_amcl.yaml  # -> 0.445 / -0.575
+```
+
+## Next session, in order
+
+1. **Presentation video** from `nav2live_20260806_214427_firstgoal` — this is
+   the highest-value remaining item and needs no car. Replay the bag and screen-
+   record RViz with `/mnt/shared_dir/nav2_live.rviz`. **Add `lookahead_point`
+   and `plan_smoothed` to that config first** — RPP publishes those;
+   `local_plan` is DWB-only and stays empty. The bag has map + costmaps + plan +
+   goal + the full actuation chain.
+2. **Prove the goal formally SUCCEEDS.** Launch with `log_level:=info` (edit
+   `/mnt/shared_dir/nav2_launch.sh`, which hardcodes `warn`) or send goals via
+   `nav2_goal_probe.py`, which captures the action result code. This closes the
+   open 0.38 m-vs-0.25 m tolerance question — it is a question about the last
+   13 cm, not about whether the stack drives.
+3. **First drive after this session's config changes**: re-verify the wheelbase
+   change per the section above *before* tuning anything else.
+4. Then the operator's asks in section A/B below — CPU profiling (no data
+   exists yet) and the one-variable-at-a-time controller progression.
+5. Only then MPC and the `steering_angle_to_servo_offset` 0.56 → 0.5
+   recalibration (weekend of 2026-08-08/09).
+
+## RESULT: the car drove autonomously under Nav2. Checklist section 9 is TICKED.
+
+**2026-08-06 21:47 EDT — first successful autonomous Nav2 drive.** From
+(0.445, -0.575) to (-1.668, -2.166) in the map frame: **2.628 m travelled,
+-44.8 deg net yaw (correct, rightward), stopping 0.38 m from the goal.** The
+global plan shrank monotonically as the car followed it (43 -> 35 -> 28 -> 21
+-> 14 -> 9 -> 6 poses, plan start tracking the robot the whole way), speed held
+at the configured 0.5 m/s cap, and the car decelerated smoothly to a stop
+rather than being cut off. Bag:
+`/mnt/shared_dir/run/nav2live_20260806_214427_firstgoal` (closed cleanly,
+35 MB) — **this is the bag to build the presentation video from.**
+
+One loose end: final distance 0.38 m vs the 0.25 m `xy_goal_tolerance`, so it
+is not certain the goal formally SUCCEEDED rather than ending some other way.
+Confirm next run with `log_level:=info` or `nav2_goal_probe.py`, which captures
+the action result code. This is now a question about the last 13 cm, not about
+whether the stack drives.
+
+## The bug that caused the first failed attempt (FIXED, verified)
+
+The first live Nav2 goal was attempted and **the blocker is found and proven**.
+Bag: `/mnt/shared_dir/run/nav2live_20260806_212315_firstgoal` (sqlite3, closed
+cleanly, 76 MB, has map + costmaps + plan + goal + full actuation chain).
+Analyzer: `/mnt/shared_dir/analyze_nav2.py` (also in scratchpad) —
+`python3 analyze_nav2.py <bag> sqlite3` reprints the whole timeline.
+
+**Everything except one function worked.** Goal accepted, valid 46-pose plan to
+the goal, replanning at 1 Hz, `cmd_vel` bounded to 0.5 m/s for 5.45 s, the R1
+handover textbook-perfect (R1 at t=244.94 -> mux handover at t=245.24, exactly
+the 0.3 s joystick timeout), gate opened on command, no duplicate nodes, AMCL
+within 11 mm of truth.
+
+### bug-140 — `twist_to_ackermann` inverts and saturates every right turn
+
+`trajectory_following_ros2/twist_to_ackermann_drive.py`, in
+`yaw_rate_to_steering_angle()`:
+
+```python
+radius = longitudinal_speed / desired_yaw_rate
+steering_angle = math.atan2(self.WHEELBASE, radius)   # <-- WRONG
+```
+
+`WHEELBASE` is always positive. A right turn gives `yaw_rate < 0` hence
+`radius < 0`, so `atan2(+L, -R)` lands in the **second quadrant** and returns
++1.6..+3.1 rad instead of a small negative angle. The node's own +/-0.4 rad
+clamp then pins it to exactly **+0.4 = full left lock**. Right turns become
+hard left; left turns happen to be correct.
+
+Proof in the bag: `/cmd_vel` `angular.z` spanned **[-1.1754, -0.1000]** (all
+right), `/drive` `steering_angle` was **constant +0.4000 for all 110 messages**,
+the log prints `Saturating steering_angle.` every cycle, and the VESC logged
+`servo command value (-0.000000) below minimum limit (0.080000), clipping`
+(servo = -1.4*0.4 + 0.56 = 0.0 -> clipped to 0.08 = hard left). The car yawed
+**+42 deg left** while the plan went right.
+
+**FIXED 2026-08-06 21:44 and verified on hardware the same run:**
+
+```python
+steering_angle = math.atan(self.WHEELBASE / radius)   # sign-correct everywhere
+```
+
+The clamp was also narrowed from +/-0.4 to +/-0.25 rad so neither lock clips
+the servo. **The edit exists ONLY inside the container** at
+`/workspaces/f1tenth/src/trajectory_following_ros2` (original kept as
+`twist_to_ackermann_drive.py.bak`). `--symlink-install` means no rebuild was
+needed — but it is **lost on the next image pull unless upstreamed to the
+`trajectory_following_ros2` repo.** That is the single most important
+follow-up, and it belongs to whoever owns that repo.
+
+A/B proof, same goal both times: BEFORE `/drive` steering was constant **+0.4**
+for all 110 messages (car yawed +42 deg LEFT, 0.55 s of motion); AFTER it spans
+**[-0.25, +0.25]** and tracks the path (car yawed -44.8 deg RIGHT, drove
+2.628 m).
+
+**Second, separate defect in the same node:** the +/-0.4 rad saturation is
+hardcoded and exceeds the car's real left-lock limit of 0.257 rad (from
+`steering_angle_to_servo_offset: 0.56`). It is **not** affected by the
+`max_steering` launch arg — that only scales the joystick. It should be a
+parameter sourced from `vesc.yaml`. Until then even a sign-correct left command
+can drive the servo past its stop.
+
+### Resolved: the 5.45 s stop was a consequence, not a separate bug
+
+`cmd_vel` ran t=240.34..245.79 then stopped dead; the planner stopped
+replanning at the same moment, so the whole BT terminated. **No WARN or ERROR
+was logged by any Nav2 server** — so it was not an abort, a collision, the
+progress checker (`movement_time_allowance` is 100 s) or goal-reached
+(tolerance 0.25 m, car was ~3 m away). It is invisible because the stack runs
+`log_level:=warn` and SUCCEEDED/CANCELED log at INFO.
+
+With the steering fixed, the very next run commanded for **7.6 s** and drove
+the full path to the goal, so the 5.45 s cutoff was the robot driving off its
+own path under inverted steering — not an independent defect. No further
+investigation needed.
+
+## Traps that cost time tonight — do not repeat
+
+- **`handoff/head_1912.tar.gz` is STALE.** It does *not* contain the AMCL seed
+  fix, contrary to what the older handoff below claims: extracting it resets
+  `localizer_amcl.yaml` `initial_pose` to (0,0,0). Regenerate it from real HEAD
+  before trusting it. Workaround used: publish `/initialpose` directly with
+  **`stamp: {sec: 0, nanosec: 0}`** (tf2 reads 0 as "latest available", so it
+  cannot extrapolate). Do NOT use `seed_initialpose.py` live — it hardcodes
+  `use_sim_time: True` for bag replay.
+- **The Jetson and the VESC are on SEPARATE batteries.** `voltage_input` on
+  `vehicle/sensors/core` is the **drive pack only** and stayed 12.1-12.3 V all
+  night. The Jetson has its own battery, no ROS topic reports it, and it is
+  what died mid-run at 21:28 ("No route to host"). A sudden total SSH loss is a
+  Jetson power symptom first, not a network one.
+- **RViz goes to the laptop, not `:0`.** gosling1 is headless; `xrandr -d :0`
+  reports 1920x1080 anyway, which is misleading. The operator's X server is on
+  the laptop over SSH. Recipe that works (container is `--network host`, so it
+  shares the host loopback and can reach the SSH tunnel directly):
+  ```bash
+  xauth nlist :10 | sed -e 's/^..../ffff/' | xauth -f /mnt/f1tenth_ssd/shared_dir/.rviz.xauth nmerge -
+  docker exec -d -e DISPLAY=localhost:10.0 -e XAUTHORITY=/mnt/shared_dir/.rviz.xauth $C bash -lc \
+    'source ...; rviz2 -d /mnt/shared_dir/nav2_live.rviz --ros-args -r /tf:=/gosling1/tf -r /tf_static:=/gosling1/tf_static'
+  ```
+  Check the display number with `ss -ltn | grep :60` — it changes per session.
+  `config/f1tenth.rviz` **cannot** be used to send a goal: fixed frame is
+  `odom` and it has no map/plan displays. Use `/mnt/shared_dir/nav2_live.rviz`
+  (staged, fixed frame `map`, map + costmaps + plan + goal tool). Note
+  `local_plan` stays empty — that is a DWB topic and the controller is RPP,
+  which publishes `lookahead_point` / `plan_smoothed` instead.
+
+## Better dry-run pattern than `60_nav2_test.sh --dry-run`
+
+Bring the stack up in **full live config** but with
+`command_gate_require_enable:=True`. The gate starts CLOSED and is the sole
+publisher of `vehicle/ackermann_cmd`, so nothing reaches the VESC, while
+everything upstream — including `twist_to_ackermann`, which `--dry-run`
+*disables and therefore never tests* — runs exactly as in the live run. Going
+live is then one service call, no second bring-up:
+
+```bash
+ros2 service call /gosling1/command_gate/set_enabled std_srvs/srv/SetBool "{data: true}"
+```
+
+A closed gate publishes **nothing at all** on `vehicle/ackermann_cmd`; an open
+gate at idle publishes **zeros at rate** (joystick holding the mux at priority
+100). That difference is how you confirm the gate state — never `ros2 topic hz`.
+
+Staged on the SSD and all working: `nav2_launch.sh` (the exact live-config
+bringup line), `warmstart.sh <container>` (HEAD -> stack -> lifecycle-ACTIVE
+gate -> duplicate/rate/gate checks -> recorder, one shot, ~35 s to READY),
+`rec_nav2.sh <label>` (records map + costmaps + plan + goal + chain, with the
+transient-local QoS override that `rec.sh` lacks), `analyze_nav2.py`,
+`nav2_live.rviz`.
+
+## Next session, in order (2026-08-06 list — SUPERSEDED)
+
+Kept only as a record of what that session queued. Items 1 (upstream the
+`twist_to_ackermann` fix) and 4 (regenerate the stale HEAD tarball) are DONE —
+see the 2026-08-07 block at the top of this file. The rest survive there in
+the same order. **Use the top block, not this one.**
+
+## Operator's asks for the next test session (2026-08-06 22:05)
+
+### A. CPU profiling of the Nav2 stack — NOT captured yet
+
+**No CPU data exists for either run.** `warmstart.sh` does not sample it and
+the bags do not contain it, so nothing can be said about Nav2's cost from what
+was recorded. Do not infer it from the earlier "planner_server 94 %" note —
+that was measured during `on_configure` (global costmap build), not steady
+state.
+
+Why the operator wants it: the depth-based obstacle source was disabled at some
+point purely for CPU, and both costmaps are currently **LiDAR-only** —
+`observation_sources: scan  #depth_scan` at `config/nav2_params.yaml:353`
+(local) and `:459` (global). With composed nodes and the current software that
+tradeoff may no longer be necessary, so the question is whether `depth_scan`
+can be re-enabled.
+
+**How to capture it** — add to `warmstart.sh` after the health gate, and sample
+again *during* a goal, since idle and driving differ:
+
+```bash
+# per-process, steady state and under a goal
+top -b -n1 | grep -E "component_container|planner_server|controller_server"
+# composed nodes hide inside the container process, so also thread-level:
+top -b -n1 -H -p $(pgrep -f component_container_isolated | head -1)
+pidstat -p ALL 1 5    # if sysstat is available
+tegrastats --interval 1000   # Jetson-wide CPU/GPU/EMC, the honest system view
+```
+
+Take a baseline LiDAR-only, then re-enable `depth_scan` in both costmaps and
+repeat the same goal. Compare controller-loop miss rate (`controller_server`
+logs "Control loop missed its desired rate") rather than raw CPU % — that is
+the number that actually matters.
+
+### B. Controller performance and harder maneuvers
+
+Current values, all in `config/nav2_params.yaml`:
+`desired_linear_vel: 0.5` (:130), `xy_goal_tolerance: 0.25` (:109),
+`use_rotate_to_heading: false` (:151), **`allow_reversing: true` already set**
+(:152). Controller is RPP.
+
+Planned progression — one variable at a time, re-running the same known-good
+goal between changes so a regression is attributable:
+
+1. Raise `desired_linear_vel` 0.5 -> 0.8 m/s. Watch for controller-loop misses
+   and for the LiDAR's ~8.6 Hz becoming the limiting factor: at 0.8 m/s the car
+   covers ~9 cm per scan, so the local costmap ages meaningfully between
+   updates.
+2. Tighten the stop distance: reduce `xy_goal_tolerance` toward 0.10-0.15 m and
+   confirm the goal still formally SUCCEEDS (see item 3 below — this is the
+   same 0.38 m question).
+3. Reversing: `allow_reversing` is on but has never been exercised. Place a
+   goal behind the car. Note the VESC has a **562 ERPM deadband** (from the MPC
+   findings) which will bite hardest at the low speeds reversing uses.
+4. Obstacles in the path: box in the lab, confirm the local costmap inflates it
+   and RPP steers around; then a dead end to exercise the recovery subtree
+   live (it has only ever been seen fire on a bag replay).
+5. Remember the **asymmetric servo**: left lock 0.257 rad vs right 0.343. A
+   left-heavy course saturates earlier than a right-heavy one and will look
+   like a controller failure. The 0.56 -> 0.5 offset recalibration is the real
+   fix and is scheduled for 2026-08-08/09.
+
+### C. log_level was NEVER actually raised to info
+
+Worth being precise, because the previous session's summary was ambiguous: the
+successful run was launched with **`log_level:=warn`**, same as every other run
+(`nav2_launch.sh` hardcodes it). A runtime
+`bt_navigator/set_logger_levels` call was drafted but dropped when the command
+was rewritten, and it never executed. So there is still **no INFO-level
+evidence** of the goal's terminal state, which is exactly why the 0.38 m vs
+0.25 m question is open. Change `log_level:=warn` in
+`/mnt/shared_dir/nav2_launch.sh` to `info` before the next run, or send goals
+via `nav2_goal_probe.py`, which captures the action result code directly.
+
+---
+
 **Updated 2026-08-06 ~20:50 EDT.** Everything below the first `---` is older
 context and still valid.
 

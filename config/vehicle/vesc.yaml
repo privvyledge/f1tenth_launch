@@ -29,8 +29,13 @@
     # publish odom to base link tf
     publish_tf: false
     use_servo_cmd_to_calc_angular_velocity: true
-    # car wheelbase is about 25cm
-    wheelbase: .25
+    # Rear-axle to front-axle distance, in metres. 0.256 is the measured value and the one every
+    # other consumer already uses: the base_link->front_axle static TF and both front wheel TFs
+    # (static_transformations.launch.py), twist_to_ackermann and ackermann_to_twist
+    # (vehicle.launch.py), and the min_turning_r derivation in nav2_params.yaml. This was .25
+    # ("about 25cm") until 2026-08-07, which biased vesc_odom's kinematic yaw rate
+    # (omega = v*tan(delta)/L) about 2.4% high relative to the frames it is fused against.
+    wheelbase: 0.256
     # publish AckermannDriveStamped actuator state (speed, steering, accel, jerk) on sensors/actuator_feedback
     publish_actuator_feedback: false
     # use gyro-z from sensors/imu/raw for yaw integration instead of kinematic model
