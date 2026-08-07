@@ -68,8 +68,12 @@ was already known stale (it silently reverts the AMCL seed) and is now stale by
 two more commits.
 
 **A fresh tarball is staged: `/mnt/shared_dir/handoff/head_0940.tar.gz`**, built
-from the pushed HEAD of `perf/config-tuning`. Use it and delete the old one.
-Verify after staging, do not assume:
+from the pushed HEAD of `perf/config-tuning` (`cec7e1d`) and verified on the
+robot to contain the 0.25 limit, the 0.256 wheelbase and the AMCL seed.
+**`warmstart.sh` has been repointed at it** (old copy kept as
+`warmstart.sh.bak_20260807`); it was staging `head_1912.tar.gz`, so a one-shot
+warm start would otherwise have silently undone all three. Verify after staging
+anyway — do not assume:
 
 ```bash
 grep -n "max_steering_angle" src/f1tenth_launch/launch/vehicle/vehicle.launch.py   # -> 0.25
