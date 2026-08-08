@@ -30,6 +30,43 @@ export VIDEO_ROOT="${VIDEO_ROOT:-${SSD_ROOT}/videos/$(date +%Y%m%d)}"
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
+# CycloneDDS profile. Both XML files live on the SSD under $SSD_ROOT and are
+# owned by the workspace/build repo, not by this package.
+#
+#   static  WiFi (wlP1p1s0) + lo, static peer list. Required whenever anything
+#           off-robot must see the topics (remote RViz on the desktop, a second
+#           gosling). Each peer in the list that is powered off costs ~200
+#           failed sendto()/sec, per process, logged to stderr — see
+#           CYCLONEDDS_PEERS.md.
+#   lo      Loopback only, single `localhost` peer, zero peer noise. Containers
+#           run with host networking, so same-host processes (the stack and an
+#           external MPC node) still discover each other. THE COST: anything
+#           off-robot is invisible with no error at all — remote RViz just shows
+#           nothing. Local-only runs.
+#   none    Leave CYCLONEDDS_URI exactly as inherited.
+#
+# Default: `none` when the caller already exported CYCLONEDDS_URI (their choice
+# wins), otherwise `static`. The offline / local-only scripts set `lo`.
+export DDS_PROFILE="${DDS_PROFILE:-$([[ -n "${CYCLONEDDS_URI:-}" ]] && echo none || echo static)}"
+case "$DDS_PROFILE" in
+  none) : ;;
+  static|lo)
+    _dds_file="$SSD_ROOT/cyclonedds_config_static.xml"
+    [[ "$DDS_PROFILE" == lo ]] && _dds_file="$SSD_ROOT/cyclonedds_offline_lo.xml"
+    # A CYCLONEDDS_URI pointing at a missing file is worse than none: Cyclone
+    # falls back to its built-in defaults (multicast on, no static peers) and
+    # says so only in a line nobody reads.
+    if [[ -f "$_dds_file" ]]; then
+      export CYCLONEDDS_URI="file://$_dds_file"
+    else
+      printf '[warn] DDS_PROFILE=%s but %s is missing — leaving CYCLONEDDS_URI unset\n' \
+        "$DDS_PROFILE" "$_dds_file" >&2
+    fi
+    unset _dds_file
+    ;;
+  *) printf '[warn] unknown DDS_PROFILE=%s (want static|lo|none)\n' "$DDS_PROFILE" >&2 ;;
+esac
+
 # Robot namespace. bringup resolves this from $VEHICLE_NAME then $USER, and
 # raises if neither is set, so we pin it explicitly and pass it through.
 export VEHICLE_NAME="${VEHICLE_NAME:-gosling1}"
@@ -53,6 +90,16 @@ export MAX_SPEED="${MAX_SPEED:-1.5}"
 # or system-identification fit done from it. Raise this back to 0.34 once
 # steering_angle_to_servo_offset has been recalibrated toward 0.5.
 export MAX_STEERING="${MAX_STEERING:-0.25}"
+
+# Ask the RealSense node to hardware-reset the D435i during init (librealsense
+# `initial_reset`). This is a RECOVERY knob, not a default: the reset itself can
+# leave the device wedged, with the control endpoints answering (camera/imu keeps
+# streaming) while every video stream sits at 0 Hz and libresense logs
+# `control_transfer ... Resource temporarily unavailable`. Measured on gosling1
+# 2026-08-08 on a freshly booted Jetson. The launch files all default it False;
+# these scripts used to force it True, which is how the failure was reached.
+# Set RESET_REALSENSE=True for the run AFTER a camera comes up dead.
+export RESET_REALSENSE="${RESET_REALSENSE:-False}"
 
 # Isaac VSLAM refuses to localize sanely into an empty map directory, and
 # bringup defaults this to True. Keep it off unless a real map exists.
@@ -302,6 +349,7 @@ print_env() {
     "namespace"       "/$NS" \
     "ROS_DOMAIN_ID"   "$ROS_DOMAIN_ID" \
     "RMW"             "$RMW_IMPLEMENTATION" \
+    "DDS profile"     "$DDS_PROFILE (${CYCLONEDDS_URI:-unset})" \
     "workspace"       "$F1TENTH_WS" \
     "bag root"        "$BAG_ROOT" \
     "map root"        "$MAP_ROOT" \

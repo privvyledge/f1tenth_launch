@@ -42,9 +42,20 @@ else
 fi
 
 info "RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
-[[ -n "${CYCLONEDDS_URI:-}" ]] && warn "CYCLONEDDS_URI is set ($CYCLONEDDS_URI).
+case "$DDS_PROFILE" in
+  static)
+    warn "DDS_PROFILE=static ($CYCLONEDDS_URI).
       Static-peer configs make 'ros2 node list' intermittently blind; prefer
-      'ros2 topic hz' over node introspection when diagnosing."
+      'ros2 topic hz' over node introspection when diagnosing. Unreachable
+      peers also flood stderr — see CYCLONEDDS_PEERS.md." ;;
+  lo)
+    warn "DDS_PROFILE=lo ($CYCLONEDDS_URI).
+      Loopback only: NOTHING off this machine can see these topics, and it
+      fails silently. Remote RViz will show an empty world with no error." ;;
+  *)
+    [[ -n "${CYCLONEDDS_URI:-}" ]] && warn "CYCLONEDDS_URI is set ($CYCLONEDDS_URI)
+      but DDS_PROFILE=$DDS_PROFILE — the config is whatever the caller inherited." ;;
+esac
 
 # ---------------------------------------------------------- 2. hardware ----
 banner "2. hardware"
@@ -88,8 +99,8 @@ elif compgen -G "/dev/video*" >/dev/null; then
       Intel vendor id was not found in sysfs — verify the camera is the D435i"
 else
   warn "no /dev/video* nodes and no Intel device in sysfs. If the camera was
-      wedged by a container restart, relaunch with reset_realsense:=True
-      (the run scripts already pass it)."
+      wedged by a container restart, relaunch with RESET_REALSENSE=True
+      (it is opt-in now — the launch files default it False)."
 fi
 
 # YDLidar X4 sits behind a CP210x USB-serial bridge -> /dev/ttyUSB*.

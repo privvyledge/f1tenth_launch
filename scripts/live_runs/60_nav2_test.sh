@@ -88,7 +88,7 @@ start_stack() {
       launch_3d_mapping:=False \
       launch_command_gate:=True \
       command_gate_require_heartbeat:=True \
-      reset_realsense:=True \
+      reset_realsense:="$RESET_REALSENSE" \
       max_speed:="$MAX_SPEED" \
       max_steering:="$MAX_STEERING" \
       log_level:=warn &

@@ -55,8 +55,8 @@ start_stack() {
   #                                     what puts odom->base_link in the bag
   #   map_tf_publisher:='ekf'           teleop defaults to 'vslam'; with no
   #                                     saved VSLAM map that is the wrong owner
-  #   reset_realsense:=True             D435i wedges silently after container
-  #                                     restarts and starts with zero streams
+  #   RESET_REALSENSE=True              D435i wedged? re-run with the reset (recovery only)
+  #                                     the reset can itself wedge the device — see 00_env.sh
   #   localize_isaac_vslam_on_startup   must stay False without a saved map
   ros2 launch f1tenth_launch teleop.launch.py \
       use_f1tenth_namespace:=True \
@@ -74,7 +74,7 @@ start_stack() {
       localize_isaac_vslam_on_startup:="$VSLAM_LOCALIZE_ON_STARTUP" \
       launch_command_gate:=True \
       command_gate_require_heartbeat:=True \
-      reset_realsense:=True \
+      reset_realsense:="$RESET_REALSENSE" \
       publish_realsense_pointcloud:="$($WITH_CLOUD && echo True || echo False)" \
       max_speed:="$MAX_SPEED" \
       max_steering:="$MAX_STEERING" \
@@ -86,7 +86,7 @@ start_stack() {
   banner "waiting for the stack to settle (camera is delayed ~6 s)"
   wait_for_topic "$(ns_topic lidar/scan_filtered)" 60 || die "LiDAR never came up"
   wait_for_topic "$(ns_topic camera/color/image_raw)" 90 \
-    || die "camera never came up — try again with reset_realsense:=True, and
+    || die "camera never came up — try again with RESET_REALSENSE=True, and
             check the container has /tmp/.X11-unix mounted and DISPLAY set
             (RealSense needs a GL context)"
   wait_for_topic "$(ns_topic odometry/local)" 60 || warn "no odometry/local yet"

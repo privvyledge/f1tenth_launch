@@ -143,7 +143,7 @@ start_stack() {
       map_tf_publisher:=ekf \
       odom_tf_publisher:=ekf \
       localize_isaac_vslam_on_startup:="$VSLAM_LOCALIZE_ON_STARTUP" \
-      reset_realsense:=True \
+      reset_realsense:="$RESET_REALSENSE" \
       publish_realsense_pointcloud:=True \
       realsense_emitter_enabled:=0 \
       log_level:=warn &

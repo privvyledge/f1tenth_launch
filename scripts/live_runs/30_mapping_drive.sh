@@ -60,7 +60,7 @@ start_stack() {
       localize_isaac_vslam_on_startup:="$VSLAM_LOCALIZE_ON_STARTUP" \
       launch_command_gate:=True \
       command_gate_require_heartbeat:=True \
-      reset_realsense:=True \
+      reset_realsense:="$RESET_REALSENSE" \
       publish_realsense_pointcloud:=False \
       max_speed:="$MAX_SPEED" \
       max_steering:="$MAX_STEERING" \
