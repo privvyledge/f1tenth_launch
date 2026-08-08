@@ -155,8 +155,21 @@
     odom2_queue_size: 2
     odom2_differential: true  # true
     odom2_relative: false
-    odom2_pose_rejection_threshold: 5.0   # Mahalanobis gate; rejects timestamp-induced position spikes
-    odom2_twist_rejection_threshold: 5.0  # same for velocity
+    # Mahalanobis gates, tightened 5.0 -> 3.0 on 2026-08-08 to match odom3 below.
+    # 5.0 passed essentially everything; 3.0 still admits normal driving deltas at
+    # rf2o's 8.3 Hz while catching timestamp-induced spikes.
+    #
+    # Scope, so this is not over-credited later: this gates OUTLIERS, it does not
+    # fix rf2o's stationary heading walk. Measured parked on 2026-08-08, back to
+    # back: -5.58 deg/min then +4.60 deg/min. The sign flip rules out a bias --
+    # it is a random walk, and per step it is small (~5 deg accumulated over ~500
+    # steps is sigma ~= 0.22 deg/step, against the 2.86 deg/step this source already
+    # declares in pose_covariance_diagonal). No rejection threshold and no
+    # covariance value removes an accumulation of in-family steps; only not
+    # integrating them while the car is stationary does. That belongs upstream in
+    # rf2o -- see docs/rf2o_zero_velocity_brief.md.
+    odom2_pose_rejection_threshold: 3.0
+    odom2_twist_rejection_threshold: 3.0
 
     odom3: odom/rtabmap/icp
     odom3_config: [ true, true, false,  # true, true
