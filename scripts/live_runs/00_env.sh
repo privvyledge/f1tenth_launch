@@ -81,15 +81,27 @@ export USE_GPU="${USE_GPU:-true}"
 # ground cannot bolt. Raise deliberately per run.
 export MAX_SPEED="${MAX_SPEED:-1.5}"
 
-# 0.25 rad, not the package default of 0.34. With the current calibration
-# (servo = -1.4 * angle + 0.56, servo_max 0.92) any left-hand command beyond
-# (0.92 - 0.56) / 1.4 = 0.257 rad clips at the servo limit, and the driver
-# logs "servo command value ... above maximum limit, clipping". A clipped
-# command makes the bag lie: the recorded steering keeps rising while the
-# wheels have stopped moving, which quietly corrupts any trajectory-tracking
-# or system-identification fit done from it. Raise this back to 0.34 once
-# steering_angle_to_servo_offset has been recalibrated toward 0.5.
-export MAX_STEERING="${MAX_STEERING:-0.25}"
+# 0.314 rad, not the package default of 0.34. This is the largest command that
+# never clips the servo, derived from the calibrated gain:
+#
+#   servo = -1.1448 * angle + 0.56,  clamped to [0.08, 0.92]
+#   left  (+angle -> low servo):  (0.56 - 0.08) / 1.1448 = +0.419 rad
+#   right (-angle -> high servo): (0.56 - 0.92) / 1.1448 = -0.314 rad
+#
+# The travel is asymmetric because the centre sits above 0.5, so the binding
+# limit is the RIGHT one and 0.314 is what makes operation symmetric and
+# clip-free. Clipping matters beyond lost authority: the recorded steering keeps
+# rising while the wheels have stopped moving, so a clipped bag quietly corrupts
+# any trajectory-tracking or system-identification fit made from it, and the
+# driver logs "servo command value ... above maximum limit, clipping".
+#
+# Was 0.25, derived from the old inherited gain of -1.4 (which put the bound at
+# 0.257) and labelled left-hand -- both wrong now: the gain was measured as
+# -1.1448 on this car in 01dc83d, and the limited side is the right, not the
+# left (bug-155 had the directions transposed). Raise toward 0.419 only if
+# steering_angle_to_servo_offset is recentred toward 0.5, which is a bench
+# decision, not a config change.
+export MAX_STEERING="${MAX_STEERING:-0.314}"
 
 # Ask the RealSense node to hardware-reset the D435i during init (librealsense
 # `initial_reset`). This is a RECOVERY knob, not a default: the reset itself can
