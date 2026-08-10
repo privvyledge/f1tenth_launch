@@ -91,9 +91,11 @@ def launch_setup(context, *args, **kwargs):
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='ekf')
     launch_visualization = LaunchConfiguration('launch_visualization', default=False)
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
-    launch_pointcloud_map = LaunchConfiguration('launch_pointcloud_map', default=False)
+    # The cloud is only ever looked at, so follow launch_visualization by default rather than
+    # republishing 1.5 MB every 3 s into a stack nobody is watching. Still overridable on its own.
+    launch_pointcloud_map = LaunchConfiguration('launch_pointcloud_map', default=launch_visualization)
     pointcloud_map_file = LaunchConfiguration('pointcloud_map_file', default=os.path.join(
-            f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'raslab', 'cloud.pcd'))
+            f1tenth_launch_dir, 'data', 'maps', '20260805', 'cloud_voxel_0p05.pcd'))
     launch_2d_mapping = LaunchConfiguration('launch_2d_mapping', default=False)
     launch_3d_mapping = LaunchConfiguration('launch_3d_mapping', default=False)
     life_long_mapping = LaunchConfiguration('life_long_mapping', default=False)
@@ -342,10 +344,13 @@ def launch_setup(context, *args, **kwargs):
     launch_pointcloud_map_arg = DeclareLaunchArgument(
             'launch_pointcloud_map', default_value=launch_pointcloud_map,
             description='Publish a static RTABMap-exported point cloud (.pcd) on map/pointcloud '
-                        'for RViz visualization only. Not used for localization or planning.')
+                        'for RViz visualization only. Not used for localization or planning. '
+                        'Defaults to whatever launch_visualization is set to.')
     pointcloud_map_file_arg = DeclareLaunchArgument(
             'pointcloud_map_file', default_value=pointcloud_map_file,
-            description='Path to the .pcd point cloud map published when launch_pointcloud_map:=True.')
+            description='Path to the .pcd point cloud map published when launch_pointcloud_map:=True. '
+                        'Must be exported from the same RTABMap database as the occupancy grid in '
+                        'map_file, or the two will not co-register.')
 
     launch_2d_mapping_arg = DeclareLaunchArgument('launch_2d_mapping',
                                                   default_value=launch_2d_mapping,
