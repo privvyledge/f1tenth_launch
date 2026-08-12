@@ -42,11 +42,14 @@ def launch_setup(context, *args, **kwargs):
     # Setup default directories
     nav2_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'nav2_params.yaml')
     localization_params_file_path = os.path.join(f1tenth_launch_dir, 'config', 'localization', 'localizer_amcl.yaml')
-    map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    # Must come from the same RTABMap database as pointcloud_map_file below (rtabmap_final_nf.db),
+    # and it is the grid the localizer_amcl.yaml initial_pose seed was measured against. The former
+    # default, data/maps/raslab.yaml, was an older map with a different origin (bug-237).
+    map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', '20260805', 'rtabmap_2d_final.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
     offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
     online_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_online.yaml")
-    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', '20260805', 'rtabmap_2d_final.yaml')
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables

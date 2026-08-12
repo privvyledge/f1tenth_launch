@@ -55,11 +55,11 @@ def launch_setup(context, *args, **kwargs):
     nvidia_isaac_launch_dir = os.path.join(f1tenth_launch_bringup_dir, 'nvidia_isaac_ros')
 
     # Setup default directories.
-    map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', '20260805', 'rtabmap_2d_final.yaml')
     rviz_config_path = os.path.join(f1tenth_launch_dir, 'config', 'f1tenth.rviz')
     offline_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_offline.yaml")
     online_mapping_2d_param_file_path = os.path.join(f1tenth_launch_dir, "config/mapping/2d_mapping_online.yaml")
-    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    default_2d_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', '20260805', 'rtabmap_2d_final.yaml')
     rtabmap_database_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'rtabmap.db')
 
     # Setup launch configuration variables

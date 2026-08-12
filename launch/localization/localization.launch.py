@@ -41,7 +41,7 @@ def launch_setup(context, *args, **kwargs):
     localization_param_file = os.path.join(
             f1tenth_launch_pkg_prefix, 'config', 'localization/localizer_amcl.yaml')
     map_file_path = os.path.join(
-            f1tenth_launch_pkg_prefix, 'data/maps', 'raslab.yaml')
+            f1tenth_launch_pkg_prefix, 'data/maps/20260805', 'rtabmap_2d_final.yaml')
     rtabmap_database_file_path = os.path.join(f1tenth_launch_pkg_prefix, 'data', 'maps', 'rtabmap', 'rtabmap.db')
     # ekf_param_file = os.path.join(
     #         f1tenth_launch_pkg_prefix, 'config', '/ekf.yaml')

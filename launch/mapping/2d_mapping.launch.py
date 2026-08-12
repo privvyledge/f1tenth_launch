@@ -28,7 +28,7 @@ def generate_launch_description():
     slam_toolbox_dir = get_package_share_directory('slam_toolbox')
 
     # Setup default directories
-    default_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', 'raslab.yaml')
+    default_map_file_path = os.path.join(f1tenth_launch_dir, 'data', 'maps', '20260805', 'rtabmap_2d_final.yaml')
     rviz_cfg_path = os.path.join(f1tenth_launch_dir, 'rviz', 'slam_toolbox.rviz')
     # rviz_cfg_path = os.path.join(f1tenth_launch_dir, 'rviz', 'slam_toolbox.rviz')
 

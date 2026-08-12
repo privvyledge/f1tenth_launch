@@ -115,7 +115,7 @@
 #    use_sim_time: False
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the localization_launch.py file & provide full path to map below.
-    yaml_filename: "raslab.yaml"
+    yaml_filename: "20260805/rtabmap_2d_final.yaml"
 
 #map_saver:
 #  ros__parameters:

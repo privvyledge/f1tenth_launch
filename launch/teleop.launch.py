@@ -63,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=rviz_config_path)
     launch_pointcloud_map = LaunchConfiguration('launch_pointcloud_map', default=False)
     pointcloud_map_file = LaunchConfiguration('pointcloud_map_file', default=os.path.join(
-            f1tenth_launch_dir, 'data', 'maps', 'rtabmap', 'raslab', 'cloud.pcd'))
+            f1tenth_launch_dir, 'data', 'maps', '20260805', 'cloud_voxel_0p05.pcd'))
 
     require_deadman = LaunchConfiguration('require_deadman', default='True')
     deadman_buttons = LaunchConfiguration('deadman_buttons', default="[4, 9]")
@@ -100,7 +100,7 @@ def launch_setup(context, *args, **kwargs):
     gravitational_acceleration = LaunchConfiguration('gravitational_acceleration', default='9.80665')
 
     map_file = LaunchConfiguration('map_file', default=os.path.join(
-            get_package_share_directory('f1tenth_launch'), 'data/maps', 'raslab.yaml'))
+            get_package_share_directory('f1tenth_launch'), 'data/maps/20260805', 'rtabmap_2d_final.yaml'))
 
     camera_name = LaunchConfiguration('camera_name', default='camera')
     approx_sync = LaunchConfiguration('approx_sync', default='True')
