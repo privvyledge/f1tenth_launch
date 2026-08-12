@@ -40,7 +40,11 @@
     # i.e. it re-origins the map frame onto wherever AMCL happened to be when it
     # first published. That throws away the one thing amcl_pose contributes: the
     # absolute pose on the grid. On the 2026-08-05 runs the start pose was
-    # (+0.445, -0.575, -79.8 deg), so `relative: true` would have offset the
+    # (+0.445, -0.575, -79.8 deg) per the RTABMap ground truth — note the live
+    # parking-spot heading was re-measured as -84.5 deg on 2026-08-11 and the
+    # AMCL seed moved accordingly; whether those bags really started 4.7 deg
+    # away or the ground truth shares the error is untested. Either way,
+    # `relative: true` would have offset the
     # whole map frame by 0.73 m and 80 deg — every Nav2 goal in map coordinates
     # wrong by that much, with a filter that looks perfectly healthy.
     # (This is why the map-frame deliverable broadcast map->odom from AMCL

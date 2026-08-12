@@ -35,10 +35,38 @@
     use_sim_time: False
     set_initial_pose: True # True: use pose below, False: Use RViz 2D Pose Estimate
     # The map frame is NOT aligned with the car's parking spot. On the raslab map
-    # (rtabmap_2d_final) the physical origin of the recorded runs sits at
-    # (+0.445, -0.575, -79.8 deg) — see the pose0 comment in ekf_map.yaml, and
-    # re-measured live 2026-08-06 when AMCL settled at (0.378, -0.581, -86.5 deg)
-    # from a car parked on that spot.
+    # (rtabmap_2d_final) the spot sits at roughly (+0.4, -0.55, -84.5 deg).
+    #
+    # The yaw was -1.3928 rad (-79.8 deg) until 2026-08-11, inherited from the
+    # RTABMap ground-truth start pose of the 2026-08-05 bags. It was 4.7 deg off.
+    # Replaced with a measurement that does not involve a localizer at all:
+    # scripts/live_runs/heading_from_scan.py scores the raw LiDAR scan against
+    # this occupancy grid over a yaw/xy grid search. Five samples, two cold
+    # launches, one deliberate re-park:
+    #   2026-08-10             -84.50 deg  (score 0.857)
+    #   2026-08-11 run A       -85.00 deg  (0.916)
+    #   2026-08-11 run B       -85.00 deg  (0.913, after roll-off/roll-on)
+    #   2026-08-11 run C       -84.25 deg  (0.893, deliberately re-parked off-mark)
+    #   2026-08-11 AMCL settle -83.97 deg  (independent algorithm, seeded at -79.8
+    #                                       and pulled 4.2 deg toward the geometry)
+    # Total spread 1.03 deg; the four scan fits span 0.75 deg and mean -84.69.
+    # -84.50 is kept as the value rather than the mean: the yaw search step is
+    # 0.25 deg and the difference is 0.19 deg, well inside the noise.
+    #
+    # The peak is single and unambiguous, which retires the old "a rectangular
+    # lab is symmetric to a planar LiDAR" explanation for the recurring ~90 deg
+    # confusion here. The old value scored 77-81 % of best and figure-8
+    # waypoint 0 (-92.08 deg) scores 62-64 % — it does not fit the map, so
+    # nothing should seed itself from it.
+    #
+    # NOT changed, deliberately: x/y. The same fits consistently prefer
+    # y = -0.515 (identical in all four) and x = 0.385-0.415, i.e. ~6 cm off the
+    # values below. Position sits in a much shallower basin than yaw at this
+    # grid resolution, 6 cm is well inside AMCL's convergence, and the offline
+    # replay seeds share these numbers. Measure it properly before moving it.
+    #
+    # A car parked at the origin that reports a large non-zero map pose is
+    # therefore *correct* — it is not drift.
     #
     # This was (0,0,0,0), i.e. ~0.73 m and 80 deg from the truth, and AMCL cannot
     # walk that off while the car sits still: update_min_d/update_min_a below gate
@@ -50,7 +78,7 @@
       x: 0.445
       y: -0.575
       z: 0.0
-      yaw: -1.3928  # radians = -79.8 deg
+      yaw: -1.4748  # radians = -84.5 deg; measured 2026-08-11, was -1.3928 (-79.8)
     # Motion model. odom->base_link comes from the 30 Hz EKF fusing VESC + rf2o +
     # two IMUs, which is good dead reckoning between updates — keep the process
     # noise low and let the measurement do the correcting.
