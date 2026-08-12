@@ -1,0 +1,35 @@
+/**:
+  ros__parameters:
+    # imu_processors::ImuBiasRemover (ros-perception/imu_pipeline, Humble 0.5.2).
+    #
+    # This is not a static offset subtractor. While the velocity source reports
+    # the robot stationary it accumulates the gyro reading into an exponential
+    # moving average; while moving it subtracts that average. It touches only
+    # angular_velocity.{x,y,z}.
+    #
+    # Two consequences to keep in mind when reading any measurement made with
+    # this node running:
+    #   * it zeroes the rate while stationary, so a parked drift test reads ~0
+    #     whether or not the moving-case correction works. Log the `bias` topic
+    #     and check it converges to the measured constant instead
+    #     (-0.00214 rad/s for the RealSense z-gyro; docs/imu_bias_removal_spec.md).
+    #   * the stationary test is `twist_is_zero_ || odom_is_zero_` with NO
+    #     staleness timeout. A velocity source that dies while reading "stopped"
+    #     pins angular_velocity at zero indefinitely, including while driving.
+
+    # Velocity source. use_odom (not use_cmd_vel): cmd_vel is inbound-only on
+    # this vehicle and is silent under teleop, so its silence would read as
+    # "stationary" and the node would accumulate bias while being driven.
+    # vehicle/vesc_odom is ERPM-derived and independent of every IMU, unlike
+    # odometry/local which is the EKF output that consumes the IMU being
+    # corrected. The `odom` topic is remapped in imu_filter.launch.py.
+    use_odom: true
+    use_cmd_vel: false
+    use_stamped: false
+
+    odom_threshold: 0.001       # [m/s] below this the robot counts as stationary
+    cmd_vel_threshold: 0.001    # [m/s] unused while use_cmd_vel is false
+
+    # Averaging constant for the stationary bias estimate. At the RealSense's
+    # ~200 Hz the default 0.01 settles in a few seconds of standing still.
+    accumulator_alpha: 0.01

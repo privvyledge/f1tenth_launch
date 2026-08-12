@@ -223,3 +223,51 @@ x/y/yaw only. Its Mahalanobis gates were tightened 5.0 → 3.0 on 2026-08-08; th
 gates outliers and does not interact with the change proposed here. Node
 parameters are set in `launch/localization/localization.launch.py` (~line 805),
 not in a YAML.
+
+---
+
+## Outcome — implemented upstream and verified on the vehicle, 2026-08-09
+
+The rf2o agent implemented this as commit `664e0fc` on `privvyledge/rf2o_laser_odometry`
+(branch `ros2`), "Add scan-derived zero-velocity detection to stop stationary
+pose drift". Two cues must agree before an increment is integrated: the solved
+translational/rotational speed, and the mean absolute range difference between
+consecutive scans over the beams valid in both — the second does not depend on
+the solver, so it also catches a solver that wrongly reports near-zero motion.
+
+Verified on gosling1, car parked, sensors + localization only (no vehicle), the
+same configuration as the baseline so the comparison is like-for-like:
+
+| source | baseline 2026-08-09 | run A | run B |
+|---|---|---|---|
+| `odom/rf2o` | +3.08 °/min (prior runs: −5.58, +4.60) | **+0.02** | **+0.40** |
+| `odometry/local` | −0.30 °/min | +0.08 | −0.15 |
+
+The random walk is gone: the sign no longer flips between windows and both runs
+sit far below the 1 °/min acceptance bar. `odometry/local` did not regress.
+
+Three properties of the implementation were checked directly rather than taken
+on trust, because each was a stated constraint in this brief:
+
+- `enable_zero_velocity_detection` defaults **true** and is scan-only — no new
+  topic or parameter is needed on the `f1tenth_launch` side.
+- While gated the node **keeps publishing at rate** (7.9 Hz measured) with a held
+  pose and exactly zero twist on all six components. It never goes silent, so a
+  consumer cannot mistake the gate for a dead node.
+- `zero_velocity_angular_threshold` ships at **0.05 rad/s, not 0.01**, and this
+  is deliberate: stationary solver noise reaches 0.029 rad/s, so 0.01 would
+  essentially never latch.
+
+The optional `zero_velocity_twist_topic` can only veto, never trigger. It is
+unset here. If the VESC is ever wired in, it accepts `Twist`, `TwistStamped`,
+`TwistWithCovarianceStamped` or `Odometry` and auto-detects which.
+
+**Still untested: the moving case.** Whether the gate ever latches while the car
+is genuinely creeping, and whether the `odom2` Mahalanobis gates at 3.0 reject
+legitimate rf2o updates mid-turn, both need a drive — see
+`scripts/live_runs/BATTERY_SESSION_PLAN.md`.
+
+To deploy: the robot image's rf2o is one commit behind this, and `/workspaces` is
+a container layer, so the patch must be re-applied and rebuilt after every
+container restart. `/mnt/f1tenth_ssd/shared_dir/rf2o_zv_0809/prep_container.sh`
+does it, idempotently, along with the config staging and the twist fix.

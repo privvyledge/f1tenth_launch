@@ -353,7 +353,17 @@ def launch_setup(context, *args, **kwargs):
                 'node_name': 'realsense_imu_filter',
                 'imu_corrector_output_topic': camera_name_str + 'imu/bias_removed',
                 'use_madgwick_filter': 'True',
-                'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
+                # Set to 'True' once ros-humble-imu-pipeline is in the robot image.
+                # The chain is wired and the constant is measured (-0.00214 rad/s
+                # z-gyro, four stationary runs over two days), but the node is not
+                # installed yet, so flipping this now makes the launch fail.
+                # Installing the apt package belongs to the separate
+                # workspace-build repo, not to a launch-time change here.
+                # Enabling it needs a before/after with scripts/live_runs/yaw_drift.py,
+                # not a flip: parked, rf2o and VSLAM already hold fused yaw to
+                # -0.05 deg/min, so this bias is real but currently drives nothing.
+                # See docs/imu_bias_removal_spec.md.
+                'remove_imu_bias': 'False',
                 # camera_imu_optical_frame, sensor_kit_link, base_link
                 'imu_corrector_frame': 'camera_imu_optical_frame',
                 'imu_corrector_node_name': 'realsense_imu_bias_removal_node',

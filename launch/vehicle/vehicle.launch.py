@@ -367,7 +367,14 @@ def generate_launch_description():
                 'node_name': 'vesc_imu_filter',
                 'imu_corrector_output_topic': 'vehicle/sensors/imu/bias_removed',
                 'use_madgwick_filter': 'True',
-                'remove_imu_bias': 'False',  # disabled since its not really useful and requires Autoware installation
+                # Stays 'False' even after the RealSense chain is enabled. This is
+                # spec step 4, deliberately not bundled with step 2 -- their effects
+                # on odometry/local are not separable after the fact, and the VESC
+                # bias constant is still dated 2026-08-08 and needs re-measuring.
+                # Only imu0's yaw *rate* row is in scope if this is ever enabled;
+                # the VESC's orientation is computed onboard and no external offset
+                # can touch it. See docs/imu_bias_removal_spec.md.
+                'remove_imu_bias': 'False',
                 'imu_corrector_frame': 'imu_link',  # imu_link, sensor_kit_link, base_link
                 'imu_corrector_node_name': 'vesc_imu_bias_removal_node',
                 'use_sim_time': 'False',

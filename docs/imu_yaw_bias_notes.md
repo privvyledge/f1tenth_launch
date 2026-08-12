@@ -1,5 +1,24 @@
 # Notes: gyro z-bias correction for the VESC and RealSense IMUs
 
+> **Superseded on 2026-08-09 by `docs/imu_bias_removal_spec.md`. Read that first.**
+>
+> The **measured constants in this document are still good** — the RealSense
+> figure was reconfirmed twice more on 2026-08-09 at −0.002149 and −0.002131
+> rad/s, holding within 1.2 % across four measurements.
+>
+> **Proposed change A below cannot work as written.** `imu_corrector` is an
+> Autoware node that is not installed in any image on this robot, and both call
+> sites hardcode `remove_imu_bias:='False'`. `config/filters/imu_corrector.yaml`
+> is dead config: editing `angular_velocity_offset_z` there changes nothing, and
+> a re-measurement would correctly show no effect. The replacement plan is
+> `imu_processors/imu_bias_remover` from `ros-perception/imu_pipeline` — see the
+> spec.
+>
+> Also settled on 2026-08-09: `imu_filter_madgwick` **passes `angular_velocity`
+> through unchanged**, verified by subscribing to its input and output at once
+> (identical means, identical sample counts). Nothing in the current chain
+> touches the gyro rate.
+
 **Status: measured, written down, NOT applied.** Nothing in this document has been
 changed in the running configuration. `odometry/local` currently drifts −0.03 to
 +0.16 °/min parked, which is healthy, and none of this should be applied without a

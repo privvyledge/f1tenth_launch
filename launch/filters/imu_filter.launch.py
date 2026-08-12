@@ -1,8 +1,19 @@
 """
-Todo:
-    * replace Autoware's IMU tools with ROS2 imu_pipeline (https://github.com/ros-perception/imu_pipeline/tree/jazzy)
-    * setup imu corrector node name
-    * add bias estimation using AMCL and Odom. Any Odom and PoseWithCovarianceStamped message will suffice, e.g. NDT, VSLAM (https://github.com/autowarefoundation/autoware.universe/blob/main/sensing/imu_corrector/launch/gyro_bias_estimator.launch.xml | https://github.com/autowarefoundation/autoware.universe/tree/main/sensing/imu_corrector)
+Gyro bias removal followed by orientation filtering.
+
+The bias remover is imu_processors::ImuBiasRemover from ros-perception's
+imu_pipeline, released for Humble at 0.5.2 and installed from apt
+(ros-humble-imu-pipeline). It replaced Autoware's imu_corrector, which was
+never installed in any robot image and was switched off at every call site.
+
+The chain, when remove_imu_bias is True:
+
+    <input_topic> -> imu_bias_remover -> <imu_corrector_output_topic> -> madgwick -> <output_topic>
+
+imu_filter_madgwick is a pass-through for angular_velocity -- it writes only
+orientation (and linear_acceleration under remove_gravity_vector) -- so the
+bias remover is the only thing in this chain that touches the gyro rate.
+See docs/imu_bias_removal_spec.md for the measured constants and the method.
 """
 
 import os
@@ -22,7 +33,7 @@ def generate_launch_description():
     imu_filter_param_file = os.path.join(
             f1tenth_launch_pkg_prefix, "config/filters/imu_filter.yaml")
     imu_corrector_param_file_path = os.path.join(
-            f1tenth_launch_pkg_prefix, "config/filters/imu_corrector.yaml")
+            f1tenth_launch_pkg_prefix, "config/filters/imu_bias_remover.yaml")
 
     namespace = LaunchConfiguration('namespace')
     use_namespace = LaunchConfiguration('use_namespace')
@@ -63,6 +74,7 @@ def generate_launch_description():
     imu_orientation_stddev = LaunchConfiguration('imu_orientation_stddev')
     node_name = LaunchConfiguration('node_name')
     imu_corrector_node_name = LaunchConfiguration('imu_corrector_node_name')
+    imu_bias_odom_topic = LaunchConfiguration('imu_bias_odom_topic')
     use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
     use_mag = LaunchConfiguration('use_mag')
     remove_imu_bias = LaunchConfiguration('remove_imu_bias')
@@ -143,6 +155,15 @@ def generate_launch_description():
             'imu_corrector_node_name',
             default_value='imu_bias_removal_node',
             description='Name for the IMU bias corrector/removal node.')
+    imu_bias_odom_topic_la = DeclareLaunchArgument(
+            'imu_bias_odom_topic',
+            default_value='vehicle/vesc_odom',
+            description='Velocity source telling the bias remover when the robot is '
+                        'stationary. Must be independent of the IMU being corrected and '
+                        'must not fall silent while the vehicle is driven -- see '
+                        'config/filters/imu_bias_remover.yaml. Do not point this at '
+                        'cmd_vel (silent under teleop) or odometry/local (EKF output, '
+                        'closes a loop with the IMU being corrected).')
     use_madgwick_filter_la = DeclareLaunchArgument(
             'use_madgwick_filter',
             default_value='True',
@@ -156,6 +177,7 @@ def generate_launch_description():
                             declare_imu_corrector_params_file_cmd,
                             imu_frame_la, imu_corrector_frame_la, input_topic_la, mag_topic_la,
                             output_topic_la, imu_corrector_output_topic_la, imu_corrector_node_name_la,
+                            imu_bias_odom_topic_la,
                             remove_gravity_vector_la,
                             imu_gyro_stddev_la, imu_accel_stddev_la, imu_orientation_stddev_la,
                             node_name_la, use_madgwick_filter_la, use_mag_la, remove_imu_bias_la])
@@ -168,11 +190,11 @@ def generate_launch_description():
                         namespace=namespace
                 ),
                 SetParameter(name='use_sim_time', value=use_sim_time),
-                SetParameter(name='base_link', value=imu_corrector_frame),
-                SetParameter(name='angular_velocity_stddev_xx', value=imu_gyro_stddev),
-                SetParameter(name='angular_velocity_stddev_yy', value=imu_gyro_stddev),
-                SetParameter(name='angular_velocity_stddev_zz', value=imu_gyro_stddev),
-                SetParameter(name='acceleration_stddev', value=imu_accel_stddev),
+                # Only orientation_stddev survives here. base_link,
+                # angular_velocity_stddev_* and acceleration_stddev were
+                # imu_corrector parameters; neither imu_bias_remover nor
+                # imu_filter_madgwick declares them, so ROS 2 would drop them
+                # silently and the file would read as though they applied.
                 SetParameter(name='orientation_stddev', value=imu_orientation_stddev),
 
                 # SetParametersFromFile(imu_filter_param_file),
@@ -186,29 +208,21 @@ def generate_launch_description():
                 SetRemap(src=['/tf'], dst=['tf']),
                 SetRemap(src=['/tf_static'], dst=['tf_static']),
 
-                # IncludeLaunchDescription(
-                #         XMLLaunchDescriptionSource(  # or FrontendLaunchDescriptionSource
-                #                 launch_file_path=PathJoinSubstitution([
-                #                     FindPackageShare("imu_corrector"), "launch", "imu_corrector.launch.xml",
-                #                 ]),
-                #         ),
-                #         launch_arguments={
-                #             "input_topic": input_topic,
-                #             "output_topic": imu_corrector_output_topic,
-                #             "param_file": imu_corrector_params_file,
-                #         }.items()
-                # ),
-
                 Node(
-                        package='imu_corrector',
-                        executable='imu_corrector_node',
-                        name=imu_corrector_node_name,  # f"{node_name_string}_corrector_node",
+                        package='imu_processors',
+                        executable='imu_bias_remover_node',
+                        name=imu_corrector_node_name,
                         # namespace=namespace,
                         output={'both': 'log'},
                         parameters=[imu_corrector_params_file],
                         remappings=[
-                            ('input', input_topic),  # input topic: vehicle/sensors/imu/raw
-                            ('output', imu_corrector_output_topic),  # output topic: vehicle/sensors/imu/data
+                            ('imu', input_topic),
+                            ('imu_biased', imu_corrector_output_topic),
+                            # Stationarity source. `bias` is left unremapped on
+                            # purpose: it is the only way to check the estimate
+                            # converges to the measured constant, since a parked
+                            # test reads ~0 either way.
+                            ('odom', imu_bias_odom_topic),
                         ]
                 ),
 
@@ -219,13 +233,18 @@ def generate_launch_description():
                         name=node_name,
                         # namespace=namespace,
                         output='screen',
+                        # do_bias_estimation, do_adaptive_gain, gain_acc and
+                        # gain_mag are imu_complementary_filter parameters and
+                        # are NOT declared by this node. Passing them here made
+                        # the file read as though gyro bias estimation was on
+                        # while ROS 2 dropped them as undeclared overrides.
+                        # Madgwick's own drift term is `zeta`, and it only
+                        # steers the internal orientation estimate -- the
+                        # published angular_velocity is a pass-through either
+                        # way. Bias removal happens upstream of this node.
                         parameters=[
-                            {'do_bias_estimation': True},
-                            {'do_adaptive_gain': True},
                             {'use_mag': use_mag},
                             {'gain': 0.3},
-                            {'gain_acc': 0.01},
-                            {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},
                             {'world_frame': "enu"},
                             {'remove_gravity_vector': remove_gravity_vector},
@@ -294,13 +313,18 @@ def generate_launch_description():
                         name=node_name,
                         # namespace=namespace,
                         output='screen',
+                        # do_bias_estimation, do_adaptive_gain, gain_acc and
+                        # gain_mag are imu_complementary_filter parameters and
+                        # are NOT declared by this node. Passing them here made
+                        # the file read as though gyro bias estimation was on
+                        # while ROS 2 dropped them as undeclared overrides.
+                        # Madgwick's own drift term is `zeta`, and it only
+                        # steers the internal orientation estimate -- the
+                        # published angular_velocity is a pass-through either
+                        # way. Bias removal happens upstream of this node.
                         parameters=[
-                            {'do_bias_estimation': True},
-                            {'do_adaptive_gain': True},
                             {'use_mag': use_mag},
                             {'gain': 0.3},
-                            {'gain_acc': 0.01},
-                            {'gain_mag': 0.01},
                             {'fixed_frame': imu_frame},
                             {'world_frame': "enu"},
                             {'remove_gravity_vector': remove_gravity_vector},

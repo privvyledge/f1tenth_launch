@@ -168,6 +168,14 @@
     # covariance value removes an accumulation of in-family steps; only not
     # integrating them while the car is stationary does. That belongs upstream in
     # rf2o -- see docs/rf2o_zero_velocity_brief.md.
+    #
+    # Stationary check, 2026-08-09 (car elevated, VESC unpowered, so the EKF ran
+    # on rf2o + camera IMU only -- the weakest input set this filter ever sees):
+    # odom/rf2o walked +3.08 deg/min while odometry/local held -0.30 deg/min. The
+    # fused output does not follow the walk even without VESC odom or VSLAM. Both
+    # thresholds verified as 3.0 in the live node via `ros2 param get`.
+    # Still untested: the driving-time timestamp spikes these gates exist for. A
+    # stationary car cannot exercise them -- that needs Stage 4a on the ground.
     odom2_pose_rejection_threshold: 3.0
     odom2_twist_rejection_threshold: 3.0
 
