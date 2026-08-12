@@ -76,7 +76,16 @@ def launch_setup(context, *args, **kwargs):
     launch_localization = LaunchConfiguration('launch_localization', default=True)
     launch_local_localization = LaunchConfiguration('launch_local_localization', default=True)
     launch_global_localization = LaunchConfiguration('launch_global_localization', default=True)
-    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
+    # Was default=True until 2026-08-11, which silently defeated the ekf_map guard: the guard
+    # (localization.launch.py) is computed as use_gpu AND localize_on_startup, so with both True
+    # ekf_map fused visual_slam/vis/slam_odometry as an ABSOLUTE map anchor while the VSLAM node
+    # itself ran unlocalized from its own power-up origin — 72.3 deg of map->odom error, with the
+    # car, footprint, live scan and 3D cloud all rotated inside a perfectly good map and every node
+    # reporting healthy (bug-232). Every documented launch path was passing :=False by hand, the
+    # description below already claimed False, and localization.launch.py / mapping.launch.py
+    # already default False. Set True only with a saved VSLAM map that is co-registered with the
+    # nav map.
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     # RTABMap ICP LiDAR odometry: expensive, and rf2o already covers this. Was previously hardcoded
     # 'True' at the localization include, which made it un-overridable from the command line.

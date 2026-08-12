@@ -55,7 +55,11 @@ def launch_setup(context, *args, **kwargs):
     # (measured: odometry/local at 12.78 Hz with 2.44 s gaps, versus 29.70 Hz
     # and a 0.180 s max gap with it off). rf2o covers the same job far cheaper.
     launch_icp_odometry = LaunchConfiguration('launch_icp_odometry', default=False)
-    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=True)
+    # Was default=True until 2026-08-11. Same defect as bringup.launch.py — see the comment there
+    # (bug-232): True defeats the ekf_map absolute-anchor guard and rotates map->odom onto VSLAM's
+    # power-up origin. teleop is an independent entry point that includes localization directly, so
+    # leaving it True would have reintroduced the bug through the other door.
+    localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')  # ekf
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='vslam')  # amcl
