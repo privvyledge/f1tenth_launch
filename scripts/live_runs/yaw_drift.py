@@ -31,7 +31,13 @@ from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu
 
-NS = "/" + os.environ.get("VEHICLE_NAME", "gosling1")
+# Namespace comes from $VEHICLE_NAME, but a bring-up with use_f1tenth_namespace
+# off publishes at the root even though $VEHICLE_NAME is still set in the
+# container. Set F1TENTH_NS='' to measure such a stack; without this the script
+# subscribes to topics that do not exist and every row reports 0 samples, which
+# looks like a dead stack rather than a wrong prefix.
+_ns = os.environ.get("F1TENTH_NS", os.environ.get("VEHICLE_NAME", "gosling1")).strip("/")
+NS = f"/{_ns}" if _ns else ""
 DURATION = float(sys.argv[1]) if len(sys.argv) > 1 else 60.0
 
 ODOM = [

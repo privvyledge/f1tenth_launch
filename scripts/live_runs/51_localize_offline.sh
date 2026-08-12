@@ -62,6 +62,10 @@
 
 set -uo pipefail
 cd "$(dirname "$0")"
+# Local-only run: nothing off this machine needs the topics, so use the
+# loopback-only CycloneDDS profile (no peer-unreachable spam). Override with
+# DDS_PROFILE=static if you want to watch this from a remote RViz.
+export DDS_PROFILE="${DDS_PROFILE:-lo}"
 # shellcheck source=00_env.sh
 source ./00_env.sh
 

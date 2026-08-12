@@ -193,7 +193,10 @@ which bounds how well this can be resolved from incidental driving. The Stage 4b
 ERPM staircase measures it deliberately and should settle it.
 
 Note this does **not** support the MPC side's reported 8–19 % speed-gain error;
-see the open question below.
+see the open question below. The LUCIO side measured the same thing
+independently on 2026-08-08 and puts the honest gain at **~3950** — inside this
+range, in its upper half. Still not a reason to change the config before the
+staircase; see the resolution below.
 
 Two methodology notes:
 
@@ -292,14 +295,36 @@ rest, `0 + 3.0 × 0.05 = 0.15 m/s`, is **562 erpm**, below the 750–975 erpm
 ground breakaway. Item 3 — checking that 3.0/0.05 against the MPC's actual
 configuration rather than second-hand — is **not done**.
 
-**One MPC-side claim still to resolve.** They report the car moving 10–19 %
-faster than commanded in the 0.08–0.21 band and read it as a speed-gain error.
-That is only evidence about `speed_to_erpm_gain` if "measured" came from an
-ERPM-independent source; if it came from `vesc_odom` or `sensors/core` ERPM,
-both are ERPM-derived and it is instead the VESC's own speed loop overshooting
-at low command — a different finding with a different owner. Ask which signal it
-was. The gain measured here (3687–4022, straddling 3750) does not support an
-8–19 % gain error.
+**The "10–19 % faster than commanded" claim is dead, and it was never LUCIO's**
+(resolved 2026-08-08 by `RESPONSE_f1tenth_sysid_round2.md`). It reached this
+work second-hand from the MPC side, and an earlier draft of `LUCIO_REPLY.md`
+put the question to LUCIO — that was a misattribution. LUCIO cannot find the
+claim in any of their documents and declines to defend it; the only speed
+statement they have made says the opposite. **Do not carry it as a LUCIO
+finding.**
+
+They measured it anyway, on the same three long bags, six references (two
+ERPM-derived, four not), and it fails three independent ways:
+
+1. **The 0.08–0.21 m/s band does not exist in this data** — 0.5–1.2 % of
+   command samples, 0.8–1.7 s equivalent per run, all of it the stick in
+   transit. Consistent with the 0.20–0.26 m/s ground breakaway measured here:
+   the band sits almost entirely below the speed at which this car moves at all.
+2. **The sign is opposite.** Every ERPM-independent reference (`pose_map`,
+   two camera pixel→world tracks, `odometry/local`) reads **3–11 % slower** than
+   commanded, on every run, at every speed with data.
+3. **The ERPM signals cannot produce it either** — `sensors/core` and
+   `vesc_odom` track the command to 0.4 %, which is expected: the VESC closes
+   its loop in ERPM and `ackermann_to_vesc` is a transparent affine map, so
+   measuring speed there is very nearly measuring the command back.
+
+Useful by-product for the gain: if true ground speed is ~5 % below `erpm/3750`,
+the honest gain is `3750 / 0.95 ≈ 3950`, inside the 3687–4022 measured here.
+Note their `odometry/local` reads 4.4–6.2 % slow *despite* fusing ERPM, because
+rf2o and VSLAM are ground-referenced and pull it down — a second,
+differently-constructed ERPM-independent vote for the same direction. Both
+methods are soft in magnitude, so **the config still does not move before the
+Stage 4b staircase**; expect it to move up rather than down when it does.
 
 ---
 
@@ -328,3 +353,28 @@ Not settleable from archived data:
   where drive resumes after a dropout
 - **the speed gain to better than ~7 %**, and the transport delay on bags
   without sharp throttle transients — both need Stage 4b's structured excitation
+
+## The acceptance test is `k ≈ 0.96`, not `k → 1.0`
+
+Agreed with LUCIO 2026-08-08 and it changes how Stage 4a is read. Their fit
+gave `k = 1.177`; the applied correction was `1.4 / 1.1448 = 1.223`. If both
+fits are sound their post-recalibration number lands at
+`1.177 / 1.223 = 0.962`, **not** 1.000. Accepted band is **0.95–1.02**.
+
+A systematic 0.96 is the residual reference/wheelbase difference between the
+two fits, not a failed recalibration — **do not chase the last 4 %.** Any
+wheelbase error is common-mode in that ratio and cancels.
+
+It does **not** cancel in the vehicle, which is why the wheelbase is now the
+top open item on both sides: both fits go through `ψ̇ = v·tan(δ)/L`, so a wrong
+`L` biases the calibrated gain and the delivered physical angle is off by the
+same 2.2 %. Carried through, at `L = 0.25 m` the `figure8_172338` `k` of 1.2163
+becomes ~1.190 against LUCIO's 1.177 — the disagreement drops from 3.4 % to
+1.1 %, inside both spreads. It is a tape measure.
+
+On lag, LUCIO withdrew their 160 ms (80 ms transport + 80 ms first-order): it
+was fitted against `pose_map` yaw rate, an EKF state carrying its own group
+delay, and they are re-fitting against gyro. The 60 ms + 40 ms here was gyro
+throughout, and the < 20 ms throttle figure was on differenced ERPM, so neither
+carries that delay. Treat any LUCIO 160 ms in a document older than 2026-08-08
+as superseded.

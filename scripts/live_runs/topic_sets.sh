@@ -191,9 +191,18 @@ set_for() {
                     "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" \
                     "$TOPICS_GLOBAL_LOC" "$TOPICS_NAV2" ;;
     mpc)
+      # VSLAM odometry is included so a heading question asked of this bag can
+      # be answered. odom/rf2o and odometry/local are not independent -- rf2o is
+      # fused into the EKF -- so without a third source a heading change cannot
+      # be attributed to rf2o rather than to the fusion. Only publishes on the
+      # GPU path, same guard as the other sets.
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_VEHICLE" \
                     "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" \
-                    "$TOPICS_GLOBAL_LOC" ;;
+                    "$TOPICS_GLOBAL_LOC"
+      if [[ "${USE_GPU,,}" == "true" ]]; then
+        printf '%s\n' "$TOPICS_ODOM_VSLAM"
+      fi
+      ;;
     *) err "unknown topic set: $1"; return 1 ;;
   esac
 }

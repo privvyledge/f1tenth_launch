@@ -68,8 +68,8 @@ echo "=== confirming the two behavioural changes are live"
 grep -q 'respawn_delay=2.0' "$DST/launch/vehicle/vehicle.launch.py" \
   && echo "  [ ok ] vesc_driver respawn_delay = 2.0 s (was 10.0)" \
   || { echo "  [FAIL] respawn_delay not applied"; rc=1; }
-grep -q 'MAX_STEERING:-0.25' "$DST/scripts/live_runs/00_env.sh" \
-  && echo "  [ ok ] MAX_STEERING default = 0.25 rad (was 0.34)" \
+grep -q 'MAX_STEERING:-0.314' "$DST/scripts/live_runs/00_env.sh" \
+  && echo "  [ ok ] MAX_STEERING default = 0.314 rad (was 0.25, derived from the old -1.4 gain)" \
   || { echo "  [FAIL] MAX_STEERING not applied"; rc=1; }
 grep -q 'vehicle/sensors/imu/mag' "$DST/scripts/live_runs/topic_sets.sh" \
   && echo "  [ ok ] TOPICS_VEHICLE includes imu + imu/mag" \

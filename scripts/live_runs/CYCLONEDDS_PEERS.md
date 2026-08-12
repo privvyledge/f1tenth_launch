@@ -1,10 +1,17 @@
 # CycloneDDS static peers — log noise and the fix
 
-**Status: not applied.** This describes a change to
-`cyclonedds_config_static.xml`, which is owned by the separate workspace/build
-repo, not by `f1tenth_launch`. The file is deployed to
-`/mnt/f1tenth_ssd/shared_dir/cyclonedds_config_static.xml` on gosling1 and
-selected via `CYCLONEDDS_URI`. Apply this there at merge time.
+**Status: applied on the robot 2026-08-07, NOT in any repo.**
+`cyclonedds_config_static.xml` is owned by the separate workspace/build repo,
+not by `f1tenth_launch`. The live copy at
+`/mnt/f1tenth_ssd/shared_dir/cyclonedds_config_static.xml` on gosling1 (selected
+via `CYCLONEDDS_URI`) now has `192.168.2.193` commented out; backup of the
+previous contents is `cyclonedds_config_static.bak08072026.xml` beside it. **The
+same edit still has to be made in the build repo at merge time**, or the next
+deploy silently reverts it.
+
+Profile selection is wired into these scripts as `DDS_PROFILE`
+(`static` | `lo` | `none`) in `00_env.sh`; the four offline scripts
+(`40`, `51`, `52`, `61`) default to `lo`, everything else to `static`.
 
 Written 2026-08-05 after the noise buried a real YDLidar failure during a live
 recording session.
@@ -31,6 +38,35 @@ run on host networking, so same-host processes (e.g. an external MPC node) still
 discover each other. The cost is the static-peer trap in its strongest form:
 anything not in the list is invisible with no error, so remote RViz sees
 nothing. Use it only when nothing off-robot needs the topics.
+
+## Correction, measured 2026-08-07 13:53 — reachability is NOT the trigger
+
+Counting the spam by destination address in two full stack logs:
+
+| Log | `.140` | `.141` | `.193` | `.194` |
+|---|---|---|---|---|
+| `mpc_stack_20260807_112934.log` (before the edit, 5,176,774 lines) | 1,294,000 | 1,294,000 | 1,294,000 | 1,294,000 |
+| `mpc_stack_20260807_135313.log` (after the edit) | 34,800 | 34,800 | — | 34,800 |
+
+**Every remote peer produces an identical count, whether it is up or down.** ICMP
+at the same moment: `.140` UP, `.141` UP, `.193` DOWN, `.194` DOWN, `.195` (self)
+UP. So the "peers that are powered off" explanation below is wrong as a *cause* —
+`retcode -3` also fires for peers that answer ping.
+
+The likely mechanism is the second interface: gosling1 has `lo` and `wlP1p1s0`
+in `<Interfaces>`, and the `tev` thread announces to every peer on every
+interface. A `192.168.2.x` address is unroutable via `lo`, so each remote peer
+costs exactly one `EHOSTUNREACH` per announcement regardless of its state.
+
+Consequences for planning:
+- The spam scales with **peer count**, not with how many are down. Commenting out
+  `.193` removed exactly one of four equal shares: **~25 % less noise, and only
+  that.** `.194` staying in is not what makes the remaining 75 %.
+- **Fix B (render the list from a reachability probe) would not have helped
+  either** — a probe keeps `.140` and `.141`, which flood at the same rate.
+- The lever that would actually silence it is the `lo` entry, and that is off the
+  table by operator decision (it took VSLAM frame stalls 0.1373/s → 0.0294/s).
+  `cyclonedds_offline_lo.xml` sidesteps it instead, by having no remote peers.
 
 ## Symptom
 

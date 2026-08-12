@@ -41,6 +41,15 @@ def main():
     ap.add_argument("--timeout", type=float, default=60.0)
     ap.add_argument("--sigma-xy", type=float, default=0.05)
     ap.add_argument("--sigma-yaw", type=float, default=0.02)
+    # Defaults keep the bag-replay behaviour this script was written for. Pass
+    # `--ns "" --no-use-sim-time` on a LIVE stack: a raw
+    # `ros2 launch f1tenth_launch bringup.launch.py` leaves
+    # use_f1tenth_namespace False, so TF is on the bare /tf and there is no
+    # /clock publisher to drive sim time.
+    ap.add_argument("--use-sim-time", dest="use_sim_time",
+                    action=argparse.BooleanOptionalAction, default=True,
+                    help="sim time for bag replay (default); "
+                         "--no-use-sim-time for a live robot")
     args = ap.parse_args()
 
     # The /tf remap is load-bearing and is the same trap 00_env.sh's tf_has_edge
@@ -48,14 +57,21 @@ def main():
     # /tf and /tf_static, so putting the node in a namespace moves the node but
     # not its TF subscriptions. It would then wait forever on a /tf nobody
     # publishes and report "odom->base_link never arrived" against a healthy tree.
-    rclpy.init(args=["--ros-args",
-                     "-r", f"/tf:=/{args.ns}/tf",
-                     "-r", f"/tf_static:=/{args.ns}/tf_static"])
+    #
+    # An empty --ns is the un-namespaced live stack. Remapping /tf to //tf then
+    # matches nothing and the node waits out its timeout against a perfectly
+    # healthy tree, so skip the remap entirely in that case.
+    init_args = ["--ros-args"]
+    if args.ns:
+        init_args += ["-r", f"/tf:=/{args.ns}/tf",
+                      "-r", f"/tf_static:=/{args.ns}/tf_static"]
+    rclpy.init(args=init_args if args.ns else None)
     # use_sim_time has to be set at construction: the clock is built when the
     # node is, so flipping the parameter afterwards leaves a system clock behind.
-    node = Node("initialpose_seeder", namespace=args.ns,
+    node = Node("initialpose_seeder", namespace=args.ns or "/",
                 parameter_overrides=[
-                    Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+                    Parameter("use_sim_time", Parameter.Type.BOOL,
+                              args.use_sim_time)])
 
     buf = Buffer()
     TransformListener(buf, node)
