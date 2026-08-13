@@ -86,6 +86,8 @@ def launch_setup(context, *args, **kwargs):
     # already default False. Set True only with a saved VSLAM map that is co-registered with the
     # nav map.
     localize_isaac_vslam_on_startup = LaunchConfiguration('localize_isaac_vslam_on_startup', default=False)
+    seed_initialpose = LaunchConfiguration('seed_initialpose', default='True')
+    initialpose_seed_delay = LaunchConfiguration('initialpose_seed_delay', default='20.0')
     launch_map_server = LaunchConfiguration('launch_map_server', default=True)
     # RTABMap ICP LiDAR odometry: expensive, and rf2o already covers this. Was previously hardcoded
     # 'True' at the localization include, which made it un-overridable from the command line.
@@ -289,6 +291,16 @@ def launch_setup(context, *args, **kwargs):
                                                            default_value=launch_global_localization,
                                                            description="Launch the global localization component.")
 
+    seed_initialpose_la = DeclareLaunchArgument(
+            'seed_initialpose', default_value=seed_initialpose,
+            description='Publish localizer_amcl.yaml\'s initial_pose onto `initialpose` a few seconds '
+                        'after localization starts, so ekf_map is seeded deterministically rather than '
+                        'racing AMCL\'s one-shot latched amcl_pose (bug-238). Skipped under '
+                        'use_sim_time. Default: True')
+    initialpose_seed_delay_la = DeclareLaunchArgument(
+            'initialpose_seed_delay', default_value=initialpose_seed_delay,
+            description='Seconds after localization start before the initialpose seed is published. '
+                        'Default: 20.0')
     localize_isaac_vslam_on_startup_la = DeclareLaunchArgument(
             'localize_isaac_vslam_on_startup', default_value=localize_isaac_vslam_on_startup,
             description='Attempt to localize Isaac ROS VSLAM in a previously saved map on startup. '
@@ -623,6 +635,8 @@ def launch_setup(context, *args, **kwargs):
         launch_local_localization_arg,
         launch_global_localization_arg,
         localize_isaac_vslam_on_startup_la,
+        seed_initialpose_la,
+        initialpose_seed_delay_la,
         launch_map_server_la,
         launch_icp_odometry_la,
         odom_tf_publisher_arg,
@@ -933,6 +947,8 @@ def launch_setup(context, *args, **kwargs):
                                         "qos_imu": realsense_qos,
                                         "gravitational_acceleration": gravitational_acceleration,
                                         "localize_on_startup": localize_isaac_vslam_on_startup,
+                                        "seed_initialpose": seed_initialpose,
+                                        "initialpose_seed_delay": initialpose_seed_delay,
                                         "log_level": log_level,
                                     }.items()
                             )

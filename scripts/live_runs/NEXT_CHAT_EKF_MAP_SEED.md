@@ -1,218 +1,321 @@
-# Handoff — `ekf_map` unseeded, odometry closure error, and three carried-over items
+# Handoff — `ekf_map` startup race (**fix written, untested on hardware**), archived-bag seeds (closed), IMU bias (not started)
 
-**Written:** 2026-08-11 ~16:20 EDT · **Branch:** `perf/config-tuning` · **Robot:** gosling1
-**Container at time of writing:** `jetson_container_20260811_145440` · `ROS_DOMAIN_ID=42`
-**Stack:** raw `ros2 launch` per `DEMO_RUNBOOK_20260810.md` §4 (un-namespaced, CycloneDDS,
-`localize_isaac_vslam_on_startup:=False`), map `20260805/rtabmap_2d_final.yaml`
+**Rewritten:** 2026-08-13 ~13:40 EDT · **Branch:** `perf/config-tuning` · **Robot:** gosling1
+Supersedes the 2026-08-12 revision; §0 of the 08-11 revision (the −84.5° heading result) is still
+current and is not repeated here — see `DEMO_RUNBOOK_20260810.md` §5b.
 
-The heading question is **closed** — see §0. Everything below is what that session turned up on the
-way past, none of it chased.
+**What changed today (offline, no robot time used):**
 
----
-
-## 0 · What was settled (do not re-litigate)
-
-The parking spot is at **−84.5°**. `localizer_amcl.yaml` `initial_pose.yaw` was changed
-**−1.3928 → −1.4748** on 2026-08-11 after five samples across two cold launches agreed to within
-1.03°. Full table, method and the list of things deliberately left unchanged:
-`DEMO_RUNBOOK_20260810.md` §5b. Buglog `bug-234`.
-
-Bags kept at `/mnt/shared_dir/claude_heading_0811/heading_{A,B,C}` (raw `/lidar/scan_filtered`,
-~20 s each, parked; B and C after rolling the car off the spot and back on).
-
-**The robot is still running the old value.** The container gets `f1tenth_launch` from a tarball,
-not git, so the running stack has −1.3928 until the package is re-staged and rebuilt. Verify with
-`ros2 param get /amcl initial_pose.yaw` rather than assuming.
+- §1 — **fix written and wired** into `localization.launch.py` + `bringup.launch.py` (`bug-241`).
+  Untested on hardware; the whole remaining job is the acceptance test in §1a.
+- §2 — **CLOSED as an invalid measurement** (`bug-240`). The operator confirmed the car was not
+  verified to be on its marks, which explains the 0.61 fit score. Do not chase the 14° spread.
 
 ---
 
-## 1 · `ekf_map` sat at identity while AMCL was correct  ← main item
+## 1 · `ekf_map` startup race — **mechanism identified; fix written 2026-08-13, NOT yet verified**
 
-**Measured 2026-08-11 ~15:11, on the gate before any recording:**
+### The measurement that settles it
+
+Taken live 2026-08-12 ~16:56, stack up per `DEMO_RUNBOOK_20260810.md` §4, no seed:
 
 ```
-ros2 param get /ekf_map_node odom1   ->  visual_slam/vis/slam_odometry__NOT_FUSED   (guard engaged)
-tf2_echo map base_link               ->  (-0.025, 0.002), yaw -0.30 deg             (identity)
-ros2 topic echo /amcl_pose           ->  (0.5159, -0.4723), yaw -83.97 deg          (correct)
+ros2 topic info /amcl_pose --verbose
+
+  PUBLISHER   amcl            RELIABLE     TRANSIENT_LOCAL   KEEP_LAST(1)
+  SUBSCRIPTION ekf_map_node   BEST_EFFORT  VOLATILE          KEEP_LAST(2)
 ```
 
-So AMCL had a good global fix and `ekf_map` — which owns `map→odom` under bringup
-(`map_tf_publisher='ekf'`) — never took it. `map→odom` stayed at identity, putting the car ~0.7 m
-and ~84° from where it actually was, in a stack where every individual node reports healthy.
+**The two are QoS-compatible, so the connection forms and `Subscription count` reads 1** — which is
+why nothing in any health check ever flagged this. But `VOLATILE` means the subscriber receives
+**nothing published before it subscribed**. AMCL publishes `amcl_pose` `TRANSIENT_LOCAL` precisely so
+a late joiner still gets the one-shot initial pose; `robot_localization` declines the latch.
 
-**Why this matters more than it looks:** the runbook currently says the opposite. §4 states that
-with the bug-232 guard engaged, `pose0 = amcl_pose` is the only global input and AMCL's own
-`set_initial_pose: True` propagates unaided — "verified 2026-08-10 with **no seed at all**:
-`map→base_link` came up at `(0.463, -0.602, -79.31°)`". That verification is real, and so is
-today's contradiction. The same runbook already names the suspect:
+Combine that with motion gating (`update_min_d` / `update_min_a`): parked, AMCL publishes its initial
+pose essentially once and then goes quiet. Whether `ekf_map` subscribes before or after that single
+publish is a race with no second chance. That is the whole defect.
 
-> AMCL publishes that initial pose essentially once, so a startup race where `ekf_map` is not yet
-> subscribed is plausible though not observed.
+Cold-launch record so far, all with no seed:
 
-**It has now been observed.** Treat the seed step as required-but-intermittently-unnecessary until
-this is root-caused, and do not delete the seed line from any script on the strength of the
-2026-08-10 result.
+| date | `map→odom` | outcome |
+|---|---|---|
+| 2026-08-10 | `(0.463, -0.602, -79.31°)` composed to base_link | took AMCL |
+| 2026-08-11 | identity | **missed it** |
+| 2026-08-12 | `(0.486, -0.598, -75.38°)` | took AMCL |
 
-Note the interaction with motion gating: AMCL is gated on `update_min_d`/`update_min_a`, so parked
-it publishes its initial pose and then goes quiet. If `ekf_map` misses that single message there is
-no second chance until the car moves. That is exactly the shape of a subscription race.
+2 : 1. Consistent with a race, and it confirms the standing rule that **one clean launch proves
+nothing**.
 
-### Diagnostics, in order
+### What this changes about the candidate fixes
 
-Stack up, car parked, before touching anything:
+The 2026-08-11 revision listed three. One is now dead:
+
+- ~~"Latch / transient-local QoS on `amcl_pose`, if upstream allows it."~~ **No-op — the publisher
+  already latches.** The volatile side is the *subscriber*, and `robot_localization` does not expose
+  its subscription QoS as a parameter. Confirm that against the installed source before designing
+  around it; if a newer `robot_localization` does expose it, that is the cheapest fix by far.
+- **A first-fix forwarder** that republishes the localizer's pose onto `initialpose` once
+  `ekf_map` is subscribed. Still the front-runner. `bug-111`'s RESIDUAL note already anticipated
+  needing exactly this for the `particle_filter` auto-global-init case — same gap, different trigger,
+  so one node closes both.
+- **Have AMCL republish its initial pose a few times at startup.** Upstream change; no local knob.
+
+Acceptance is unchanged: **repeated cold launches with no seed.** Given 2:1 odds of passing by luck,
+budget at least five or six.
+
+### 1a · The fix as written (2026-08-13, `bug-241`) — and how to test it
+
+Neither candidate above, in the end. The forwarder was a new node in a package that deliberately has
+none, and it would have had to *observe* a pose that may never be published. What is there instead is
+simpler: **publish the seed from the launch file itself**, because the number is already on disk.
+
+`launch/localization/localization.launch.py`:
+
+- `read_initial_pose(params_file)` reads the `initial_pose` block back out of the AMCL params file.
+  The constant therefore still lives in exactly one place, `localizer_amcl.yaml` — this is not a
+  second copy to keep in step with the grid and the cloud.
+- A `TimerAction` (`initialpose_seed_delay`, default **20.0 s** after localization starts, so ≈30 s
+  into a bringup) runs `ros2 topic pub --times 5 --rate 1 /initialpose
+  geometry_msgs/msg/PoseWithCovarianceStamped …`.
+- `initialpose` is where `ekf_map`'s `set_pose` is already remapped (`seed_from_initialpose`,
+  `bug-111`) **and** what AMCL listens on, so one publish seeds both from the same number.
+- `header.stamp` is `{sec: 0, nanosec: 0}` — "latest available" to tf2, which therefore cannot
+  extrapolate into the future. This is the same trick `seed_initialpose.py` documents.
+- Five publishes, not one: a single publish can still land before subscription matching completes,
+  and a dropped seed is invisible.
+- `condition=UnlessCondition(use_sim_time)`: replays seed themselves with replay-specific values
+  (`51_localize_offline.sh`, `61_nav2_offline.sh`), and a second seed carrying the parking-spot pose
+  would fight them.
+- Gated on `launch_ekf_map` as well as `seed_initialpose`. If the params file has no `initial_pose`
+  block it logs and does nothing — it does not crash the launch. Verified offline against
+  `localizer_amcl.yaml` (parses −84.5°, round-trips as valid YAML) and `nav2_params.yaml` (→ `None`).
+
+New args, defaulting `True` / `20.0`, declared and passed explicitly at `bringup.launch.py` per the
+launch-config inheritance rule: **`seed_initialpose`**, **`initialpose_seed_delay`**.
+
+**The acceptance test.** Cold launch per §5, **with no manual `seed_initialpose.py` run**, then:
 
 ```bash
-ros2 daemon stop                                   # always, bug-233
-ros2 topic info /amcl_pose --verbose               # subscriber count: is ekf_map_node even on it?
-ros2 param get /ekf_map_node pose0                 # must be  amcl_pose  (not renamed by a guard)
-ros2 param get /ekf_map_node pose0_differential    # expect False
-ros2 param get /ekf_map_node pose0_relative        # expect False  (bug-104 — must stay False)
-ros2 topic echo /amcl_pose --field header          # frame_id must be map; check the stamp is sane
-ros2 run tf2_ros tf2_echo map odom                 # the actual broadcast; identity == the symptom
+ros2 run tf2_ros tf2_echo map base_link      # must NOT be identity
+ros2 topic echo /amcl_pose --once
 ```
 
-Then the discriminating test — **does a late `amcl_pose` get taken?**
+Expect the log line `[localization] seeding /initialpose with (+0.445, -0.575, -84.50 deg)` at ≈30 s,
+then `map→base_link` near `(0.445, -0.575, -84.5°)`. **Five or six cold launches**, all passing — at
+2:1 prior odds, one pass proves nothing. If a launch still comes up identity, run the §1b test on it
+before assuming the delay is wrong.
+
+Two things to watch that would mean tuning rather than failure: the seed arriving *before* AMCL and
+`ekf_map` finish coming up (raise `initialpose_seed_delay`), and the five resets visibly disturbing
+anything (they should not — the car is parked and this is startup).
+
+### 1b · Not yet run — the discriminating test
+
+The 08-11 revision's push-the-car test (does a *late* `amcl_pose` get taken?) was never run: the
+race did not reproduce on the 08-12 launch, so there was no identity state to test against, and the
+card faulted before a relaunch. **It is now largely redundant** — the QoS mismatch predicts its
+outcome (a late pose *is* taken, because by then both ends are connected) — but it is still worth one
+run the next time a launch does come up at identity, as confirmation rather than diagnosis.
+
+---
+
+## 2 · Live pose disagreed with the spot — **CLOSED 2026-08-13: invalid measurement** (`bug-240`)
+
+**The operator confirmed the car was not verified to be on its marks for that launch.** That is the
+answer the section below was waiting on, and it resolves it: the 0.61 fit score was the tell, and it
+was telling the truth. A uniformly low score is not "right place, wrong heading" — it means a large
+fraction of beams never landed on mapped structure. **There is no localization defect here to chase,
+and the 14° spread is not evidence of one.**
+
+Two things to carry forward rather than re-derive:
+
+- **`heading_from_scan.py` scores are a validity gate, not decoration.** Archived bags and the
+  2026-08-11 samples score 0.89–0.92. Treat anything below ~0.85 as a failed *measurement* and fix
+  the physical setup; do not read its heading and reason about the number.
+- Any future live heading check starts by confirming the car is on its marks and the room is clear of
+  unmapped clutter — a lab day on AC power puts cables, benches and people into the scan.
+
+The original section is kept below for the record.
+
+### (superseded) Live pose disagreed with the spot
+
+On the 08-12 launch, parked:
+
+```
+amcl_pose                     yaw -70.7 deg
+map->base_link                (0.540, -0.592, -72.5 deg)
+odom->base_link               (0.008,  0.087, +3.4 deg)
+heading_from_scan.py --live   BEST (0.365, -0.515, -79.75 deg)   score 0.61
+config seed                   (0.445, -0.575, -84.5 deg)
+```
+
+Three different answers spanning ~14°. **Do not chase this as a localization bug until the physical
+question is answered**, because the scan fit — the one measurement with no estimator in it — is
+itself untrustworthy here: its score is **0.61**, against **0.89–0.92** for the archived bags and for
+yesterday's five samples. A low score everywhere is not the signature of a car at the right place
+with the wrong heading; it means a large fraction of beams do not land on mapped structure at all.
+
+Most likely causes, in order: the car was not on its marks; or the room had unmapped clutter (this
+was a lab day on AC power — cable, bench, people all read as unmapped returns). **The operator was
+asked whether the car was on the spot and had to leave before answering. Ask again first thing.**
+
+Only if the car *was* on its marks and the room was clear does this become a real finding — and in
+that case the thing it would indicate is that `ekf_map` took AMCL but AMCL itself had converged 14°
+off the seed, which is a different defect from §1.
+
+---
+
+## 3 · Archived bags' start pose — **CLOSED. The ground truth carries the same ~4.4° error.**
+
+Ran `heading_from_scan.py` against the first scans of every 2026-08-05 bag that contains a
+`LaserScan`, scored against the map those same bags built
+(`/mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml`), with `--xy-range 0.15 --xy-step 0.03`:
+
+| bag | best fit | vs −84.50 (config today) | vs −79.82 (archived truth) |
+|---|---|---|---|
+| `mapping_drive_170025` | **−84.25°**, (0.415, −0.515) | 99.8 % of best, 0.25° | 82.9 %, **4.45°** |
+| `loop_laps_173558` | −83.50°, (0.445, −0.485) | 97.5 %, 1.00° | 86.0 %, 3.70° |
+| `figure8_172338` | −82.25°, (0.415, −0.515) | 91.6 %, 2.25° | 93.5 %, 2.45° |
+
+`mapping_drive_170025` is decisive: it is the bag the RTABMap database was built from and the bag
+`truth_mapping_drive_170025.csv` describes. Its own first scan, scored against its own derived map,
+lands **0.25° from −84.5° and 4.45° from the −79.82° that five files carry as its start pose.**
+
+**Conclusion: the bags did not start 4.7° from where the car parks today. The RTABMap optimized-pose
+ground truth shares the bias the AMCL seed had** — expected, since both were read from the same
+source.
+
+Two checks that make this a measurement rather than an impression:
+
+- **Not motion smear.** Re-running at 3, 8 and 20 scans gives bit-identical results per bag
+  (`mapping_drive_170025` = −84.25° at all three), so the car was genuinely parked through them.
+- **The ~2° spread across bags is real re-placement variation** between separate hand-placements, not
+  noise. `figure8_172338` is the outlier and is also the only one where the two candidates score
+  within 2 points of each other, so it discriminates weakly on its own — if the seeds are ever
+  updated, consider giving that bag its own value rather than the shared one.
+
+**Nothing was changed.** The five files still carry `(+0.445, −0.575, −79.82°)`:
+`51_localize_offline.sh`, `scripts/analysis/check_map_frame.py`, `MAP_BUILD_HANDOFF.md`,
+`BRIEF_PARTICLE_FILTER.md`, `LOCALIZER_FOLLOWUPS.md`. The measurement to justify updating them now
+exists; the edit is deliberate and was left for the operator, because a careless one desynchronizes
+each replay from its own data.
+
+---
+
+## 4 · gosling1 SD card — **event 4, 2026-08-12 16:58 EDT** (`bug-239`)
+
+```
+16:58:41  mmc0: Tuning failed, falling back to fixed sampling clock   (x11)
+16:58:41  blk_update_request: I/O error, dev mmcblk0, sector 24299552 (WRITE)
+16:58:41  JBD2: Error -5 detected when updating journal superblock for mmcblk0p1-8
+16:58:42  EXT4-fs (mmcblk0p1): I/O error while writing superblock
+16:58:42  EXT4-fs (mmcblk0p1): Remounting filesystem read-only
+16:59:11  blk_update_request: I/O error, dev mmcblk0, sector 9254148  (READ)
+```
+
+1 h 50 min into the boot, at 87 % full — same signature as the three events of 2026-08-09, and
+capacity is again not the cause. `docker exec` dies with
+`OCI runtime exec failed: open /tmp/runc-process…: read-only file system`.
+
+**The running container and ROS stack survive it** — Docker's data-root and `ROS_LOG_DIR` are both on
+the NVMe, so only *new* `docker exec` calls fail; already-open shells keep working. That is the
+salvage path if it happens mid-session again.
+
+**Rescued this session:** `/etc/udev/rules.d/*` → `/mnt/f1tenth_ssd/shared_dir/sdcard_rescue/udev_20260812/`,
+plus `daemon.json` and `f1tenth_launch.sh`. The udev rules were the known-missing backup — without
+`99-vesc.rules` and `ydlidar.rules` a fresh card has no `/dev/sensors/vesc` and no `/dev/ydlidar`.
+`chrony.conf` did not copy; `ydlidar-V2.rules.disabled` came across as 0 bytes (it is `.disabled`,
+so nothing depends on it).
+
+**Do not plan a long session on this card.** The 08-09 pattern was faults at 28 min, 70 min and
+mid-bringup across three boots. Replace it, or move the rootfs to the NVMe (916 GB at 33 %).
+
+---
+
+## 5 · Restarting tomorrow — the container reverts, and it reverts to something wrong
+
+`/workspaces` is a container layer, so a fresh container starts from the image's `f1tenth_launch`.
+**Verified 2026-08-12: the image is wrong in three ways at once** — it carries the old AMCL yaw
+`-1.3928`, has no `data/maps/20260805/` (only the deleted `raslab` map, so `pcd_to_pointcloud` aborts
+on its missing default PCD), and has none of the `scripts/live_runs` or `scripts/analysis` tools.
+
+That is now one command. After `prep_container.sh`:
 
 ```bash
-# force AMCL to run a laser update by moving the car ~0.5 m and back,
-# then re-read map->base_link. If it snaps to the right pose, it is a startup
-# race (ekf_map subscribed after AMCL's one-shot publish). If it stays at
-# identity, ekf_map is rejecting the measurement and the Mahalanobis gate
-# (pose0_rejection_threshold: 2.0) against a 2.0 m initial covariance is
-# the next thing to look at.
+/mnt/f1tenth_ssd/shared_dir/stage_0812.sh <container-name>
 ```
 
-And confirm the manual seed still works as the escape hatch:
+> **`f1tenth_stage_20260812.tgz` is now stale — it predates the §1a fix.** It was cut from `4ff8d4e`;
+> the `initialpose` seed landed after that. Staging it un-tars the *old* `localization.launch.py` over
+> the container and the acceptance test then silently measures the unfixed code — the same class of
+> trap as the image carrying the old AMCL yaw. **Re-cut the tarball before the next lab session**, and
+> verify on the robot after staging:
+> ```bash
+> grep -c seed_initialpose /workspaces/.../launch/localization/localization.launch.py   # expect 2+
+> ```
+> The rebuild is still required after staging: `--symlink-install` links only files that existed at
+> build time.
+
+It un-tars `f1tenth_stage_20260812.tgz` (the repo at `4ff8d4e`, md5 `e5eb9e53c447afd60279f05f7b6db93a`),
+copies the three `20260805` map files into the package, rebuilds with `--symlink-install`, and then
+**verifies all three** — the yaw, the maps, the scripts. The rebuild is not optional:
+`--symlink-install` links only files that existed at build time, so anything *added* is absent from
+`install/` until you rebuild.
+
+Then the §4 launch block from `DEMO_RUNBOOK_20260810.md`, with today's log dir on the SSD:
 
 ```bash
-cd /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs
-python3 seed_initialpose.py --ns "" --no-use-sim-time --x 0.445 --y -0.575 --yaw -1.4748
+export ROS_DOMAIN_ID=42
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+export ROS_LOG_DIR=/mnt/shared_dir/claude_ekfmap_0812/roslogs
+ros2 launch f1tenth_launch bringup.launch.py \
+  launch_visualization:=True launch_twist_to_ackermann:=True \
+  max_steering:=0.314 localize_isaac_vslam_on_startup:=False \
+  map_file:=/mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml
 ```
 
-### Candidate fixes, none applied
-
-- A first-fix forwarder that re-publishes the localizer's pose onto `initialpose` once `ekf_map` is
-  subscribed. Buglog `bug-111`'s RESIDUAL note already anticipates needing this for the
-  `particle_filter` auto-global-init case — same gap, different trigger.
-- Have AMCL re-publish its initial pose a few times at startup rather than once.
-- Latch/transient-local QoS on `amcl_pose`, if upstream allows it.
-
-Whichever it is, the acceptance test is a **cold launch with no seed**, repeated enough times to
-show the race is gone — one clean launch proves nothing, which is the lesson from 2026-08-10.
+**The operator launches the stack, not the agent** — an agent-initiated bringup over ssh kills the
+RealSense via the GLFW/X11 context.
 
 ---
 
-## 2 · Odometry closure error over a short out-and-back — first moving data point
+## 6a · Spare cars are an option — but `vesc.yaml` is gosling1's
 
-Rolling the car off the parking spot and back onto its marks (tile lines + sticker, so the physical
-return was within ~1.5 cm and ~0.12°, confirmed independently by the scan fit landing on the same
-grid cell) left:
+Raised by the operator 2026-08-13: there are other F1/10 Jetsons available, not kept up to date.
+Bringing one up is mostly pulling the current Docker image and re-applying the udev rules (rescued to
+`/mnt/f1tenth_ssd/shared_dir/sdcard_rescue/udev_20260812/`) and `chrony.conf` — that part is cheap,
+and it sidesteps the §4 card.
 
-```
-odom->base_link  before:  (-0.025,  0.002)  yaw  -0.30 deg
-odom->base_link  after:   ( 0.318,  0.225)  yaw  -5.40 deg
-```
+**What does not transfer is the VESC calibration.** `config/vehicle/vesc.yaml`'s measured values are
+gosling1's: `steering_angle_to_servo_gain −1.1448` and `..._offset 0.56` were measured on that car
+2026-08-07, and the asymmetric servo travel (+24.0° left / −18.0° right) is that car's servo horn.
+On another chassis those are inherited numbers again, with the same ~18–23 % over-steer risk the
+sysid found. So:
 
-**0.39 m and 5.1° of accumulated error on a round trip that physically closed.** The path was hand-
-rolled and its length was not measured, so this is an observation, not a number to tune against —
-but it is the first non-parked odometry data this vehicle has on record, and every parked
-measurement says the stack is healthy (`odometry/local` −0.05 °/min, per-source drift ≤0.34 °/min).
+- **The §1a acceptance test transfers fine** — it is localization-only, parked, and touches nothing
+  the VESC calibration affects. A spare car is a legitimate way to run it off the failing card.
+- **Anything that drives — the moving-odometry check (§6), MPC, Nav2 — does not transfer** without
+  re-running the steering sysid on that car. Method: `SYSID_RESULTS.md`.
+- The AMCL seed is a property of the *parking spot and map*, not the car, so it carries over — but
+  only if the spare is parked on the same marks.
 
-This is precisely the gap `DEMO_RUNBOOK_20260810.md` §3 flags: *"Every odometry number this vehicle
-has on record was taken parked. A scale error in `speed_to_erpm_gain`, the 2.4 % wheelbase yaw-rate
-bias in `vesc_odom`, and an rf2o whose zero-velocity gate latches on under motion are all invisible
-parked."* Hand-rolling adds a fourth candidate the runbook does not: with the motor unpowered the
-VESC still counts ERPM, but the rf2o zero-velocity gate and any control-input path see nothing.
+## 6 · Not started
 
-**Do it properly rather than chasing this number.** Run the §3 procedure: tape both rear-wheel
-contact patches, one straight ~4 m leg, bag it, then
+**IMU bias remover.** Unchanged from the 08-11 revision — `launch/sensors/realsense_d435i.launch.py:366`
+hardcodes `'remove_imu_bias': 'False'` and that one string is the whole blocker; the chain is wired
+and `imu_processors` is present in the image (`prep_container.sh` confirms it every run). Needs a
+deliberate before/after with `yaw_drift.py` (60 s, parked), not a flip, because parked the measured
+bias (−0.002208 rad/s) drives nothing while rf2o and VSLAM hold fused yaw to −0.05 °/min. Leave
+`vehicle.launch.py:377` at `False` — the two effects on `odometry/local` are not separable after the
+fact. Internet on the Jetson was confirmed working this session (`apt` reachable), so the stated
+blocker is gone.
 
-```bash
-python3 …/scripts/live_runs/odom_moving_check.py "$(cat "$BAG_ROOT/.last_bag")" --tape 4.00 --tape-yaw 0
-```
+**Moving-odometry check.** `odom_moving_check.py` and `analysis/check_map_frame.py` are now carried
+by `f1tenth_stage_20260812.tgz`, so the staging gap that blocked this is closed. The procedure is
+`DEMO_RUNBOOK_20260810.md` §3; it needs battery power and a driven leg.
 
-Read health → scale vs tape → heading, in that order. Stage `odom_moving_check.py` and
-`analysis/check_map_frame.py` together first; the tarball carries neither.
-
----
-
-## 3 · Carried over, not started
-
-**LUCIO notification — WRITTEN 2026-08-11, not yet sent.**
-`scripts/live_runs/LUCIO_MAP_HEADING_NOTICE.md`. Covers the heading change, the method, the
-five-sample table, and the waypoint-0 problem (−92.08° scores 62–64 % against the map in every
-sample; anything seeding from it starts ~7.7° wrong, and its "seeded from waypoint 0, verified
-19 mm from waypoint 0" self-check is circular and cannot detect that). Two asks are open in it: is
-their pipeline sensitive to the ~6 cm x/y question, and do they have an independent reason to
-believe waypoint 0. **The operator sends it, not the agent.**
-
-**Are the archived bags' seeds wrong too?** `51_localize_offline.sh`, `scripts/analysis/check_map_frame.py`,
-`MAP_BUILD_HANDOFF.md`, `BRIEF_PARTICLE_FILTER.md` and `LOCALIZER_FOLLOWUPS.md` all carry
-`(+0.445, −0.575, −79.82°)` as the 2026-08-05 bags' start pose, read from the RTABMap database's
-optimized poses. Either those bags really started 4.7° from where the car parks today, or that
-ground truth shares the error the AMCL seed had. **One command decides it** — run
-`heading_from_scan.py` against the first seconds of an archived bag (it takes any bag with a
-`LaserScan` topic). Left alone deliberately: changing those seeds without the measurement would
-desynchronize each replay from its own data.
-
-**IMU bias remover — assigned to the next session.** `realsense_d435i.launch.py:363` hardcodes
-`'remove_imu_bias': 'False'` and its "node not installed" comment is stale (`imu_processors` was
-built on the robot 2026-08-09). `imu_filter.launch.py` already defaults the arg `True`, so that one
-hardcoded string is the whole blocker. Parked measurement says the RealSense bias
-(−0.002208 rad/s) is real but drives nothing while rf2o and VSLAM hold fused yaw to −0.05 °/min —
-so this needs a deliberate before/after with `yaw_drift.py`, not a flip. **The operator reports
-internet access is back on the Jetson as of 2026-08-11**, which is why this is now actionable;
-re-verify that before planning around it, and note `/workspaces` is still a container layer either
-way.
-
----
-
-## 4 · The `localize_isaac_vslam_on_startup` default — APPROVED AND APPLIED 2026-08-11
-
-`localize_isaac_vslam_on_startup` now defaults **`False`** in both `bringup.launch.py` (was line 76)
-and `teleop.launch.py` (was line 58). All five entry points that carry the arg now agree:
-
-```
-bringup.launch.py                          False   (changed 2026-08-11)
-teleop.launch.py                           False   (changed 2026-08-11)
-mapping.launch.py                          False
-localization/localization.launch.py        'False'
-nvidia_isaac_ros/…_visual_slam_realsense   False
-```
-
-With it `True` the bug-232 guard (`use_gpu AND localize_on_startup`) evaluated True while the VSLAM
-node ran unlocalized from its own power-up origin, so `ekf_map` pinned `map→odom` to that origin —
-72.3° of error, rotating car, footprint, live scan and 3D cloud inside a perfectly good map with
-every node reporting healthy. Forgetting the arg was the whole failure mode.
-
-`teleop.launch.py` was included in the change without being named in the approval, because it is an
-independent entry point that includes localization directly — leaving it `True` would have
-reintroduced the identical bug through the other door. **Both `DeclareLaunchArgument` descriptions
-already read "False (default)"**, so the docstrings had been describing the intended behaviour all
-along and only the code disagreed.
-
-Anyone who genuinely has a saved VSLAM map co-registered with the nav map must now opt in with
-`localize_isaac_vslam_on_startup:=True`. The §4 launch block in `DEMO_RUNBOOK_20260810.md` still
-passes `:=False` explicitly; that is now redundant but harmless, and worth keeping as documentation
-of intent.
-
-**Already changed this session (disclosure, not a request):** `DEMO_RUNBOOK_20260810.md` §5b was
-rewritten from "Proposed, NOT yet applied" to the confirmed result with the five-sample table; the
-§4 seed command lines and the §4 gate's expected `map→base_link` moved from −79.8° to −84.5°; the
-waypoint-0 gotcha in §5 was reworded. Plus `localizer_amcl.yaml`, `ekf_map.yaml` (comment),
-`CLAUDE.md`, `NEXT_CHAT_ODOM_ROTATION.md` (seed line) and `heading_from_scan.py` (candidate table
-now carries both the old and new seed as labelled rows).
-
----
-
-## 5 · Gate that was clean, so you can skip re-deriving it
-
-```
-ros2 topic list | grep -c gosling1   ->  0        (raw launch, bare topics — no /gosling1 prefix)
-ros2 param get /ekf_map_node odom1   ->  ...__NOT_FUSED     (bug-232 guard engaged)
-ros2 topic hz /lidar/scan_filtered   ->  8.38 Hz, max gap 0.128 s
-```
-
-**8.4 Hz is correct for this sensor on this machine**, not a fault — the runbook's "~10–12 Hz" is
-optimistic; CLAUDE.md's YDLidar X4 note ("observed ~8 Hz on Jetson Orin Nano due to USB/CPU
-overhead") is the accurate one. Worth reconciling in the runbook at some point.
+**LUCIO notification.** `scripts/live_runs/LUCIO_MAP_HEADING_NOTICE.md`, written 2026-08-11, still
+not sent. **The operator sends it, not the agent.** §3 above strengthens it: the archived RTABMap
+ground truth is now independently shown to carry the same error, which is a second, unprompted
+confirmation of the point the notice makes about waypoint 0.

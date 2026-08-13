@@ -13,10 +13,12 @@ This node sets up local and global localization.
 * Launch Kalman Filter (EKF or UKF) nodes
 
 """
+import math
 import os
 import pathlib
+import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction, LogInfo
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, TimerAction, GroupAction, SetEnvironmentVariable, OpaqueFunction, LogInfo
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition, UnlessCondition
@@ -27,6 +29,35 @@ from launch_ros.descriptions import ComposableNode, ParameterFile
 from nav2_common.launch import RewrittenYaml, ReplaceString
 from ament_index_python import get_package_share_directory
 from ament_index_python.packages import PackageNotFoundError as ROS2PackageNotFoundError
+
+
+def read_initial_pose(params_file_path):
+    """Pull `initial_pose` out of an AMCL params file, or None if it has none.
+
+    The seed constant lives in exactly one place — localizer_amcl.yaml — because
+    the grid, the cloud and the seed have to come from the same map build. Reading
+    it back here keeps the startup publish below from becoming a second copy that
+    drifts out of step with the file AMCL itself loads.
+    """
+    try:
+        with open(params_file_path) as f:
+            doc = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+
+    # nav2 params files key their nodes either by name ('amcl:') or by wildcard
+    # ('/**:'); localizer_amcl.yaml uses the wildcard. Take the first block that
+    # actually carries an initial_pose rather than guessing the key.
+    for block in doc.values():
+        if not isinstance(block, dict):
+            continue
+        params = block.get('ros__parameters')
+        if isinstance(params, dict) and isinstance(params.get('initial_pose'), dict):
+            pose = params['initial_pose']
+            return (float(pose.get('x', 0.0)),
+                    float(pose.get('y', 0.0)),
+                    float(pose.get('yaw', 0.0)))
+    return None
 
 
 def launch_setup(context, *args, **kwargs):
@@ -88,6 +119,8 @@ def launch_setup(context, *args, **kwargs):
     visual_slam_enable_visualization = LaunchConfiguration('visual_slam_enable_visualization', default='True')
     odom_tf_publisher = LaunchConfiguration('odom_tf_publisher', default='ekf')
     map_tf_publisher = LaunchConfiguration('map_tf_publisher', default='amcl')
+    seed_initialpose = LaunchConfiguration('seed_initialpose', default='True')
+    initialpose_seed_delay = LaunchConfiguration('initialpose_seed_delay', default='20.0')
 
     base_frame = LaunchConfiguration('base_frame', default='base_link')
     odom_frame = LaunchConfiguration('odom_frame', default='odom')
@@ -308,6 +341,18 @@ def launch_setup(context, *args, **kwargs):
     gravitational_acceleration_la = DeclareLaunchArgument(
             'gravitational_acceleration', default_value=gravitational_acceleration,
             description='Gravitational acceleration (m/s^2). Calibrate per robot. Default: 9.80665')
+
+    seed_initialpose_la = DeclareLaunchArgument(
+            'seed_initialpose', default_value=seed_initialpose,
+            description='Publish the AMCL params file\'s initial_pose onto `initialpose` a few '
+                        'seconds after startup, so ekf_map is seeded deterministically instead of '
+                        'racing AMCL\'s one-shot amcl_pose. Live stacks only (skipped under '
+                        'use_sim_time; replays seed themselves). Default: True')
+    initialpose_seed_delay_la = DeclareLaunchArgument(
+            'initialpose_seed_delay', default_value=initialpose_seed_delay,
+            description='Seconds after localization start before the initialpose seed is published. '
+                        'Must exceed the time AMCL and ekf_map need to come up and subscribe. '
+                        'Default: 20.0')
 
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
@@ -1087,6 +1132,87 @@ def launch_setup(context, *args, **kwargs):
     except ROS2PackageNotFoundError as e:
         particle_filter_node = LogInfo(msg=f'Failed to launch particle filter node: {e}. Skipping...')
 
+    # ------------------------------------------------------------------
+    # Startup seed for the map-frame filters (bug-238).
+    #
+    # AMCL applies `set_initial_pose` INTERNALLY and never publishes /initialpose,
+    # so on a live bringup the only thing carrying the seed out of AMCL is the
+    # one-shot /amcl_pose. That publisher is TRANSIENT_LOCAL, but ekf_map_node
+    # subscribes VOLATILE — a compatible pair, so the connection forms and every
+    # health check passes, yet a volatile subscriber receives nothing published
+    # before it subscribed. AMCL is motion-gated (update_min_d / update_min_a), so
+    # parked there is no second publish and no second chance. Whether ekf_map got
+    # the seed was a coin flip: measured good / identity / good on three cold
+    # launches, 2026-08-10..12.
+    #
+    # Latching harder does not help — the publisher already latches, and
+    # robot_localization does not expose its subscription QoS as a parameter. So
+    # publish the seed ourselves, once both ends are up: `initialpose` is where
+    # ekf_map's `set_pose` is already remapped (see ekf_map.launch.py,
+    # seed_from_initialpose / bug-111) and is also what AMCL listens on, so one
+    # publish seeds both from the same number.
+    #
+    # Repeated because a single publish can still land before subscription
+    # matching completes, and a dropped seed is invisible — same reason
+    # seed_initialpose.py repeats.
+    #
+    # stamp 0 == "latest available" to tf2, which cannot extrapolate into the
+    # future; a wall-clock stamp risks AMCL dropping the pose on a lookup a few ms
+    # ahead of the transform buffer.
+    #
+    # Skipped under use_sim_time: bag replays seed themselves with replay-specific
+    # values (51_localize_offline.sh, 61_nav2_offline.sh), and a second seed
+    # carrying the parking-spot pose would fight them.
+    initial_pose_seed = read_initial_pose(params_file.perform(context))
+    launch_ekf_map_str = launch_ekf_map.perform(context)
+    seed_initialpose_str = seed_initialpose.perform(context)
+
+    seed_wanted = (seed_initialpose_str.lower() == 'true'
+                   and launch_ekf_map_str.lower() == 'true')
+
+    if seed_wanted and initial_pose_seed is None:
+        seed_initialpose_action = LogInfo(
+                msg=f'[localization] seed_initialpose is True but no initial_pose block was found '
+                    f'in {params_file.perform(context)}; ekf_map will start unseeded.')
+    elif seed_wanted:
+        seed_x, seed_y, seed_yaw = initial_pose_seed
+        seed_topic = (f'/{namespace_str}/initialpose'
+                      if use_namespace_str.lower() == 'true' and namespace_str
+                      else '/initialpose')
+        # sigma 0.05 m / 0.02 rad, matching seed_initialpose.py: the seed is a
+        # measured pose, not a guess, so it should not be handed over as a vague one.
+        covariance = [0.0] * 36
+        covariance[0] = covariance[7] = 0.05 ** 2
+        covariance[35] = 0.02 ** 2
+        seed_msg = (
+            '{header: {stamp: {sec: 0, nanosec: 0}, frame_id: map}, '
+            'pose: {pose: {position: {x: %.6f, y: %.6f, z: 0.0}, '
+            'orientation: {x: 0.0, y: 0.0, z: %.9f, w: %.9f}}, '
+            'covariance: [%s]}}' % (
+                seed_x, seed_y,
+                math.sin(seed_yaw / 2.0), math.cos(seed_yaw / 2.0),
+                ', '.join(f'{c:g}' for c in covariance)))
+        seed_initialpose_action = TimerAction(
+                period=initialpose_seed_delay,
+                actions=[
+                    LogInfo(msg=f'[localization] seeding {seed_topic} with '
+                                f'({seed_x:+.3f}, {seed_y:+.3f}, '
+                                f'{math.degrees(seed_yaw):+.2f} deg) from '
+                                f'{params_file.perform(context)}'),
+                    ExecuteProcess(
+                            cmd=['ros2', 'topic', 'pub',
+                                 '--times', '5', '--rate', '1',
+                                 seed_topic,
+                                 'geometry_msgs/msg/PoseWithCovarianceStamped',
+                                 seed_msg],
+                            output='screen'),
+                ],
+                condition=UnlessCondition(use_sim_time))
+    else:
+        seed_initialpose_action = LogInfo(
+                msg='[localization] initialpose seed disabled '
+                    '(seed_initialpose False or launch_ekf_map False).')
+
     # Create Launch Description and add nodes to the launch description
     ld = [
         stdout_linebuf_envvar,
@@ -1140,6 +1266,9 @@ def launch_setup(context, *args, **kwargs):
         camera_name_la,
         scan_prefix_la,
         gravitational_acceleration_la,
+        seed_initialpose_la,
+        initialpose_seed_delay_la,
+        seed_initialpose_action,
         localize_on_startup_la,
         visual_slam_enable_visualization_la,
         launch_particle_filter_la,
