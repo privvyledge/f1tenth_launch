@@ -239,28 +239,30 @@ mid-bringup across three boots. Replace it, or move the rootfs to the NVMe (916 
 `-1.3928`, has no `data/maps/20260805/` (only the deleted `raslab` map, so `pcd_to_pointcloud` aborts
 on its missing default PCD), and has none of the `scripts/live_runs` or `scripts/analysis` tools.
 
-That is now one command. After `prep_container.sh`:
+That is now one command. Copy `f1tenth_stage_20260813.tgz` and `stage_0813.sh` onto the SSD, then,
+inside the container after `prep_container.sh`:
 
 ```bash
-/mnt/f1tenth_ssd/shared_dir/stage_0812.sh <container-name>
+bash /mnt/shared_dir/stage_0813.sh
 ```
 
-> **`f1tenth_stage_20260812.tgz` is now stale — it predates the §1a fix.** It was cut from `4ff8d4e`;
-> the `initialpose` seed landed after that. Staging it un-tars the *old* `localization.launch.py` over
-> the container and the acceptance test then silently measures the unfixed code — the same class of
-> trap as the image carrying the old AMCL yaw. **Re-cut the tarball before the next lab session**, and
-> verify on the robot after staging:
-> ```bash
-> grep -c seed_initialpose /workspaces/.../launch/localization/localization.launch.py   # expect 2+
-> ```
-> The rebuild is still required after staging: `--symlink-install` links only files that existed at
-> build time.
+> **Use the `20260813` tarball, not `20260812`.** `f1tenth_stage_20260812.tgz` was cut from `4ff8d4e`,
+> before the §1a `initialpose` seed landed. Staging it un-tars the *old* `localization.launch.py` over
+> the container, and the acceptance test then silently measures the unfixed code — the same class of
+> trap as the image carrying the old AMCL yaw.
 
-It un-tars `f1tenth_stage_20260812.tgz` (the repo at `4ff8d4e`, md5 `e5eb9e53c447afd60279f05f7b6db93a`),
-copies the three `20260805` map files into the package, rebuilds with `--symlink-install`, and then
-**verifies all three** — the yaw, the maps, the scripts. The rebuild is not optional:
-`--symlink-install` links only files that existed at build time, so anything *added* is absent from
-`install/` until you rebuild.
+`f1tenth_stage_20260813.tgz` (cut 2026-08-13 from commit `2c5c0ec`, md5
+`48e3f36bb8db36067400998d64bcc0cb`, 1.9 MB) un-tars over the package, rebuilds with
+`--symlink-install`, and then **verifies in the installed tree** — the seed, the yaw, the three
+`20260805` maps, the four `live_runs` tools. Confirmed present inside the tarball before it shipped.
+The rebuild is not optional: `--symlink-install` links only files that existed at build time, so
+anything *added* by staging is absent from `install/` until you rebuild.
+
+Post-staging spot check on the robot, if you want it independent of the script:
+
+```bash
+grep -c seed_initialpose /workspaces/f1tenth/install/f1tenth_launch/share/f1tenth_launch/launch/localization/localization.launch.py   # expect 2+
+```
 
 Then the §4 launch block from `DEMO_RUNBOOK_20260810.md`, with today's log dir on the SSD:
 
