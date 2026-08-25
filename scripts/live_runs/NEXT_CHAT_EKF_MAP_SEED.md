@@ -239,22 +239,28 @@ mid-bringup across three boots. Replace it, or move the rootfs to the NVMe (916 
 `-1.3928`, has no `data/maps/20260805/` (only the deleted `raslab` map, so `pcd_to_pointcloud` aborts
 on its missing default PCD), and has none of the `scripts/live_runs` or `scripts/analysis` tools.
 
-That is now one command. Copy `f1tenth_stage_20260813.tgz` and `stage_0813.sh` onto the SSD, then,
-inside the container after `prep_container.sh`:
+That is one command, run on the host or inside the container after `prep_container.sh`:
 
 ```bash
-bash /mnt/shared_dir/stage_0813.sh
+bash /mnt/shared_dir/stage_0825.sh          # inside the container
+/mnt/f1tenth_ssd/shared_dir/stage_0825.sh   # on the host; auto-detects the container
 ```
 
-> **Use the `20260813` tarball, not `20260812`.** `f1tenth_stage_20260812.tgz` was cut from `4ff8d4e`,
-> before the §1a `initialpose` seed landed. Staging it un-tars the *old* `localization.launch.py` over
-> the container, and the acceptance test then silently measures the unfixed code — the same class of
-> trap as the image carrying the old AMCL yaw.
+> **`f1tenth_stage_20260813.tgz` was cut but never delivered.** It existed only in the Windows-side
+> handoff dir, never on the robot's SSD — so a session following that text stages nothing and
+> silently runs the image's own package. The lesson is that a tarball named in a handoff has two
+> separate states, *built* and *on the robot*, and only the second one matters. Both older tarballs on the SSD are also unusable:
+> `20260812` was cut from `4ff8d4e`, *before* the §1a `initialpose` seed landed, and `20260810` is
+> older still. Staging either un-tars the old `localization.launch.py` over the container and the
+> acceptance test then measures the unfixed code — the same class of trap as the image carrying the
+> old AMCL yaw. **Verify the tarball is on the SSD before trusting any staging instruction here.**
 
-`f1tenth_stage_20260813.tgz` (cut 2026-08-13 from commit `2c5c0ec`, md5
-`48e3f36bb8db36067400998d64bcc0cb`, 1.9 MB) un-tars over the package, rebuilds with
-`--symlink-install`, and then **verifies in the installed tree** — the seed, the yaw, the three
-`20260805` maps, the four `live_runs` tools. Confirmed present inside the tarball before it shipped.
+`f1tenth_stage_20260825.tgz` (cut 2026-08-25 from `4966f6c` plus the then-uncommitted
+`scripts/`+`config/` working tree, md5 `508e7706db2eb26d0cb4b9b8d6e0a587`, 462 KB, 182 entries)
+un-tars over the package, copies the three `20260805` map files in from
+`/mnt/shared_dir/maps/20260805/`, rebuilds with `--symlink-install`, and then **verifies in the
+installed tree** — the yaw, the seed count, the three maps, the two tools. Validated end-to-end in a
+throwaway container 2026-08-25 (exit 0; `yaw: -1.4748`, 14 `seed_initialpose` hits, all three maps).
 The rebuild is not optional: `--symlink-install` links only files that existed at build time, so
 anything *added* by staging is absent from `install/` until you rebuild.
 
