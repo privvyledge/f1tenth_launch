@@ -224,6 +224,14 @@ def launch_setup(context, *args, **kwargs):
     # "Failed to localize in map. Error 3" inevitable on every run without a previously saved map.
     map_path_string = map_path.perform(context)
     map_exists = os.path.isdir(map_path_string) and bool(os.listdir(map_path_string))
+    save_map_requested = save_map.perform(context).lower() == 'true'
+    # cuVSLAM autosaves into save_map_folder_path when the node shuts down, so handing it a
+    # path while save_map is False silently writes a map anyway. The next launch then has a
+    # map to relocalize into, and because visual_slam/initial_pose is remapped to initialpose
+    # (below), the startup pose seed doubles as a relocalization hint that finds it. Measured
+    # 2026-08-25: that relocalization drives ekf_odom to ~25 m/s while the car is stationary.
+    # Give cuVSLAM nowhere to save unless saving was actually asked for.
+    save_map_folder_path = map_path_string if save_map_requested else ''
     localize_on_startup_effective = (
             localize_on_startup.perform(context).lower() == 'true' and map_exists
     )
@@ -276,7 +284,7 @@ def launch_setup(context, *args, **kwargs):
                 ],
                 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
-                'save_map_folder_path': map_path,
+                'save_map_folder_path': save_map_folder_path,
                 'load_map_folder_path': map_path,
                 'localize_on_startup': localize_on_startup_effective,
             }],
@@ -292,7 +300,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Only create the map directory when we actually intend to save into it. Creating it
     # unconditionally left an empty directory behind that later runs then tried to localize in.
-    if save_map.perform(context).lower() == 'true' and not os.path.exists(map_path_string):
+    if save_map_requested and not os.path.exists(map_path_string):
         os.makedirs(map_path_string, exist_ok=True)
 
     # to save a map (ros2 action send_goal /visual_slam/save_map isaac_ros_visual_slam_interfaces/action/SaveMap "{map_url: /shared_dir/maps/nvidia/vslam_map}")
