@@ -277,7 +277,12 @@ Then re-stage, from the host:
 ## 10 · Housekeeping
 
 - **Two commits are local and unpushed** (`e1ae908`, `aedbb42`). Ask before pushing.
-- `docs/build_repo_requirements.md` is **untracked** and was edited today (its `apt install
-  ros-humble-imu-pipeline` ask is a downgrade and now says so). It is referenced by
-  `docs/imu_bias_removal_spec.md` §8. Decide whether it should be tracked — CLAUDE.md says
-  build-repo material is not maintained here, which may be why it is not.
+- `docs/build_repo_requirements.md` is now **tracked** (decided 2026-08-26). CLAUDE.md's rule that
+  build-repo material is not maintained here covers *copies from* that repo — `Dockerfile*`,
+  `f1tenth.repos`. This is the opposite: an outbound handoff **authored here**, in the same category
+  as `LUCIO_REPLY.md` and `DATASET_HANDOFF.md`, which are tracked. `docs/imu_bias_removal_spec.md`
+  §8 cites it, so leaving it untracked left a dangling reference.
+  Four stale claims were corrected before tracking (no-internet, the 96 %-full root fs, the
+  apt-is-preferred line, and item 1's stated blocker, which is now bug-251 on our side rather than
+  anything the build repo owes). Corrections are inline strike-throughs, not rewrites, so the
+  original 2026-08-09 reasoning stays auditable.
