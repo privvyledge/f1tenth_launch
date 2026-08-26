@@ -13,9 +13,11 @@
     #     whether or not the moving-case correction works. Log the `bias` topic
     #     and check it converges to the measured constant instead
     #     (-0.00214 rad/s for the RealSense z-gyro; docs/imu_bias_removal_spec.md).
-    #   * the stationary test is `twist_is_zero_ || odom_is_zero_` with NO
-    #     staleness timeout. A velocity source that dies while reading "stopped"
-    #     pins angular_velocity at zero indefinitely, including while driving.
+    #   * the stationary test is `twist_is_zero_ || odom_is_zero_`, which in
+    #     stock imu_processors has NO staleness timeout: a velocity source that
+    #     dies while reading "stopped" pins angular_velocity at zero
+    #     indefinitely, including while driving. `stationary_timeout` below
+    #     closes that, and REQUIRES the forked build (see its comment).
 
     # Velocity source. use_odom (not use_cmd_vel): cmd_vel is inbound-only on
     # this vehicle and is silent under teleop, so its silence would read as
@@ -33,3 +35,27 @@
     # Averaging constant for the stationary bias estimate. At the RealSense's
     # ~200 Hz the default 0.01 settles in a few seconds of standing still.
     accumulator_alpha: 0.01
+
+    # [s] How long the velocity source may go silent before its "stationary"
+    # verdict is discarded and the node returns to subtracting the last bias.
+    #
+    # REQUIRES privvyledge/imu_pipeline @ humble-devel. Stock imu_processors
+    # does not declare this parameter and silently ignores it -- the node starts
+    # and logs nothing -- so on a stock build this file reads as configured while
+    # the hazard above is fully open. Verify on the live node with
+    #   ros2 param get /imu_bias_remover stationary_timeout
+    # which errors on a stock build and returns 0.5 on the fork.
+    #
+    # Like any watchdog on a periodic source, this must exceed the source's
+    # WORST-CASE publish interval, not its average -- the same rule that set the
+    # mux joystick timeout to 0.3 s rather than 0.1 s. vehicle/vesc_odom runs
+    # ~50 Hz (0.02 s nominal), but its worst-case gap has NOT been measured on
+    # this car, so 0.5 s is chosen for headroom by analogy with the command_gate
+    # heartbeat timeout (0.5 s against a measured worst gap of 0.136 s). Tighten
+    # it only after measuring vesc_odom's actual gap distribution.
+    #
+    # Note vesc_odom is silent while parked with no joystick connected
+    # (vesc_to_odom returns early until a servo command arrives). That is benign:
+    # the flag starts false, so a source that has never published never votes and
+    # the node simply passes the gyro through with a zero bias.
+    stationary_timeout: 0.5

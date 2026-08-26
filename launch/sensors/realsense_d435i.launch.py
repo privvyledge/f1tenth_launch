@@ -360,16 +360,24 @@ def launch_setup(context, *args, **kwargs):
                 'imu_filter_constant_dt': '0.005',
                 'imu_corrector_output_topic': camera_name_str + 'imu/bias_removed',
                 'use_madgwick_filter': 'True',
-                # Set to 'True' once ros-humble-imu-pipeline is in the robot image.
-                # The chain is wired and the constant is measured (-0.00214 rad/s
-                # z-gyro, four stationary runs over two days), but the node is not
-                # installed yet, so flipping this now makes the launch fail.
-                # Installing the apt package belongs to the separate
-                # workspace-build repo, not to a launch-time change here.
-                # Enabling it needs a before/after with scripts/live_runs/yaw_drift.py,
-                # not a flip: parked, rf2o and VSLAM already hold fused yaw to
-                # -0.05 deg/min, so this bias is real but currently drives nothing.
-                # See docs/imu_bias_removal_spec.md.
+                # The node IS installed -- imu_processors is source-built into the
+                # image, so flipping this no longer breaks the launch. (It is not
+                # an apt package: Humble's binary is 0.4.1 against the 0.5.2 the
+                # image builds, so apt would be a downgrade.)
+                #
+                # Still 'False' because enabling it needs a before/after with
+                # scripts/live_runs/yaw_drift.py rather than a flip: parked, rf2o
+                # and VSLAM already hold fused yaw to -0.05 deg/min, so the
+                # measured -0.00214 rad/s z-gyro bias is real but currently drives
+                # nothing. Note also that a parked test cannot tell you whether the
+                # correction works -- the zeroing branch is what is active while
+                # stationary -- so log the `bias` topic, not just the drift.
+                #
+                # Setting this 'True' requires stationary_timeout support, i.e.
+                # privvyledge/imu_pipeline @ humble-devel; stock imu_processors
+                # silently ignores that parameter and leaves the pinned-zero hazard
+                # wide open. See config/filters/imu_bias_remover.yaml and
+                # docs/imu_bias_removal_spec.md.
                 'remove_imu_bias': 'False',
                 # camera_imu_optical_frame, sensor_kit_link, base_link
                 'imu_corrector_frame': 'camera_imu_optical_frame',

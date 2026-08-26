@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Score the imu_bias_remover offline test written by bias_test_driver.py.
 
-Usage: bias_test_analyze.py <csv> [guard_seconds]
+Usage: bias_test_analyze.py <csv> [guard_seconds] [stationary_timeout]
 
 Four questions, all answerable with the car parked:
 
   1. does the bias estimate converge to the gyro's real stationary mean?
   2. while moving, is the output exactly raw - bias?
   3. while stationary, is the output pinned to zero?
-  4. if the velocity source dies while reading "stopped", does the node stay
-     pinned in the zeroing branch forever? (the staleness hazard, spec section 3)
+  4. if the velocity source dies while reading "stopped", what happens?
+     With stationary_timeout 0 (stock imu_processors) the node stays pinned in
+     the zeroing branch forever -- the staleness hazard, spec section 3. With a
+     positive timeout (the privvyledge/imu_pipeline fork) it must leave that
+     branch within roughly the timeout and resume subtracting the last bias.
 
 GUARD BAND. The driver labels each output row by the phase at RECEIVE time, but
 the node picked its branch when it processed the message, and the synthetic odom
@@ -26,6 +29,19 @@ BOUNDS = [25.0, 40.0, 50.0]     # must match PHASES in bias_test_driver.py
 
 csv_path = sys.argv[1]
 GUARD = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
+TIMEOUT = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+D_START = BOUNDS[-1]            # phase D begins when C ends
+
+# Recovery can legitimately be measured slightly EARLY, and the tolerance is a
+# property of the harness rather than a fudge factor. D_START is the nominal
+# phase boundary, but the driver's last odom publish lands on the preceding
+# 50 Hz tick (up to 0.020 s before it), so the node's clock starts running out
+# that much sooner; and the row timestamps are output samples at the IMU's
+# 200 Hz (a further 0.005 s of quantisation). Late recovery has no such excuse
+# and is allowed only one extra second, for a slow first sample after the edge.
+ODOM_PERIOD = 0.020
+IMU_PERIOD = 0.005
+EARLY_TOL = ODOM_PERIOD + IMU_PERIOD
 
 rows = []
 with open(csv_path) as f:
@@ -91,21 +107,52 @@ for p in ("A_stationary", "C_stationary"):
               % (p, mx, "PASS" if mx == 0.0 else "FAIL"))
 print()
 
-# --- 4: the staleness hazard ---
+# --- 4: the staleness hazard, or the timeout that closes it ---
 d = sel("D_source_dead")
 if d:
     mx = max(abs(r[4]) for r in d)
     rawmx = max(abs(r[3]) for r in d)
-    print("CHECK 4  velocity source stopped while it read 'stopped'")
+    print("CHECK 4  velocity source stopped while it read 'stopped'"
+          "   (stationary_timeout=%.3f s)" % TIMEOUT)
     print("         n=%d  max|out_z| %.3e   (raw gyro still live: max|raw_z| %.6f)"
           % (len(d), mx, rawmx))
-    if mx == 0.0:
-        print("         -> HAZARD CONFIRMED: the rate stays pinned at 0 with no source.")
-        print("            The node never leaves the zeroing branch, so a vesc_odom")
-        print("            death while parked zeroes the gyro indefinitely, including")
-        print("            once the car moves. Needs an external watchdog.")
+
+    if TIMEOUT <= 0.0:
+        if mx == 0.0:
+            print("         -> HAZARD CONFIRMED: the rate stays pinned at 0 with no source.")
+            print("            The node never leaves the zeroing branch, so a vesc_odom")
+            print("            death while parked zeroes the gyro indefinitely, including")
+            print("            once the car moves.")
+        else:
+            print("         -> node left the zeroing branch on its own; re-read the source.")
     else:
-        print("         -> node left the zeroing branch on its own; re-read the source.")
+        # First sample after the source died whose output is no longer hard zero.
+        recovered = next((r for r in d if r[4] != 0.0), None)
+        if recovered is None:
+            print("         -> FAIL: still pinned at zero %.1f s after the source died,"
+                  % (d[-1][0] - D_START))
+            print("            despite stationary_timeout=%.3f s. The timeout is not"
+                  % TIMEOUT)
+            print("            taking effect -- check the node is the forked build")
+            print("            ('ros2 param get <node> stationary_timeout').")
+        else:
+            latency = recovered[0] - D_START
+            # Everything from recovery onward must be exactly raw - bias again.
+            after = [r for r in d if r[0] >= recovered[0]]
+            err = [abs(r[4] - (r[3] - r[5])) for r in after]
+            pinned = [r for r in d if r[0] < recovered[0]]
+            ok_latency = (TIMEOUT - EARLY_TOL) <= latency <= (TIMEOUT + 1.0)
+            ok_subtract = max(err) < 1e-9
+            print("         pinned for      %.3f s (%d samples) after the source died"
+                  % (latency, len(pinned)))
+            print("         recovery latency %.3f s vs timeout %.3f s "
+                  "(early tol %.3f s = one odom tick + one IMU sample) -> %s"
+                  % (latency, TIMEOUT, EARLY_TOL, "PASS" if ok_latency else "FAIL"))
+            print("         after recovery, out == raw - bias: n=%d max residual %.3e -> %s"
+                  % (len(after), max(err), "PASS" if ok_subtract else "FAIL"))
+            if ok_latency and ok_subtract:
+                print("         -> HAZARD CLOSED: the node drops the stale 'stationary'")
+                print("            verdict and resumes subtracting the last bias.")
 print()
 
 # Raw placement of anything the guard band excluded, so it is never hidden.

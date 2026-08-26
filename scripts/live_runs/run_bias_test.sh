@@ -6,6 +6,16 @@ set -o pipefail
 
 BAG="${1:-/mnt/shared_dir/claude_bringup_0826/run18_constdt}"
 OUT="${2:-/mnt/shared_dir/biastest_0826}"
+# Seconds a velocity source may go silent before its "stationary" verdict is
+# dropped. 0.0 (default) disables the check, which is upstream's behaviour and
+# reproduces the 2026-08-26 hazard measurement. Any positive value requires the
+# privvyledge/imu_pipeline fork. Stock imu_processors does not declare this
+# parameter and SILENTLY IGNORES it -- verified 2026-08-26, the node starts
+# normally and logs nothing -- so a stock build scored against a positive
+# timeout looks configured and is not. Confirm with
+#   ros2 param get /imu_bias_remover stationary_timeout
+# which errors on a stock build and returns the value on the fork.
+TIMEOUT="${3:-0.0}"
 CSV="$OUT/bias_test.csv"
 CFG=/workspaces/f1tenth/install/f1tenth_launch/share/f1tenth_launch/config/filters/imu_bias_remover.yaml
 
@@ -14,9 +24,10 @@ source /opt/ros/humble/setup.bash
 source /workspaces/f1tenth/install/setup.bash
 mkdir -p "$OUT"
 
-echo "=== node under test ==="
+echo "=== node under test (stationary_timeout=$TIMEOUT) ==="
 setsid ros2 run imu_processors imu_bias_remover_node --ros-args \
     --params-file "$CFG" \
+    -p stationary_timeout:="$TIMEOUT" \
     -r imu:=/test/imu -r imu_biased:=/test/imu_biased \
     -r bias:=/test/bias -r odom:=/test/odom \
     > "$OUT/node.log" 2>&1 &

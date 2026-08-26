@@ -82,13 +82,60 @@ end-to-end on 2026-08-09 (`camera/imu` 200.6 Hz → `camera/imu/bias_removed`
 itself was verified offline on 2026-08-26: the estimate reproduces the measured
 −0.00214 rad/s to 3.1e-05 and the subtraction is bit-exact.
 
-What now blocks it is a **design decision on our side**, not an image change:
-the node's stationary test is `twist_is_zero_ || odom_is_zero_` with **no
-staleness timeout**, so a velocity source that dies while reading "stopped" pins
+**UPDATED 2026-08-26 — the blocker is closed, and this item now does ask you for
+something.** What had been blocking it was a design decision on our side: the
+node's stationary test is `twist_is_zero_ || odom_is_zero_` with **no staleness
+timeout**, so a velocity source that dies while reading "stopped" pins
 `angular_velocity` at zero indefinitely — measured at 3996 consecutive samples
-with the raw gyro live (bug-251). See
-`scripts/live_runs/BIAS_REMOVER_OFFLINE_20260826.md`. **Nothing is owed by the
-build repo for item 1 beyond continuing to build the 0.5.2 tag.**
+with the raw gyro live (bug-251). That is now fixed in a fork.
+
+Confirmed absent in three independent places before forking, so this is not a
+version-skew story: the source-built **0.5.2** in the image (read end to end — no
+`rclcpp::Time` stored, no timer), the **apt 0.4.1** `.deb` (the string `timeout`
+appears in no file in the package), and upstream's **`ros2` branch at 0.6.1**
+(same condition, same six parameters). The only change between 0.5.2 and 0.6.1 in
+that file is a `use_stamped` default flip.
+
+### What to change
+
+Replace the tarball with a `.repos` entry, so the fix survives a container
+rebuild instead of being re-applied by hand:
+
+```yaml
+  imu_pipeline:
+    type: git
+    url: https://github.com/privvyledge/imu_pipeline.git
+    version: humble-devel
+```
+
+That branch is upstream tag **0.5.2** — the version this vehicle has been
+validated against — plus one commit adding a **`stationary_timeout`** parameter
+to `ImuBiasRemover`. Each velocity source records when it last published; a
+source silent for longer than the timeout has its "stationary" verdict dropped,
+and the node falls through to subtracting the last converged bias rather than
+zeroing. **The default is `0.0`, which disables the check and reproduces stock
+behaviour exactly**, so adopting the fork changes nothing until a config asks for
+a timeout.
+
+This supersedes both the apt line at the top of this section and the
+`imu_pipeline_0.5.2.tar.gz` interim route. It does not change the "do not use
+apt" conclusion — apt Humble is still 0.4.1.
+
+### How it was verified
+
+Same recorded gyro, same harness, same scoring script, only the parameter
+differing (`scripts/live_runs/run_bias_test.sh`, phase D):
+
+| `stationary_timeout` | behaviour after the velocity source dies |
+|---|---|
+| `0.0` (stock) | **3996 samples pinned at exactly 0.0**, raw gyro live to 0.037 rad/s |
+| `1.0` (fork) | pinned **0.986 s** (195 samples), then recovered; all **3801** remaining samples exactly `raw − bias`, max residual **0.0** |
+
+One trap worth carrying: stock `imu_processors` does not declare
+`stationary_timeout` and **silently ignores** it — the node starts normally and
+logs nothing. A stock build given a positive timeout therefore looks configured
+and is not. Check with `ros2 param get /imu_bias_remover stationary_timeout`,
+which errors on stock and returns the value on the fork.
 
 ## 2. `rf2o_laser_odometry` — the branch pin in `.repos` does not exist
 
