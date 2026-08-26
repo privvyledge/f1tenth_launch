@@ -126,7 +126,7 @@ FLIP=1 bash /mnt/shared_dir/stage_0826c.sh      # ~1 min
 ```
 
 `stage_0826c.sh` supersedes `stage_0826.sh`. It carries **`f1tenth_stage_20260826c.tgz`**
-(md5 `ace7e260d9df993890af836ff1a86e3c`, cut from git HEAD with `git archive`), clones the
+(md5 `5e39c50d3512756b524a339029450f76`, cut from git HEAD with `git archive`; it carries the bug-245 gate), clones the
 `imu_pipeline` fork and rebuilds `imu_processors`, and verifies eight values in the **installed**
 tree. `FLIP=1` applies a temporary `remove_imu_bias:='True'` for wiring tests; **omit it** for the
 committed `'False'`. **Re-staging `0826b` or `0825` silently reverts today's work.**
