@@ -1,5 +1,13 @@
 # Resume — `bug-244` is root-caused and fixed; the IMU defect underneath it is not
 
+> **SUPERSEDED 2026-08-26 by `BUG244_CLOSEOUT_20260826.md`.** bug-244 is **closed** (three more
+> cold launches, run14/15/16). bug-248 is **root-caused**: it is a timestamp defect in the
+> RealSense driver's first 2-3 IMU samples, amplified by madgwick's `constant_dt: 0.0` — not an
+> attitude defect, not intermittent (4 of 4 launches), and **not** "~10 s into a launch" (that was
+> the camera's startup delay; the jump is 0.02-0.10 s after the IMU stream starts). §2 of this file
+> is wrong on all three points, and its `TimerAction(period=10s)` speculation is refuted. bug-248
+> is now also **fixed** (`imu_filter_constant_dt: 0.005`, verified on run17). §3-§7 still stand.
+
 **Repo:** `f1tenth_launch` · branch `perf/config-tuning`
 **gosling1:** `192.168.2.195`, direct `ssh gosling1@192.168.2.195` (no jump host)
 
