@@ -357,3 +357,60 @@ playback is comfortable and the 25 GB of camera data is never touched.
 6. Everything already carried forward in `NEXT_CHAT_PROMPT.md` (udev fix on the
    other goslings, `vesc_driver` serial reconnect, `MAX_STEERING` back to 0.34
    after recalibration).
+
+---
+
+## 3. A third correction — the `-79.82 deg` start pose is itself off (2026-08-24)
+
+**Added after v1 was frozen. It changes no delivered file and no delivered
+number.** The bags, `MD5SUMS.txt` and every figure above stand exactly as
+written; what changes is how two of them should be *read*.
+
+`-79.82 deg` came from RTABMap's optimized poses at t=0. Evidence gathered since
+says it is wrong relative to RTABMap's own rendered grid:
+
+- On both 2026-08-05 runs with a genuine stationary window (car parked, <=5 mm of
+  position change over 8-10 s), AMCL **walks away from the -79.80 deg seed** and
+  reaches at least **-85.0 deg**, still moving (`mapping` -85.79 deg at
+  -0.74 deg/s; `loop_laps` -85.00 deg at -0.07 deg/s). One-sided: neither run
+  converged, so the endpoint has no upper bound from this data.
+- Independently, the raw-scan fit at the same physical spot on 2026-08-11 gives
+  **-84.50 deg** with no filter in the loop (`heading_from_scan.py`).
+- The seed pull cuts the right way: AMCL was seeded at -79.80 deg, so any
+  residual pull biases *toward* it, and it went the other way regardless.
+
+Structurally this is unsurprising. That pose graph was optimized **from the end**
+of the trajectory (see §1 above), so t=0 is its least-constrained end. The seed
+was also read from `rtabmap_final.db` while the grid and clouds were rendered
+from `rtabmap_final_nf.db` — two optimizations, whose `map` origins need not
+coincide.
+
+### What to re-read, and what not to
+
+- **The delivered `pose_map` track is unaffected.** It is AMCL's `map->odom`
+  composed with the source bag's `odom->base_link`. RTABMap's optimized poses
+  enter only as the t=0 seed (which AMCL walks off, as above) and as the scoring
+  control. Neither is written into a delivered bag.
+- **Re-read the accuracy figures in "How accurate is it".** The
+  **yaw error (mean 1.69 deg, p95 4.92 deg, max 7.19 deg)** was measured against
+  `rtabmap_ground_truth.py`. If RTABMap's t=0 is off against its own grid, part
+  of that disagreement is **RTABMap's error, not AMCL's** — a t=0 offset decaying
+  to zero has qualitatively the shape of that profile. **This is deliberately not
+  quantified**: the parked-AMCL data above is one-sided and cannot bound the t=0
+  error tightly enough to set a number against 7.19 deg. The translation figures
+  (mean 64.7 mm, p95 143.5 mm) inherit the caveat this document already stated —
+  agreement between two estimators, not absolute accuracy.
+- **Do not regenerate v1 over this.** Nothing here improves the delivered track;
+  it reinterprets the control that track was graded against. If a v2 ever happens
+  for other reasons, the rules in "If a better localizer comes along" still apply.
+- **The replay seeds still say `-79.82 deg`** (`51_localize_offline.sh:81`,
+  `61_nav2_offline.sh:90`, `check_map_frame.py:274`, `BRIEF_PARTICLE_FILTER.md`).
+  Left as-is deliberately: a seed costs **convergence time, not correctness**, and
+  changing it would make future replays non-comparable with the archived ones.
+
+**Open, and the only thing that can put a number on this:** run
+`heading_from_scan.py` against an archived 2026-08-05 bag's raw scan. Blocked
+2026-08-24 (gosling1 reflashed, velox1 unreachable), not declined.
+
+Full derivation and the LUCIO exchange that produced it:
+`scripts/live_runs/LUCIO_MAP_HEADING_ANSWER.md`.

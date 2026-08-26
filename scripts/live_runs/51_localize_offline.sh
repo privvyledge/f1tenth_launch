@@ -78,6 +78,11 @@ OUT=""
 # The shared physical start pose, in the map frame. See the header.
 INIT_X=0.4451
 INIT_Y=-0.5750
+# NOTE (2026-08-24): this -1.3931 rad (-79.82 deg) came from RTABMap's optimized
+# poses at t=0 and is off against RTABMap's own grid -- the true 08-05 park
+# heading is at least -85.0 deg. Left as-is on purpose: a seed costs
+# convergence TIME, not correctness, and changing it makes future replays
+# non-comparable with the archived ones. See LUCIO_MAP_HEADING_ANSWER.md.
 INIT_YAW=-1.3931
 KEEP_VSLAM=0
 NO_VSLAM=0

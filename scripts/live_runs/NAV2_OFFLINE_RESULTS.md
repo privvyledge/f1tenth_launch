@@ -151,6 +151,59 @@ linger as `<defunct>` zombies with frozen names and CPU figures. Three runs'
 leftovers looked precisely like three concurrent nav2 stacks. Use
 `docker run --init`, sample with `top -b -n2`, and skip state `Z`.
 
+## Running it live — the prerequisites, in the order they bite
+
+Folded in 2026-08-25 from `BATTERY_SESSION_PLAN.md` §Phase 4 and the earlier
+`NEXT_CHAT_HEADING_AND_NAV2.md` §Job C, both now deleted. Nothing below has been
+run on a moving car.
+
+**Always do the dry run first.** It diverts the smoother to `cmd_vel_nav2`, so
+Nav2 plans and publishes exactly as normal but nothing reaches the actuation
+chain:
+
+```bash
+ROS_DOMAIN_ID=7 DDS_PROFILE=lo ./60_nav2_test.sh --map <map.yaml> --dry-run
+ROS_DOMAIN_ID=7 DDS_PROFILE=lo ./60_nav2_test.sh --map <map.yaml>
+```
+
+1. **`launch_twist_to_ackermann:=True`.** It defaults `False` because the MPC
+   publishes `drive` directly. Without it Nav2's `cmd_vel` never reaches the
+   vehicle, and everything looks healthy while the car sits still.
+2. **Re-apply the twist fix to the container** (`/mnt/shared_dir/apply_twist_fix.sh
+   <container>`). `/workspaces` is a container layer, so a fresh container starts
+   from pre-fix source where right turns steer hard left (bug-140).
+3. **Gate the servers on lifecycle ACTIVE**, not on topics or action servers
+   existing — those appear at CONFIGURE, and goals are rejected while inactive
+   with nothing logged anywhere (bug-126).
+4. **Goals must be poses.** Rows from `maps/*/truth_<bag>.csv` are the `map->odom`
+   transform and land on top of the robot (bug-128). Use
+   `scripts/live_runs/goal_poses_from_bag.py`.
+
+**On `log_level:=info`.** Worth it, but log to `/mnt/f1tenth_ssd/shared_dir/logs/`,
+never the Jetson home directory — at `warn`, five bring-ups wrote 1.16 GB into `/`
+and took it to 100 %, 0 bytes free. `info` is worse.
+
+**There is no recorded diagnosis of the "controller stopped shy of the goal"
+observation** anywhere in this repo's buglog or notes — it was never written down.
+Treat it as an open question to investigate afresh, not a known issue to confirm.
+The nearest recorded item is bug-140 (wrong steering direction on the first live
+goal, fixed 2026-08-06), which could plausibly have produced a shortfall but was
+never connected to it.
+
+**Tear down with a script piped on stdin, matching on paths**
+(`/opt/ros/|/workspaces/f1tenth/install/` plus `ros2 launch|component_container`,
+excluding PID 1, TERM then KILL, then print survivors). A pattern matching only
+node names missed 11 orphans once, and the resulting load average starved rf2o to
+2.5 Hz and the LiDAR to 6.5 Hz — **low-but-nonzero sensor rates can be CPU
+contention, not a sensor fault; check `uptime` first.** A `pkill -f` typed inside
+`docker exec bash -lc "..."` matches the exec'd shell's own command line and kills
+itself.
+
+**Check `visual_slam/tracking/odometry` by rate** at the start of every run and
+after any anomaly: VSLAM aborts on roughly one launch in three, does not respawn,
+and fails silently because `odometry/local` stays at 30 Hz on the remaining
+sources. Mid-run that quietly hands heading to rf2o's walk.
+
 ## What is still untested
 
 - **Everything closed-loop.** The car has still never driven under Nav2.

@@ -271,7 +271,9 @@ def main():
     # truth: all three should agree here to within the placement accuracy.
     print(f"\n  first map pose   x={path[0,1]:+.3f} y={path[0,2]:+.3f} "
           f"yaw={math.degrees(path[0,3]):+.2f} deg   "
-          f"(shared start pose is +0.445, -0.575, -79.82 deg)")
+          f"(shared start pose is +0.445, -0.575, -79.82 deg; that yaw is\n"
+          f"   RTABMap t=0 and reads off against its own grid -- see\n"
+          f"   scripts/live_runs/LUCIO_MAP_HEADING_ANSWER.md)")
     print(f"  map-frame path   x {path[:,1].min():+6.2f} .. {path[:,1].max():+6.2f}   "
           f"y {path[:,2].min():+6.2f} .. {path[:,2].max():+6.2f} m")
     d = np.hypot(np.diff(path[:, 1]), np.diff(path[:, 2])).sum()

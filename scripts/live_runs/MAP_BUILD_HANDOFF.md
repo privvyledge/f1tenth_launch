@@ -138,6 +138,12 @@ all three runs: `(+0.445, −0.575, −79.82°)`** — and let AMCL produce Δ. 
 at the origin costs ~28 s of convergence during which every pose misses the
 126 mm bar. See `MAP_FRAME_DELIVERY.md`.
 
+> **Superseded in accuracy, not in use (2026-08-24):** that `-79.82°` is RTABMap's
+> t=0 pose and reads off against RTABMap's own grid; the true 08-05 park heading is
+> at least `-85.0°`. Still used as the seed on purpose — a seed costs convergence
+> time, not correctness. See `scripts/live_runs/LUCIO_MAP_HEADING_ANSWER.md`.
+
+
 **Do not try to validate this by naive scan matching against `rtabmap_2d_final`
 — that was attempted and it does not work.** Sweeping Δ and scoring LiDAR
 endpoints against the map's occupied cells (distance transform) appeared to fail

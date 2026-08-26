@@ -264,8 +264,9 @@ unset here. If the VESC is ever wired in, it accepts `Twist`, `TwistStamped`,
 
 **Still untested: the moving case.** Whether the gate ever latches while the car
 is genuinely creeping, and whether the `odom2` Mahalanobis gates at 3.0 reject
-legitimate rf2o updates mid-turn, both need a drive — see
-`scripts/live_runs/BATTERY_SESSION_PLAN.md`.
+legitimate rf2o updates mid-turn, both need a drive. The procedure is the
+moving-odometry check: `scripts/live_runs/odom_moving_check.py`, run per
+`DEMO_RUNBOOK_20260810.md` §3, which needs battery power and a driven leg.
 
 To deploy: the robot image's rf2o is one commit behind this, and `/workspaces` is
 a container layer, so the patch must be re-applied and rebuilt after every

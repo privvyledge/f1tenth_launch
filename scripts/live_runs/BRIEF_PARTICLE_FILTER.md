@@ -308,6 +308,12 @@ identical for all three bags:
 x = +0.4451   y = -0.5750   yaw = -1.3931 rad  (-79.82°)
 ```
 
+> **Superseded in accuracy, not in use (2026-08-24):** that `-79.82°` is RTABMap's
+> t=0 pose and reads off against RTABMap's own grid; the true 08-05 park heading is
+> at least `-85.0°`. Still used as the seed on purpose — a seed costs convergence
+> time, not correctness. See `scripts/live_runs/LUCIO_MAP_HEADING_ANSWER.md`.
+
+
 Seeding at (0,0,0) costs 0.73 m and 25° of initial error; AMCL needed **~28 s of
 driving** to pull in from it, and every pose in that window misses the bar. If
 you compare an unseeded pf run to a seeded AMCL run you will conclude your filter
