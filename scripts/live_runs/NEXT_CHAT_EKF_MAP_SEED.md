@@ -315,7 +315,7 @@ hardcodes `'remove_imu_bias': 'False'` and that one string is the whole blocker;
 and `imu_processors` is present in the image (`prep_container.sh` confirms it every run). Needs a
 deliberate before/after with `yaw_drift.py` (60 s, parked), not a flip, because parked the measured
 bias (−0.002208 rad/s) drives nothing while rf2o and VSLAM hold fused yaw to −0.05 °/min. Leave
-`vehicle.launch.py:377` at `False` — the two effects on `odometry/local` are not separable after the
+`vehicle.launch.py:769` at `False` — the two effects on `odometry/local` are not separable after the
 fact. Internet on the Jetson was confirmed working this session (`apt` reachable), so the stated
 blocker is gone.
 

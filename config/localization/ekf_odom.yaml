@@ -231,8 +231,23 @@
     imu1_config: [ false, false, false,
                    false,  false,  false,  # false, false, true
                    false, false, false,
-                   true,  true,  true,  # false, true, false
-                   true,  true,  true]  # false, true, false
+                   true,  true,  true,  # vroll, vpitch, vyaw — KEEP: with imu0 yaw
+                                        # disabled, this is the only gyro-rate input to yaw.
+                   false, false, false] # ax, ay, az DISABLED — measured 2026-08-25 (bug-244).
+                                        # camera/imu/filtered emitted an 82.56 deg discontinuous
+                                        # attitude jump at t+9.81s into a launch (largest of the
+                                        # whole 155 s run by 90x; next was 0.91 deg). 40 ms later
+                                        # odometry/local began accelerating at 9.34 m/s^2 = 95% of g
+                                        # and locked at 25-46 m/s with the car parked on a desk.
+                                        # robot_localization removes gravity by rotating the measured
+                                        # accel by the IMU's OWN orientation quaternion, so an 82 deg
+                                        # attitude error leaves a ~1g residual that integrates straight
+                                        # into velocity. imu1 was the ONLY acceleration input here
+                                        # (imu0's ax/ay/az are all false), and acceleration is redundant
+                                        # given VESC+rf2o+VSLAM at 30 Hz — the same density argument
+                                        # that justifies use_control: false above.
+                                        # The 82 deg jump itself is a separate, still-unfixed defect in
+                                        # camera/imu/filtered; this only stops ekf_odom listening to it.
     imu1_nodelay: false
     imu1_differential: false  # false
     imu1_relative: true  # true because of orientation/yaw drift. Also, if there is no magnetometer/compass then initial yaw is useless.

@@ -14,8 +14,8 @@ Then pick up the IMU gyro-bias work.
 
 **The Autoware plan is dead and the replacement is chosen.** `imu_corrector` is
 not installed in any robot image and both call sites hardcode
-`remove_imu_bias:='False'` (`realsense_d435i.launch.py:356`,
-`vehicle.launch.py:370`), so `config/filters/imu_corrector.yaml` is dead config —
+`remove_imu_bias:='False'` (`realsense_d435i.launch.py:366`,
+`vehicle.launch.py:769`), so `config/filters/imu_corrector.yaml` is dead config —
 editing it changes nothing. `imu_filter_madgwick` does not fill the gap: it is a
 **pass-through for `angular_velocity`**, verified on the vehicle by subscribing to
 its input and output at once (identical means, identical sample counts). Nothing
@@ -49,7 +49,7 @@ component, `imu_processors::ImuBiasRemover`.
 2. Wire the RealSense chain: `camera/imu` → bias remover → `camera/imu/bias_removed`
    → madgwick → `camera/imu/filtered`. `launch/filters/imu_filter.launch.py`
    already has exactly this shape in its `remove_imu_bias` branch — reuse it,
-   swap the node, flip the flag at `realsense_d435i.launch.py:356`.
+   swap the node, flip the flag at `realsense_d435i.launch.py:366`.
 3. While in that file, fix the latent trap: `do_bias_estimation`,
    `do_adaptive_gain`, `gain_acc` and `gain_mag` are complementary-filter
    parameters being passed to the madgwick node, where ROS 2 silently drops them
@@ -81,8 +81,9 @@ component, `imu_processors::ImuBiasRemover`.
 stationary drift went **+3.08 → +0.02 and +0.40 °/min** across two parked 60 s
 runs, with `odometry/local` at +0.08 / −0.15 (no regression). Full result and the
 three implementation properties that were checked directly are in
-`docs/rf2o_zero_velocity_brief.md`. **The moving case is still untested** — see
-`BATTERY_SESSION_PLAN.md`.
+`docs/rf2o_zero_velocity_brief.md`. **The moving case is still untested** — it needs the
+moving-odometry check (`odom_moving_check.py`, procedure in
+`DEMO_RUNBOOK_20260810.md` §3), which needs battery power and a driven leg.
 
 Two things this cost that are worth not re-paying: the image's rf2o is one commit
 behind and `/workspaces` is a container layer, so the patch must be re-applied

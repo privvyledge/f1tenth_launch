@@ -24,8 +24,8 @@ That plan is dead — see §1. This document replaces it.
 2. **It is switched off at every call site anyway.** Both parents hardcode
    `'remove_imu_bias': 'False'` with the comment *"disabled since its not really
    useful and requires Autoware installation"* —
-   `launch/sensors/realsense_d435i.launch.py:356` and
-   `launch/vehicle/vehicle.launch.py:370`.
+   `launch/sensors/realsense_d435i.launch.py:366` and
+   `launch/vehicle/vehicle.launch.py:769`.
 3. Therefore **`config/filters/imu_corrector.yaml` is dead config.** Editing
    `angular_velocity_offset_z` in it changes nothing at runtime. Anyone who
    "applies the fix" there and re-measures will correctly observe no change and
@@ -249,7 +249,7 @@ camera/imu  →  imu_bias_remover  →  camera/imu/bias_removed  →  madgwick  
 (`camera/imu/bias_removed`) and the `SetRemap(src='imu/data_raw', ...)` wiring all
 exist and were built for exactly this. **Reuse that structure**; replace the
 `Node(package='imu_corrector', ...)` action with the `imu_processors` node and
-flip `remove_imu_bias` to `True` at `realsense_d435i.launch.py:356`.
+flip `remove_imu_bias` to `True` at `realsense_d435i.launch.py:366`.
 
 While in that file, fix the latent trap from §1: the complementary-filter-only
 parameters must not be passed to the madgwick node.
@@ -268,7 +268,7 @@ at 100 Hz. Bias-corrected and fed in as `vyaw` only, it is a yaw-rate source
 independent of both camera and LiDAR — the redundancy that is missing when Isaac
 VSLAM aborts, which it does roughly 1 launch in 3 with no respawn.
 
-`vehicle.launch.py:370` has the identical wiring already present and disabled.
+`vehicle.launch.py:769` has the identical wiring already present and disabled.
 
 > **Do not re-enable `imu0`'s orientation yaw as part of this.** Only the rate
 > row. Every `imu0` angular-rate entry in `ekf_odom.yaml` is currently `false`;

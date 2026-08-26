@@ -41,7 +41,7 @@ Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2�
   `rtabmap_ground_truth.py` were staged to `/mnt/f1tenth_ssd/shared_dir/` and into the container src
   tree on 2026-08-10. **Re-stage them after any container reset.**
 - **The IMU bias remover is one flag from running, and its documented blocker is stale.**
-  `realsense_d435i.launch.py:363` hardcodes `'remove_imu_bias': 'False'` with a comment saying the
+  `realsense_d435i.launch.py:366` hardcodes `'remove_imu_bias': 'False'` with a comment saying the
   node "is not installed yet" — it is, as of 2026-08-09. `imu_filter.launch.py` already defaults the
   arg `True`, so only that hardcoded string stops the chain. Not flipped yet: parked measurement
   shows the RealSense bias is not currently driving fused yaw (see §4), so this is an improvement to
