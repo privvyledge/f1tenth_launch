@@ -1,5 +1,23 @@
 # Prompt for the next chat — IMU bias removal, launch validation, rf2o retest
 
+> **STATUS 2026-08-26 — the bias-removal half of this document is DONE except for
+> one decision.** The node is built, wired and now verified offline: the estimate
+> reproduces the measured −0.00214 rad/s to 3.1e-05 and the subtraction is
+> bit-exact. What remains is the **watchdog decision** for the staleness hazard,
+> which is confirmed rather than theoretical (bug-251). Read
+> `scripts/live_runs/BIAS_REMOVER_OFFLINE_20260826.md` before this file.
+>
+> **Three claims below are stale and will cost you time:**
+> - *"The Jetson has no internet, so this cannot be `apt install` on the robot."*
+>   Retired 2026-08-24 — it is online. But it is also moot: see the next point.
+> - *"`imu_processors` is released for Humble at 0.5.2."* No. The apt binary is
+>   **0.4.1**; 0.5.2 is the **source tag**, and the image already carries it built
+>   from source. Going to apt would be a downgrade.
+> - *"Root filesystem is at 96 %, ~1.1 GB free."* Retired — gosling1 was reflashed
+>   2026-08-24 and `/mnt/shared_dir` has ~775 G free. Still log to the SSD.
+>
+> The rf2o and launch-validation halves of this document are unaffected.
+
 Paste this into a fresh session. This resumes the 2026-08-09 evening session and
 is **separate from `NEXT_CHAT_PROMPT.md`**, which owns the actuator
 system-identification track. See §"How this relates" at the bottom.

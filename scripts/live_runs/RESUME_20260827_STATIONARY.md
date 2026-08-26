@@ -8,8 +8,50 @@ Written 2026-08-26 ~16:00 EDT, re-scoped ~16:50 after the operator picked the ne
 everything of its content that was still true is carried forward below. Recover it from git history
 if you want the original wording.
 
-**Next chat does §2(a), §2(b) and §2(c). All three are stationary — a parked car and a warm
-container, no drive battery.** The moving-odometry check is §2(e) and waits.
+**ALL THREE STATIONARY ITEMS ARE DONE — 2026-08-26 evening.** See §0 for what closed and what
+that leaves. The rest of this document is kept because its environment notes, traps and the
+§2.5 `max_steering` correction are all still current.
+
+---
+
+## 0 · Done 2026-08-26 evening — and what it leaves
+
+**(a) bug-248 second verification — PASS, and it is better evidence than a repeat.**
+`run18_constdt`, 240 s cold launch. Largest attitude step over 217 s **0.420 deg** (run17: 0.187;
+pre-fix 63–167). The point is not that the jump failed to recur: **the driver defect is still
+present in this run** — a **+865.55 s** header discontinuity at filtered sample 8 — and the
+attitude moved **0.0121 deg** through the first 5 s, the window the pre-fix jump landed in on 4 of
+4 launches. madgwick absorbs the provocation. `constant_dt`'s fingerprint is visible in the data:
+the filtered stream's own header dt is a metronomic 0.005000/0.005001 while its raw input drifts at
+0.005528 — a stronger check than `ros2 param get`. Tool: `early_stamps.py`. bug-244's acceptance
+also passed again (`odometry/local` 1.4e-05 m/s at t+30 s), making four clean cold launches.
+
+**(b) IMU bias remover — verified offline, one decision left.**
+Full write-up: **`BIAS_REMOVER_OFFLINE_20260826.md`**. The estimate reproduces the statically
+measured −0.00214 rad/s to **3.1e-05**; the moving-branch subtraction is **bit-exact**; and the
+staleness hazard is **confirmed, not inferred** — 3996 consecutive samples pinned at 0.0 with the
+source dead while the raw gyro read up to 0.037 rad/s (**bug-251**).
+
+Two things §2(b) below got wrong, corrected in place there: the version, and the claim that the
+driving half needed a drive. It did not — the node's only use of the velocity source is a threshold
+test on twist, so a synthetic source exercises the moving branch exactly as a real one would.
+
+**(c) Doc consolidation — committed** as its own commit (`e1ae908`), with `LUCIO_MAP_HEADING_ANSWER.md`
+added to it: it was untracked, and the change added citations to it from four files.
+
+### What this leaves, in priority order
+
+1. **The watchdog decision (bug-251) — blocks everything else on this track.** `remove_imu_bias`
+   stays `'False'` at both call sites until it is made. Either stop trusting `imu_biased` when
+   `vehicle/vesc_odom` goes stale, or gate on liveness at the EKF. This is a design call, not a
+   measurement.
+2. **The live parked wiring test** (spec §6 step 3): stack up with the node in the chain,
+   `odometry/local` must not regress from +0.04 / +0.01 / +0.17 deg/min. Stationary and safe, but it
+   needs a source edit to flip the flag, so it was not done unilaterally.
+3. **`max_steering` 0.34 → 0.314** (§2(d)/§2.5). Untouched — it was outside the a/b/c scope and it
+   changes how the car steers under manual driving. The repo is still wrong and `LUCIO_REPLY.md`
+   still claims it was applied.
+4. **The moving-odometry check** (§2(e)) — still needs battery and a driven leg.
 
 ---
 
@@ -42,7 +84,7 @@ was the camera's startup delay), **not** intermittent (4 of 4), and **not** an a
 Scoped by the operator 2026-08-26. **(a), (b) and (c) below need nothing but a parked car and a
 warm container.** The moving-odometry check is §2.5 and waits for a session with battery time.
 
-### (a) One more cold launch for bug-248
+### (a) One more cold launch for bug-248 — DONE, PASS (see §0)
 
 The fix has **one** verification run. That is worth more here than it was for bug-244, because the
 failure was deterministic (4 of 4 launches) rather than 3-in-8, so a single clean run is not a coin
@@ -57,7 +99,7 @@ Expect the largest attitude step well under 1 deg (run17: 0.187 deg). Tens of de
 parameter did not reach the node — check `ros2 param get /realsense_imu_filter constant_dt` first,
 which must read `Double value is: 0.005`.
 
-### (b) IMU bias remover — stationary. It is no longer blocked, and the spec's version is wrong
+### (b) IMU bias remover — DONE offline (see §0 and `BIAS_REMOVER_OFFLINE_20260826.md`)
 
 `NEXT_CHAT_IMU_BIAS.md` and `docs/imu_bias_removal_spec.md` own this. **Two blockers named in those
 docs are stale as of 2026-08-26** — check these before re-deriving anything:
@@ -68,13 +110,12 @@ docs are stale as of 2026-08-26** — check these before re-deriving anything:
   container and test **today**, without waiting on the image-build repo. The image-build change is
   still owed — a container install vanishes with the container — but it no longer gates the test.
 - **"`imu_processors` is released for Humble at 0.5.2 and that tag builds `imu_bias_remover`."**
-  The version actually available is **0.4.1** (`0.4.1-1jammy.20260804.210108`), not 0.5.2. It does
-  ship the node — `dpkg -c` on the downloaded .deb lists
-  `/opt/ros/humble/lib/imu_processors/imu_bias_remover_node`, `libimu_bias_remover.so` and an
-  `rclcpp_components` resource-index entry — so the plan survives, but **every behavioural claim in
-  the spec was written against 0.5.2 and must be re-checked against 0.4.1**, in particular the
-  `bias` topic name and the `twist_is_zero_ || odom_is_zero_` stationary test. Read the installed
-  headers, do not assume.
+  ~~The version actually available is 0.4.1, and every behavioural claim must be re-checked
+  against it.~~ **Both halves of this were wrong about this robot (corrected 2026-08-26).** The apt
+  *binary* is indeed 0.4.1 — but the robot does not use it. `privvyledge/f1tenth:humble-devel-08092026`
+  carries **0.5.2 built from source** at `/workspaces/f1tenth/install/`, which is the version the
+  spec was written against, so **switching to apt would be a downgrade**. Every behavioural claim
+  was re-checked directly against the shipping source in the image and all of it holds.
 
 **How to verify it stationary — this is the part that needs care.** A parked re-measurement reads
 ~0 *whether or not the correction works*, because the zeroing path is active and the subtraction
@@ -87,13 +128,16 @@ path is not. So the parked test must be:
    (+0.04 / +0.01 / +0.17 deg/min; today's reading was +0.04). **Stop and report if it regresses.**
 3. Do **not** conclude the correction works from a parked yaw-drift figure alone.
 
-The **staleness hazard is still real and still cannot be closed stationary**: the node's stationary
-test has no timeout, so a velocity source that dies while reading "stopped" pins `angular_velocity`
-at zero *forever, including while driving* — and the VESC driver on this car does abort on serial
+The **staleness hazard is real — and it WAS closed stationary** (corrected 2026-08-26; the claim
+below that it could not be is wrong, because "moving" to this node means only *odom twist above
+`odom_threshold`*, which a synthetic source reproduces exactly). Measured: 3996 consecutive samples
+pinned at 0.0. The node's stationary test has no timeout, so a velocity source that dies while
+reading "stopped" pins `angular_velocity` at zero *forever, including while driving* — and the VESC driver on this car does abort on serial
 EIO and go dead-stick while the command topics look healthy. Its velocity source must be
 `vehicle/vesc_odom` (not `cmd_vel`, silent under teleop; not `odometry/local`, which closes a loop
-with the IMU being corrected). **Kill `vesc_odom` while parked and confirm the node's behaviour, but
-the driving half of that check is owed and must be carried to the first drive session.**
+with the IMU being corrected). ~~**the driving half of that check is owed and must be carried to the first drive session.**~~
+**Done offline instead — bug-251.** What a synthetic source still cannot tell you is whether the
+correction improves *real heading accuracy* over a driven leg; that belongs to §2(e).
 
 Scope discipline from the spec, unchanged: the RealSense chain only. **The VESC chain is spec step 4
 and must not be bundled** — their effects on `odometry/local` are not separable after the fact.
@@ -107,7 +151,7 @@ Two things today changed for this work:
   madgwick node in a live stack is `/realsense_imu_filter`. If that chain is ever enabled it needs
   its own `imu_filter_constant_dt` — `vehicle/sensors/imu/raw` measured 100.4 Hz, so 0.01, not 0.005.
 
-### (c) Decide the uncommitted doc consolidation
+### (c) Decide the uncommitted doc consolidation — DONE, committed as `e1ae908` (see §0)
 
 In the working tree: content folded out of `BATTERY_SESSION_PLAN.md`, `MPC_BENCH_HANDOFF.md` and
 `NEXT_CHAT_ODOM_ROTATION.md` into `NAV2_OFFLINE_RESULTS.md` and `rf2o_zero_velocity_brief.md`, with

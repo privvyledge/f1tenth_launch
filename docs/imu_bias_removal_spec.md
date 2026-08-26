@@ -110,18 +110,23 @@ from the drive pack, and it was disconnected for the 2026-08-09 session, so
 Use **`imu_processors/imu_bias_remover`** from
 [`ros-perception/imu_pipeline`](https://github.com/ros-perception/imu_pipeline).
 
-**It is released for Humble and installs from apt — no fork, no `.repos` entry,
-no source build:**
+**It needs no fork and no `.repos` entry — but on this robot it is a source
+build of the 0.5.2 tag, not an apt install; see the correction below.**
 
-```bash
-sudo apt install ros-humble-imu-pipeline
-```
+> **Corrected 2026-08-26: the apt route is a DOWNGRADE, do not take it.** The
+> Humble *binary* is **0.4.1** (`0.4.1-1jammy.20260804.210108`, re-confirmed from
+> the robot with working internet). 0.5.2 is the source tag. The robot image
+> `privvyledge/f1tenth:humble-devel-08092026` already carries **0.5.2 built from
+> source** at `/workspaces/f1tenth/install/`, which is what everything below was
+> written against, so `apt install ros-humble-imu-pipeline` would replace a newer
+> node with an older one. Keep building the tag. See section 8.
 
-Verified 2026-08-09: `imu_processors` is released into Humble at **0.5.2**, and
-the 0.5.2 tag's `imu_processors/CMakeLists.txt` builds
+The 0.5.2 tag's `imu_processors/CMakeLists.txt` builds
 `add_library(imu_bias_remover SHARED src/imu_bias_remover.cpp)` and registers
-`imu_bias_remover_node`. The node in 0.5.2 matches the description below — it was
-checked against the release tag, not the development branch.
+`imu_bias_remover_node`. Every behavioural claim below was re-checked on
+2026-08-26 against the shipping source in the image itself
+(`/workspaces/f1tenth/src/imu_pipeline/imu_processors/src/imu_bias_remover.cpp`),
+not against a release note, and all of it holds.
 
 This replaces an Autoware dependency the project is already committed to dropping
 with a `ros-perception` one, which is the same ecosystem as `imu_filter_madgwick`
@@ -326,7 +331,26 @@ confirmed independent of any drive test.
 
 ---
 
-## 8. Status, 2026-08-09 evening — built and wired, correction NOT yet measured
+## 8. Status — built, wired, and VERIFIED OFFLINE 2026-08-26
+
+> **Superseding header (2026-08-26).** Everything from the 2026-08-09 entry below
+> still describes how it was built, but its closing claim — "the correction is
+> unmeasured" — no longer holds. It was measured offline on 2026-08-26 against
+> real RealSense gyro with a synthetic velocity source: the bias estimate
+> reproduces the statically measured −0.00214 rad/s to **3.1e-05**, the
+> moving-branch subtraction is **bit-exact**, and the staleness hazard is
+> **confirmed** (3996 consecutive samples pinned at 0.0 with the source dead
+> while the raw gyro read up to 0.037 rad/s). `remove_imu_bias` therefore stays
+> `'False'` pending a watchdog decision — that is now the only thing blocking it.
+> Full numbers and method: `scripts/live_runs/BIAS_REMOVER_OFFLINE_20260826.md`
+> (bug-251).
+>
+> The "next test should be offline" plan below was right, and is the one that
+> ran — with `run18_constdt` in place of `figure8_172338`, because the 2026-08-05
+> source bags are not on gosling1 after the reflash (only the derived `pose_map`
+> deliverables are).
+
+### Original entry, 2026-08-09 evening
 
 **Built.** `imu_processors` 0.5.2 is compiled into the container from staged
 source (`/mnt/f1tenth_ssd/shared_dir/rf2o_zv_0809/imu_pipeline_0.5.2.tar.gz`) and
