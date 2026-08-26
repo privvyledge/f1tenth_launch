@@ -114,9 +114,22 @@ samples arrive ~1 ms apart).
 Reproduce the analysis with `ekfdiag.py` in that directory, plus the two ad-hoc scripts described in
 `.wolf/buglog.json` under bug-248.
 
-**Suggested first step:** the jump is in the *filtered* topic. Compare `camera/imu/filtered` against
-the raw RealSense IMU across the same window to see whether the discontinuity originates in the sensor
-stream or in madgwick. That is offline work on a bag already on the robot — no lab time.
+**Suggested first step:** the jump is in the *filtered* topic, so the question is whether the
+discontinuity originates in the sensor stream or in madgwick. Compare `camera/imu/filtered` against
+the **raw** RealSense IMU across the same window.
+
+> **This needs a NEW capture — `ekfdiag_run12_control` cannot answer it.** That recorder's filter
+> caught `camera/imu/filtered` but **not** the raw RealSense stream; its `vehicle/sensors/imu/raw` is
+> the *VESC* IMU (`imu0`), not the camera. Only the filtered side is in the bag. Add the raw topics
+> — `camera/imu`, or `camera/gyro/sample` + `camera/accel/sample`, whichever the driver publishes with
+> the current `unite_imu_method` — and re-record across cold launches until one shows the jump.
+> Budget several: the jump accompanied a divergence in roughly 3 of 8 launches, and it is not known
+> whether it occurs on launches that *don't* diverge (worth checking directly — if it does, the
+> trigger and the divergence are separable and the jump can be studied without waiting for a runaway).
+>
+> Confirm the raw topic names first: `ros2 topic list | grep -i imu`. Recording the wrong name
+> silently yields another bag that cannot answer the question — which is exactly how this note came
+> to be written.
 
 ---
 
