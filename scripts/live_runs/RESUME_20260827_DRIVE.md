@@ -75,19 +75,34 @@ That is why the offline bias test needed a synthetic velocity source.
 
 ## 2 · Two things that should land before that session
 
-**bug-245 — cuVSLAM autosaves a map on shutdown even though `save_map` defaults `False`.** The next
-launch relocalizes into it at the initialpose seed, loops on `Failed to localize in map. Error 3`,
-and `visual_slam_container` dies **exit −6**. Fix is still queued in
-`isaac_ros_visual_slam.launch.py`.
+**bug-245 — code fix landed 2026-08-26, NOT YET VERIFIED ON HARDWARE.** This is the first thing to
+confirm on the next launch, before any measurement.
 
-**This is not cosmetic — it invalidated a measurement on 2026-08-26.** With VSLAM dead, `ekf_odom`
+The autosave half was already fixed (`save_map_folder_path` is `''` unless `save_map` is true). The
+half that bit us was different, and it is worth understanding because **our own seed fix is what
+triggers it**: `load_map_folder_path` was handed over *unconditionally*, while
+`visual_slam/initial_pose` is remapped to `initialpose` — the topic `localization.launch.py`
+deliberately publishes on at `initialpose_seed_delay` (20 s) to seed `ekf_map` and AMCL from one
+number (bug-241). cuVSLAM reads that same message as a **relocalization hint**, so a load path plus
+that seed starts relocalization even with `localize_on_startup` False.
+
+Measured: `Trying to localize in map … around [0.445, -0.575, 0.000]` — the AMCL seed — then
+`Failed to localize in map. Error 3` on repeat, and `visual_slam_container` died **exit −6**, at
+t+20 s exactly matching the seed delay.
+
+`load_map_folder_path` is now gated on `localize_on_startup_effective`, the same condition as
+`localize_on_startup`, so both map paths are symmetric: no intent, no path.
+
+**Verify on the next launch** — VSLAM should survive past t+20 s and `/visual_slam/tracking/odometry`
+should be publishing. If it aborts again, move `/mnt/data/maps/nvidia/vslam_map` aside (making
+`map_exists` False) and re-check; that isolates whether the gate is working or something else still
+hands over a map.
+
+**Why this matters more than it looks — it invalidated a measurement.** With VSLAM dead, `ekf_odom`
 lost `odom1` entirely and rf2o degraded to 3.2 Hz, and a parked `yaw_drift` read **+3.77 °/min**
-against a +0.04/+0.01/+0.17 baseline that had been measured with VSLAM healthy. It looked exactly
-like a fusion regression and was not one. **The tell is the `yaw_drift` source table: check the
-`Isaac VSLAM (VO)` row for `0` samples before reading the `odometry/local` number.** Workaround
-until the fix lands: move `/mnt/data/maps/nvidia/vslam_map` aside so `map_exists` is False. Note
-`/mnt/data` is a container layer, so a genuinely fresh container will not carry the stale map — but
-one that has survived a few killed launches will.
+against a +0.04/+0.01/+0.17 baseline measured with VSLAM healthy. It reads exactly like a fusion
+regression and is not one. **The tell is the `yaw_drift` source table: check the
+`Isaac VSLAM (VO)` row for `0` samples before reading the `odometry/local` number.**
 
 **`remove_imu_bias` stays `'False'`** at both call sites until the driven evidence exists. Only the
 stale comment at the RealSense call site was corrected — it had claimed flipping the flag "makes the

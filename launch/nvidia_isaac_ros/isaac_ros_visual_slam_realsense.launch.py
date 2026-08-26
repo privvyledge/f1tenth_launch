@@ -235,6 +235,25 @@ def launch_setup(context, *args, **kwargs):
     localize_on_startup_effective = (
             localize_on_startup.perform(context).lower() == 'true' and map_exists
     )
+    # Handing cuVSLAM a load path it was not asked to use is not inert, because
+    # visual_slam/initial_pose is remapped to `initialpose` below. That topic is not
+    # only RViz's "2D Pose Estimate" -- localization.launch.py publishes onto it on
+    # purpose, `initialpose_seed_delay` seconds after start, to seed ekf_map and AMCL
+    # from one number. cuVSLAM reads the same message as a RELOCALIZATION HINT, so a
+    # load path plus that seed is enough to start relocalization even with
+    # localize_on_startup False.
+    #
+    # Measured 2026-08-26: with a map present the node logged "Trying to localize in
+    # map ... around [0.445, -0.575, 0.000]" -- the AMCL seed -- then "Failed to
+    # localize in map. Error 3" on repeat, and visual_slam_container died exit -6, at
+    # t+20 s exactly matching initialpose_seed_delay. ekf_odom then lost odom1 entirely
+    # and a parked yaw_drift read +3.77 deg/min against a +0.04 baseline, which looks
+    # like a fusion regression and is not one.
+    #
+    # So gate the load path on the same condition as localize_on_startup: no intent to
+    # relocalize means no map to relocalize into, and the seed cannot start something
+    # nobody asked for.
+    load_map_folder_path = map_path_string if localize_on_startup_effective else ''
 
     # if a transformError occurs, it's probably due to a low realsense tf_publish_rate
     visual_slam_node = ComposableNode(
@@ -285,7 +304,7 @@ def launch_setup(context, *args, **kwargs):
                 'image_qos': image_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'imu_qos': imu_qos,  # 'DEFAULT', 'SENSOR_DATA'
                 'save_map_folder_path': save_map_folder_path,
-                'load_map_folder_path': map_path,
+                'load_map_folder_path': load_map_folder_path,
                 'localize_on_startup': localize_on_startup_effective,
             }],
             remappings=[('visual_slam/image_0', left_image_topic),
