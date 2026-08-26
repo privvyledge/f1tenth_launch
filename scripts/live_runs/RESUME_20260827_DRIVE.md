@@ -1,13 +1,16 @@
 # Resume — one item left, and it needs the battery
 
-**Repo:** `f1tenth_launch` · branch `perf/config-tuning` · pushed through `b6037fd`
+**Repo:** `f1tenth_launch` · branch `perf/config-tuning` · pushed through `91c1a3e`
 **gosling1:** `192.168.2.195`, direct `ssh gosling1@192.168.2.195` (no jump host)
 
 Written 2026-08-26 ~19:45 EDT. **Replaces `RESUME_20260827_DECISIONS.md`**, three of whose four
 items are closed — recover it from git history for the original wording.
 
-Everything stationary is finished. What remains is one drive session and two things that should
-land before it.
+Everything stationary is finished. What remains is **one drive session**, one fix that is written
+but unverified, and one decision that waits on the drive.
+
+**Start here:** §2's bug-245 check takes 30 seconds on the first launch and gates whether any
+measurement that follows is worth trusting.
 
 ---
 
@@ -73,7 +76,7 @@ That is why the offline bias test needed a synthetic velocity source.
 
 ---
 
-## 2 · Two things that should land before that session
+## 2 · Verify this on the first launch, before measuring anything
 
 **bug-245 — code fix landed 2026-08-26, NOT YET VERIFIED ON HARDWARE.** This is the first thing to
 confirm on the next launch, before any measurement.
