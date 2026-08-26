@@ -5,6 +5,10 @@
     publish_tf: false  # true
     reverse_tf: false
 #    fixed_frame: "base_link"  # imu_link, base_link, odom
+    # NOTE: this file is NOT loaded -- launch/filters/imu_filter.launch.py passes
+    # explicit parameter dicts and its parameters=[imu_filter_param_file] line is
+    # commented out. Editing values here changes nothing. constant_dt is set per
+    # chain via the imu_filter_constant_dt launch argument (bug-248).
     constant_dt: 0.0
     publish_debug_topics: false
     world_frame: "enu"

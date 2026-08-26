@@ -76,6 +76,7 @@ def generate_launch_description():
     imu_corrector_node_name = LaunchConfiguration('imu_corrector_node_name')
     imu_bias_odom_topic = LaunchConfiguration('imu_bias_odom_topic')
     use_madgwick_filter = LaunchConfiguration('use_madgwick_filter')
+    imu_filter_constant_dt = LaunchConfiguration('imu_filter_constant_dt')
     use_mag = LaunchConfiguration('use_mag')
     remove_imu_bias = LaunchConfiguration('remove_imu_bias')
 
@@ -164,6 +165,19 @@ def generate_launch_description():
                         'config/filters/imu_bias_remover.yaml. Do not point this at '
                         'cmd_vel (silent under teleop) or odometry/local (EKF output, '
                         'closes a loop with the IMU being corrected).')
+    imu_filter_constant_dt_la = DeclareLaunchArgument(
+            'imu_filter_constant_dt',
+            default_value='0.0',
+            description='Fixed integration timestep for the orientation filter, in seconds. '
+                        '0.0 means derive dt from the message header stamps -- which is only '
+                        'safe if the driver stamps every sample sanely. The RealSense driver '
+                        'does not: its first 2-3 IMU samples carry header times seconds away '
+                        'from the rest (measured +27, +1252 then -1153, +33 s), and one such dt '
+                        'swings the filter attitude 63-167 deg in a single update while the raw '
+                        'gyro reports under 0.003 deg of rotation. Set this to the nominal '
+                        'sample period of the IMU on THIS chain (the RealSense runs ~200 Hz, '
+                        'the VESC ~100 Hz) to make the filter immune to that. '
+                        'See scripts/live_runs/BUG244_CLOSEOUT_20260826.md.')
     use_madgwick_filter_la = DeclareLaunchArgument(
             'use_madgwick_filter',
             default_value='True',
@@ -180,7 +194,8 @@ def generate_launch_description():
                             imu_bias_odom_topic_la,
                             remove_gravity_vector_la,
                             imu_gyro_stddev_la, imu_accel_stddev_la, imu_orientation_stddev_la,
-                            node_name_la, use_madgwick_filter_la, use_mag_la, remove_imu_bias_la])
+                            node_name_la, use_madgwick_filter_la, use_mag_la, remove_imu_bias_la,
+                            imu_filter_constant_dt_la])
 
     imu_filter_with_correction_node = GroupAction(
             condition=IfCondition(remove_imu_bias),
@@ -245,6 +260,9 @@ def generate_launch_description():
                         parameters=[
                             {'use_mag': use_mag},
                             {'gain': 0.3},
+                            # 0.0 would take dt from the header stamps; the
+                            # RealSense driver's first samples are unusable.
+                            {'constant_dt': imu_filter_constant_dt},
                             {'fixed_frame': imu_frame},
                             {'world_frame': "enu"},
                             {'remove_gravity_vector': remove_gravity_vector},
@@ -325,6 +343,9 @@ def generate_launch_description():
                         parameters=[
                             {'use_mag': use_mag},
                             {'gain': 0.3},
+                            # 0.0 would take dt from the header stamps; the
+                            # RealSense driver's first samples are unusable.
+                            {'constant_dt': imu_filter_constant_dt},
                             {'fixed_frame': imu_frame},
                             {'world_frame': "enu"},
                             {'remove_gravity_vector': remove_gravity_vector},

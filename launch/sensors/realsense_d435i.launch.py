@@ -351,6 +351,13 @@ def launch_setup(context, *args, **kwargs):
                 'imu_accel_stddev': '0.1',
                 'imu_orientation_stddev': '0.1',
                 'node_name': 'realsense_imu_filter',
+                # gyro_fps is 200 Hz (config/sensors/realsense_config.yaml), and
+                # unite_imu_method: 2 publishes camera/imu at the gyro rate --
+                # measured 198.9-199.9 Hz. Pinning the filter's timestep here
+                # rather than deriving it from header stamps is what stops the
+                # driver's bogus first 2-3 stamps from swinging the attitude
+                # 63-167 deg at stream start (bug-248).
+                'imu_filter_constant_dt': '0.005',
                 'imu_corrector_output_topic': camera_name_str + 'imu/bias_removed',
                 'use_madgwick_filter': 'True',
                 # Set to 'True' once ros-humble-imu-pipeline is in the robot image.
