@@ -125,7 +125,10 @@ def launch_setup(context, *args, **kwargs):
     autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[10]")  # SDL DualSense: R1=10 (PS/guide=5 — never use 5, it's the power-off button)
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
-    max_steering = LaunchConfiguration('max_steering', default=0.34)
+    # Measured right-hand mechanical limit (left is +0.419 rad); the former 0.34
+    # clipped right against the servo_max bound. See vehicle/joystick.launch.py,
+    # the only consumer.
+    max_steering = LaunchConfiguration('max_steering', default=0.314)
     max_acceleration = LaunchConfiguration('max_acceleration', default=2.5)
     max_steering_rate = LaunchConfiguration('max_steering_rate', default=3.2)
     vesc_poll_rate = LaunchConfiguration('vesc_poll_rate', default=50.0)

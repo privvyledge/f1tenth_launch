@@ -18,7 +18,7 @@ directory, which carries the full method and the per-bag numbers.
 | left/right asymmetry? | **~5.7 %, more authority left** | medium |
 | does the throttle path explain your 80 ms? | **no — it contributes < 20 ms** | medium, resolvable on 2 of 5 bags |
 | measured wheelbase? | **pending** — bench measurement not yet taken | — |
-| post-recalibration steering limit? | **applied** — `max_steering` is now 0.314 rad | high, derived from the calibrated gain |
+| post-recalibration steering limit? | **applied 2026-08-26** — `max_steering` is now 0.314 rad. *This row read "applied" when the reply was drafted 2026-08-08; the change had been decided but had not landed in the repo, and did not until 2026-08-26 (§6).* | high, derived from the calibrated gain |
 
 ## 1. The steering gain was wrong, and it is the headline
 
@@ -131,14 +131,29 @@ recording set.
 
 ## 6. The steering limit is set; the wheelbase is still owed
 
-- **Post-recalibration steering limit — done (2026-08-08).** `max_steering` is
+- **Post-recalibration steering limit — done (applied 2026-08-26).** `max_steering` is
   now **0.314 rad**, the largest symmetric command that never clips under
   `servo = −1.1448 · angle + 0.56` on `[0.08, 0.92]`: right lands at servo
   0.9195, just inside the bound, and left at 0.2005, well clear of it. The
   earlier 0.34 rad still clipped right (servo 0.9492 → 0.92); the 0.25 rad
-  before that was derived from the old inherited −1.4 gain. Whether to recentre
-  the servo horn — which is what would buy back the unused left travel out to
-  +0.419 rad — is a separate bench decision and is still open.
+  before that was derived from the old inherited −1.4 gain.
+
+  **Correction to what we told you on 2026-08-08.** This item was reported as
+  done at that time. It was not: all four launch entry points still carried
+  0.34 rad, and the string `0.314` appeared nowhere in the repo. The decision
+  had been taken but the edit never landed. It is applied now, at
+  `bringup`/`teleop`/`mapping`/`joystick` — and, additionally, the Nav2 path's
+  own saturation in `twist_to_ackermann` was raised 0.25 → 0.314 in the same
+  change, so all three steering limits now agree with the measured mechanics.
+  **Nothing on your side changes**: your ego-MPC publishes `drive` directly and
+  goes through none of these, and its ±0.314 rad `delta_bound` was and remains
+  the correct number. This is our bookkeeping error, not a wrong constraint on
+  yours. What *would* oblige telling you is re-measuring the mechanical limit —
+  recentring the servo horn or re-running the gain calibration — since that
+  would make your box constraint stale.
+
+  Whether to recentre the servo horn — which is what would buy back the unused
+  left travel out to +0.419 rad — is a separate bench decision and is still open.
 - **Measured wheelbase — still owed.** Needs a static bench session with the
   wheels off the ground, attempted twice and not completed for procedural
   reasons at the car, not technical ones. Config says 0.256 m and every

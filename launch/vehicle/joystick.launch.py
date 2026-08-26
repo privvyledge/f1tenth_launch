@@ -37,7 +37,15 @@ def generate_launch_description():
     autonomous_deadman_buttons = LaunchConfiguration('autonomous_deadman_buttons', default="[10]")
     steering_button = LaunchConfiguration('steering_button', default=2)
     max_speed = LaunchConfiguration('max_speed', default=5.0)
-    max_steering = LaunchConfiguration('max_steering', default=0.34)
+    # Scales the joy_teleop steering axis. Manual driving only -- it never reaches
+    # twist_to_ackermann (Nav2 path) or an external MPC publishing `drive` directly.
+    # 0.314 rad (18.0 deg) is the measured right-hand mechanical limit; the left lock
+    # is +0.419 rad (24.0 deg). The travel is asymmetric because the servo centre
+    # offset is 0.56, not 0.5, so the two bounds are not equidistant from zero.
+    # The former 0.34 clipped right -- servo = -1.1448*0.34 + 0.56 = 0.9492 against
+    # the 0.92 maximum -- and the VESC logged "above maximum limit" on every hard
+    # right turn. 0.314 is the largest symmetric command that clips on neither side.
+    max_steering = LaunchConfiguration('max_steering', default=0.314)
 
     joy_la = DeclareLaunchArgument(
             'joy_config',

@@ -311,13 +311,16 @@ def generate_launch_description():
                 {'ackermann_cmd_topic': 'drive'},
                 {'frame_id': 'base_link'},
                 {'cmd_angle_instead_rotvel': False},
-                # The node's own symmetric saturation, in radians. Its upstream default is 0.4,
-                # which exceeds this car's real LEFT lock: with steering_angle_to_servo_offset 0.56
-                # and gain -1.4, servo = -1.4*0.4 + 0.56 = 0.0, below the 0.08 minimum, so the VESC
-                # clips and logs "below minimum limit". 0.25 < 0.257 rad keeps both locks inside the
-                # servo range. This is NOT the `max_steering` launch arg — that only scales the
-                # joystick and never reaches this node.
-                {'max_steering_angle': 0.25},
+                # The node's own symmetric saturation, in radians, and the limit on the Nav2
+                # path. Its upstream default is 0.4, which exceeds this car's real RIGHT lock.
+                # With the calibrated steering_angle_to_servo_gain -1.1448 and offset 0.56 the
+                # servo range [0.08, 0.92] corresponds to +0.419 rad (24.0 deg) left and
+                # -0.314 rad (18.0 deg) right, so 0.314 is the largest symmetric command that
+                # clips on neither side. Was 0.25, justified by arithmetic that used the old
+                # gain -1.4 and a 0.257 rad bound; both are superseded by the 2026-08-07
+                # calibration. This is NOT the `max_steering` launch arg -- that only scales
+                # the joystick and never reaches this node.
+                {'max_steering_angle': 0.314},
             ],
             remappings=[('ackermann_cmd_out', 'ackermann_drive'),
                         ('ackermann_cmd', 'vehicle/ackermann_cmd'),
