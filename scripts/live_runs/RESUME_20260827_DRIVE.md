@@ -1,5 +1,45 @@
 # Resume — everything left, in the order it can be done
 
+> ## ★ START HERE — handoff written 2026-08-27 ~10:20 EDT
+>
+> **This document is the handoff. Do not write a new RESUME/HANDOFF file** — §7 records that this
+> family has repeatedly shipped stale blockers, and there were three of these in under 24 hours.
+> Correct this one in place, in the same commit as the work.
+>
+> **Machine state:** Jetson was shut down ~09:35 to recharge and comes back **on AC power**. The
+> container and everything in `/workspaces` are gone with it — **re-stage before anything**
+> (§6, and §0★.2 of `DEMO_RUNBOOK_20260810.md`).
+>
+> **One config change is staged in git and NOT yet on the robot or tested:**
+> `config/nav2_params.yaml` `movement_time_allowance` **100.0 → 10.0** (the nav2 default).
+> **`stage_0826c.sh` carries `f1tenth_stage_20260826c.tgz`, which predates this change — the tarball
+> must be re-cut from git HEAD (`git archive`) or the robot silently runs the old value.** That trap
+> has bitten before; grep the staged value after staging, do not assume.
+>
+> **First job, ~20 minutes, and it tests two things at once:**
+> 1. Re-stage, launch per §0★.6 of the runbook — **`use_composition:=False` is required** until
+>    bug-257 is understood.
+> 2. Wait for lifecycle **ACTIVE** (not just for the nodes to exist), start a bag *including*
+>    `/goal_pose`, hold R1, send the same goal.
+> 3. Expected if the change works: the car stalls ~0.38 m short as before, then **aborts within 10 s
+>    and fires a recovery** — which would close `testing_checklist.md`'s "`BackUp` reached by the BT
+>    itself", never once observed. If instead a legitimately slow approach aborts early, revert to
+>    100.0; the comment in the file says so.
+>
+> **Then, in order:** the second lead on the 0.379 m stall (last command 0.269 m/s vs a measured
+> 0.20–0.26 m/s ground breakaway — carry it in **ERPM**, not m/s); bug-257 proper, now that
+> non-composed runs name the dying process; obstacle avoidance; §1(c) mapping mode and §1(e) the
+> particle-cloud display; then arm A (§3), which needs a battery and a taped floor.
+>
+> **Read §7 before planning around any blocker named here.** Six stale ones have been caught in this
+> family so far. Verify each against the machine first — `git log @{u}..HEAD`, `git status`, read the
+> shipping source — then fix the doc in the same commit.
+>
+> **Five commits are local and unpushed** as of this writing (`b23e8e9`, `57aff53`, `5a4cce9`,
+> `309b1e2`, plus the `movement_time_allowance` change). Check with `git log @{u}..HEAD` rather than
+> trusting this line — that is exactly the kind of claim §7 is about.
+
+
 **Repo:** `f1tenth_launch` · branch `perf/config-tuning` · pushed through `1ad686c`
 **gosling1:** `192.168.2.195`, direct `ssh gosling1@192.168.2.195` (no jump host)
 

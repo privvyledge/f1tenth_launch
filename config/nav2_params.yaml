@@ -96,7 +96,13 @@ controller_server:
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
-      movement_time_allowance: 100.0 # 10.0
+      # 10.0 is the nav2 default. Raised to 100.0 at some point; restored 2026-08-27 because the
+      # relaxed value is what let a stalled goal sit commanding zero for 100 s instead of failing
+      # and running a recovery. On the 2026-08-27 drive the car stopped 0.379 m short of a 0.25 m
+      # tolerance and then idled -- with 10.0 it would have aborted and fired the recovery subtree,
+      # which is also the never-observed "BackUp reached by the BT itself" test. UNTESTED on
+      # hardware; revert to 100.0 if a legitimately slow approach now aborts prematurely.
+      movement_time_allowance: 10.0 # was 100.0
 
     # Goal checker parameters
     #precise_goal_checker:
