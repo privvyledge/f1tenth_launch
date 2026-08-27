@@ -10,15 +10,17 @@
 > container and everything in `/workspaces` are gone with it — **re-stage before anything**
 > (§6, and §0★.2 of `DEMO_RUNBOOK_20260810.md`).
 >
-> **One config change is staged in git and NOT yet on the robot or tested:**
-> `config/nav2_params.yaml` `movement_time_allowance` **100.0 → 10.0** (the nav2 default).
-> **`stage_0826c.sh` carries `f1tenth_stage_20260826c.tgz`, which predates this change — the tarball
-> must be re-cut from git HEAD (`git archive`) or the robot silently runs the old value.** That trap
-> has bitten before; grep the staged value after staging, do not assume.
+> **DONE 2026-08-27 ~18:05 EDT — the tarball was re-cut and staged.** `config/nav2_params.yaml`
+> `movement_time_allowance` **100.0 → 10.0** (the nav2 default) is committed as `614c463` and now
+> ships: **`stage_0827.sh`** carries **`f1tenth_stage_20260827.tgz`**
+> (md5 `9c1c6b66fb8531e8fb4c48e917908655`, `git archive HEAD` over the same path set as 0826c, 180
+> entries, verified to contain `movement_time_allowance: 10.0`), and adds a ninth installed-tree
+> check for that value. Both are on the robot at `/mnt/f1tenth_ssd/shared_dir/`. **Use `stage_0827.sh`
+> — re-staging `0826c` silently reverts to 100.0.** The change is still **UNTESTED on hardware**.
 >
 > **First job, ~20 minutes, and it tests two things at once:**
-> 1. Re-stage, launch per §0★.6 of the runbook — **`use_composition:=False` is required** until
->    bug-257 is understood.
+> 1. Stage with `stage_0827.sh`, launch per §0★.6 of the runbook — **`use_composition:=False` is
+>    required** until bug-257 is understood.
 > 2. Wait for lifecycle **ACTIVE** (not just for the nodes to exist), start a bag *including*
 >    `/goal_pose`, hold R1, send the same goal.
 > 3. Expected if the change works: the car stalls ~0.38 m short as before, then **aborts within 10 s
@@ -35,9 +37,16 @@
 > family so far. Verify each against the machine first — `git log @{u}..HEAD`, `git status`, read the
 > shipping source — then fix the doc in the same commit.
 >
-> **Five commits are local and unpushed** as of this writing (`b23e8e9`, `57aff53`, `5a4cce9`,
-> `309b1e2`, plus the `movement_time_allowance` change). Check with `git log @{u}..HEAD` rather than
-> trusting this line — that is exactly the kind of claim §7 is about.
+> **Six commits are local and unpushed**, checked 2026-08-27 18:04 with `git log @{u}..HEAD`:
+> `ca645bf`, `b23e8e9`, `57aff53`, `5a4cce9`, `309b1e2`, `614c463` (the `movement_time_allowance`
+> change). The line here previously said five and omitted `ca645bf` — re-check rather than trusting
+> it, which is exactly the kind of claim §7 is about.
+>
+> **Machine check 2026-08-27 18:06 (robot up 4 min, on AC):** clock correct, load 0.13, root fs
+> 915 G / 12 % used, RealSense **present**, YDLidar CP210x **present**, **`/dev/sensors/vesc` ABSENT
+> (drive battery off)** and **`/dev/input/js0` ABSENT (DualSense not connected)**. Both are operator
+> actions and both are required before any drive — no VESC means no actuation, no joystick means the
+> `command_gate` heartbeat never arrives and the gate stays shut.
 
 
 **Repo:** `f1tenth_launch` · branch `perf/config-tuning` · pushed through `1ad686c`
@@ -422,19 +431,21 @@ bash ~/bolus_ws/f1tenth_launch.sh
 Then, from the host or inside the container:
 
 ```bash
-FLIP=1 bash /mnt/shared_dir/stage_0826c.sh      # ~1 min
+FLIP=1 bash /mnt/shared_dir/stage_0827.sh      # ~1 min
 ```
 
 **`/mnt/shared_dir` is the in-container path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`** —
 there is no `/mnt/shared_dir` on the Jetson itself, so the command above only runs inside the
 container (or via `docker exec`). Corrected 2026-08-27 after a session lost minutes to it.
 
-`stage_0826c.sh` supersedes `stage_0826.sh`. It carries **`f1tenth_stage_20260826c.tgz`**
-(md5 `5e39c50d3512756b524a339029450f76`, cut from git HEAD with `git archive`; it carries the
-bug-245 gate), clones the `imu_pipeline` fork and rebuilds `imu_processors`, and verifies eight
-values in the **installed** tree. `FLIP=1` applies a temporary `remove_imu_bias:='True'` for wiring
-tests; **omit it** for the committed `'False'`. **Re-staging `0826b` or `0825` silently reverts
-today's work.**
+`stage_0827.sh` supersedes `stage_0826c.sh` (which superseded `stage_0826.sh`). It carries
+**`f1tenth_stage_20260827.tgz`** (md5 `9c1c6b66fb8531e8fb4c48e917908655`, cut from git HEAD
+`614c463` with `git archive` over the same path set as 0826c — it carries the bug-245 gate,
+`movement_time_allowance: 10.0` and the `nav2_goal_probe.py` live-robot fix), clones the
+`imu_pipeline` fork and rebuilds `imu_processors`, and verifies **nine** values in the **installed**
+tree. `FLIP=1` applies a temporary `remove_imu_bias:='True'` for wiring tests; **omit it** for the
+committed `'False'`. **Re-staging `0826c`, `0826b` or `0825` silently reverts today's work** — 0826c
+predates `movement_time_allowance`.
 
 Two live checks worth running after any stage:
 

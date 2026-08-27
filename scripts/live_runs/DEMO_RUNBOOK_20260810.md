@@ -31,11 +31,16 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0826c.sh"    # ~1 min, idempotent
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0827.sh"     # ~1 min, idempotent
 ```
 
-- **`stage_0826c.sh` supersedes `prep_container.sh` in §2 below.** It verifies eight values in the
-  *installed* tree and rebuilds the `imu_processors` fork. Add `FLIP=1` only for a bias-remover
+- **`stage_0827.sh` supersedes `stage_0826c.sh`** (which superseded `prep_container.sh` in §2
+  below). It carries `f1tenth_stage_20260827.tgz`, md5 `9c1c6b66fb8531e8fb4c48e917908655`, cut from
+  git HEAD `614c463` with `git archive` over the same path set as 0826c — so it adds
+  `movement_time_allowance: 10.0` and the `nav2_goal_probe.py` live-robot fix on top of everything
+  0826c carried. It verifies **nine** values in the *installed* tree (the ninth is
+  `movement_time_allowance`) and rebuilds the `imu_processors` fork. **Re-staging `0826c` reverts
+  the `movement_time_allowance` change** — the tarball predates it. Add `FLIP=1` only for a bias-remover
   wiring test; omit it for the committed `remove_imu_bias:='False'`.
 - **`/mnt/shared_dir` is the IN-CONTAINER path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`.**
   There is no `/mnt/shared_dir` on the Jetson itself.
