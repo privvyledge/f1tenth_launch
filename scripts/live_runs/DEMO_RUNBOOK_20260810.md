@@ -2,6 +2,159 @@
 
 **gosling1 · image `humble-devel-08092026` · `ROS_DOMAIN_ID=42` · map `20260805/rtabmap_2d_final.yaml`**
 
+---
+
+# 0★ · CURRENT PROCEDURE — verified end to end 2026-08-27
+
+**Read this section instead of §§0–2 below.** Everything under it still holds unless contradicted
+here; the parts that went stale are marked inline. Verified on a session that ran eight cold
+launches and drove the car under Nav2.
+
+## 0★.1 · Machine check (30 s, ssh)
+
+```bash
+date                     # 1969 => fix before ANY timed measurement or bag
+uptime                   # load; a busy machine starves rf2o and the LiDAR
+ls /dev/sensors/vesc /dev/input/js0   # VESC needs its battery on to enumerate
+lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLidar)
+```
+
+- **The `mount | grep " / "` / "SD card is failing" advice below is RETIRED.** Since the 2026-08-24
+  reflash the M.2 is root, ~915 G with ~770 G free. `/dev/ttyUSB0` in the old §0 is also wrong —
+  the LiDAR shows up as the CP210x bridge.
+- **RealSense health**, when the camera is silent — count kernel re-enumerations, do not guess:
+  `docker exec $C bash -lc 'dmesg | grep -c "Found UVC 1.50 device"'`, wait 20 s idle, count again.
+  A burst of 4–16 every time anything opens it = **physical, reseat the cable** (bug-255). 2–3 at
+  boot and a `/sys/.../speed` of 5000 or 10000 is healthy.
+
+## 0★.2 · Container and staging
+
+```bash
+bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0826c.sh"    # ~1 min, idempotent
+```
+
+- **`stage_0826c.sh` supersedes `prep_container.sh` in §2 below.** It verifies eight values in the
+  *installed* tree and rebuilds the `imu_processors` fork. Add `FLIP=1` only for a bias-remover
+  wiring test; omit it for the committed `remove_imu_bias:='False'`.
+- **`/mnt/shared_dir` is the IN-CONTAINER path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`.**
+  There is no `/mnt/shared_dir` on the Jetson itself.
+- `package 'f1tenth_launch' not found, searching: ['/opt/ros/humble']` is an **unsourced overlay**,
+  not a failed build (bug-254). The searched-paths list is the diagnostic.
+
+## 0★.3 · The launch environment — every shell, including diagnosing shells
+
+```bash
+source /workspaces/f1tenth/install/setup.bash
+export ROS_DOMAIN_ID=42
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+export ROS_LOG_DIR=/mnt/shared_dir/<run-dir>/log_<name>       # never the Jetson home
+```
+
+- **A shell on the wrong domain or URI sees an empty graph and reads as a dead stack.** This is the
+  same class of error as suppressing stderr on a check whose negative result you will act on.
+- **`RMW_IMPLEMENTATION` is now set in the container environment** — the §4 warning below that it is
+  not, and that a raw `ros2 launch` silently runs FastRTPS, is **STALE as of 2026-08-25**. Verify in
+  one command rather than trusting either statement: `echo $RMW_IMPLEMENTATION`.
+- **Why `_lo` and not the container default**, measured 2026-08-27: both configs already carry `lo`
+  at priority 10, so the loopback fix behind the VSLAM-jitter result is in **both**. The static
+  config additionally binds `wlP1p1s0` and lists four remote robots, **all of which pinged ABSENT**
+  that day, costing ~200 failed `sendto`/sec per process across 41 nodes. RViz is unaffected — it
+  runs same-host and reaches you over SSH X11, not DDS.
+
+## 0★.4 · Pose seeding is now AUTOMATIC — do not seed by hand
+
+**bug-241 was verified on hardware 2026-08-27: six cold launches, six passes, zero identities**
+(and two more later the same session). `localization.launch.py` reads `initial_pose` out of
+`localizer_amcl.yaml` and publishes it on `initialpose` at `initialpose_seed_delay` (20 s), seeding
+AMCL and `ekf_map` from one number. Expected reading, ~35 s after launch:
+
+```bash
+ros2 run tf2_ros tf2_echo map base_link    # ~(0.445, -0.575, -84.5 deg), NOT identity
+```
+
+Across the eight launches: x 0.440–0.449, y 0.572–0.578, yaw −83.09° to −84.73°. **Identity means
+the bug-238 race fired** — diagnose with `ros2 topic info /amcl_pose --verbose` and read the
+**durability** of both ends, never the subscriber count. The manual `seed_initialpose.py` in §4
+below is now a fallback, not a step.
+
+**Parked at the spot, `map→base_link` ≈ (0.45, −0.57, −84.5°) is CORRECT, not drift.** And
+`odom→base_link` on a car that has not moved should be ≈ 0 — measured (0.003, 0.005, −0.13°) on
+2026-08-27, which **closes bug-231**. Read it as an absolute, never as drift-since-first-sample.
+
+## 0★.5 · Expected noise that is NOT a fault
+
+- **`visual_slam_node: Map folder '' does not exist. / Failed to localize in map. Error 4`**, five
+  times per launch, at the seed. This is the bug-245 gate **working**: the map path is correctly
+  empty, and cuVSLAM still reads the seed as a relocalization hint because
+  `visual_slam/initial_pose` is remapped to `initialpose` unconditionally (**bug-256**, open, noise
+  only). Before the fix it was `Error 3` and the container died **exit −6**.
+- **`twist_to_ackermann: Saturating steering_angle`** during a turn. Correct behaviour: Nav2 asks
+  for turns tighter than 18° and the node clamps to the configured 0.314 rad. Hit **12 %** of
+  commands on a real drive.
+- **rf2o alternating "Motion detected" / "Zero-velocity detected"** while parked, at v ≈ 0.02–0.03
+  m/s. The gate chatters at its threshold; it contributes −0.17 °/min and fused yaw is unaffected.
+  **Do not retune it.**
+
+## 0★.6 · Nav2 demo — the sequence that worked
+
+```bash
+# ... the 0*.3 exports first, then:
+ros2 launch f1tenth_launch bringup.launch.py \
+  slam:=False launch_navigation:=True launch_visualization:=True \
+  launch_twist_to_ackermann:=True log_level:=info use_composition:=False
+```
+
+1. **`launch_twist_to_ackermann:=True` is required** — it is the only `cmd_vel → drive` bridge, and
+   it defaults **False** because LUCIO's ego-MPC publishes `drive` directly. Without it Nav2 plans
+   happily and the car never moves. It is **not** declared in `bringup.launch.py`; it reaches
+   `vehicle.launch.py` by launch-config inheritance. That works — verified — but confirm the node
+   exists rather than assuming: `ros2 node list | grep twist_to_ackermann`.
+2. **`use_composition:=False` is a bug-257 workaround**, not a normal setting. Composed, the Nav2
+   container aborts with a silent SIGABRT *while executing a goal* (1.9 s and 7.2 s in, on two
+   runs). Non-composed it survived two full runs. n=2 — a lead, not a fix. Non-composed also gives
+   each server its own process, so an abort names itself, and costs zero-copy IPC.
+3. **WAIT for lifecycle ACTIVE before clicking.** A goal sent earlier is discarded with **no log
+   line at all** (bug-126), and looks exactly like a goal sent after a container abort.
+   ```bash
+   for n in bt_navigator planner_server controller_server behavior_server velocity_smoother; do
+     printf "%-20s " $n
+     ros2 service call /$n/get_state lifecycle_msgs/srv/GetState | grep -o "label=.*"
+   done
+   ```
+4. **Start the bag before the goal.** Include `/goal_pose` — without it you cannot tell afterwards
+   whether the click was even published.
+5. **Hold R1 (SDL button 10) for the WHOLE drive.** Releasing stops the car but does **not** stop
+   Nav2; it keeps replanning. Never button 5 (PS = power off).
+6. **Cancel the goal before relaxing — this is a safety step, not tidiness.** After stalling, Nav2
+   kept the goal active and decided to **reverse at 0.5 m/s**; with R1 held that drives the car
+   backwards unannounced. Humble has no `ros2 action cancel` CLI, so:
+   ```bash
+   ros2 service call /navigate_to_pose/_action/cancel_goal action_msgs/srv/CancelGoal \
+     "{goal_info: {goal_id: {uuid: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}, stamp: {sec: 0, nanosec: 0}}}"
+   ```
+   An all-zero UUID cancels every active goal. Confirm with `ros2 topic hz /cmd_vel` going silent.
+
+**What to expect**, from `nav2_drive4`: ~10 s of commands, ~5.8 m of path, 203/203 commands reaching
+the VESC, and a stop **0.379 m short** of the 0.25 m tolerance with heading well inside it. **No
+goal has yet formally SUCCEEDED.** Two open leads: the last command before it quits is 0.269 m/s
+against a measured ground breakaway of 0.20–0.26 m/s; and `movement_time_allowance: 100.0` (default
+10.0) makes Nav2 idle for 100 s rather than failing and recovering.
+
+## 0★.7 · Reading a crashed run
+
+- Composable-node output is **not** in `launch.log`. It is in
+  `$ROS_LOG_DIR/<container>_<pid>_<t>.log` — top level, **not** the dated subdirectory.
+- That file is **buffered**: on an abort it truncates at a 16384-byte boundary mid-word and the last
+  ~3 s are lost. `RCUTILS_LOGGING_BUFFERED_STREAM=0` does **not** fix it (console stream only).
+  This is why `use_composition:=False` is the diagnostic that actually works.
+- `launch.log` is drowned by the safety publisher: it is a `ros2 topic pub --rate 40` that prints
+  every message — **10 MB in 5 minutes** (bug-259). Filter `[ros2-N]` before reading anything.
+- Bags stopped with SIGINT have **no `metadata.yaml`**, so `ros2 bag info` fails. The `.db3` is
+  complete — read it with sqlite3 + `rclpy.serialization.deserialize_message`.
+
+---
+
 Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2–T5** = any ssh shell.
 `C` below = the container name from T1, e.g. `jetson_container_20260810_083904`.
 
@@ -11,8 +164,8 @@ Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2�
 
 - `date` → if the year is **1969**, fix it now, or every bag gets a 56-year jump mid-run:
   - `sudo date -s "2026-08-10 HH:MM:SS"` # ssh -t gosling1 'sudo date -s "2026-08-10 09:36:00"'
-- `mount | grep " / "` → must say `rw`. If `ro`, **reboot**; the SD card is failing (~25–30 min per boot).
-- `ls /dev/sensors/vesc /dev/ttyUSB0 /dev/input/js0` → all three must exist (VESC needs its **battery** on to enumerate).
+- ~~`mount | grep " / "` → must say `rw`. If `ro`, **reboot**; the SD card is failing.~~ **STALE** — since the 2026-08-24 reflash the M.2 is root (~915 G). See §0★.1.
+- ~~`ls /dev/sensors/vesc /dev/ttyUSB0 /dev/input/js0`~~ **STALE** — the LiDAR is the CP210x, not `ttyUSB0`. See §0★.1. (VESC still needs its **battery** on to enumerate.)
 
 ## 1 · Container — T1, desktop session only
 
@@ -25,7 +178,7 @@ Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2�
 
 ## 2 · Prep the container (T2) — ~90 s, idempotent
 
-- `/mnt/f1tenth_ssd/shared_dir/rf2o_zv_0809/prep_container.sh`
+- ~~`/mnt/f1tenth_ssd/shared_dir/rf2o_zv_0809/prep_container.sh`~~ **SUPERSEDED 2026-08-26 by `stage_0826c.sh`** — see §0★.2. The audit notes below are history.
 - Must end `container … is ready.` Re-run after **every** container restart — `/workspaces` is a container layer, not a bind mount.
 - It verifies steering gain `-1.1448`, wheelbase `0.256`, the `twist_to_ackermann` sign fix, and the rf2o zero-velocity gate.
 - **Audited 2026-08-10 on container `…_015546` — the package tree is NOT the problem it was.** All 111
@@ -141,14 +294,14 @@ state estimate. This costs one extra straight leg at the top of Run A.
     map_file:=/mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml
   ```
 
-- **`RMW_IMPLEMENTATION` is not optional here** (2026-08-10, bug-233). The image exports
+- **STALE as of 2026-08-25 — `RMW_IMPLEMENTATION` IS now set in the container environment; verify with `echo $RMW_IMPLEMENTATION` rather than trusting either version of this note.** Original text: **`RMW_IMPLEMENTATION` is not optional here** (2026-08-10, bug-233). The image exports
   `CYCLONEDDS_URI` but **not** `RMW_IMPLEMENTATION`, and only `00_env.sh:30` sets the latter. So a raw
   `ros2 launch` runs **FastRTPS** while every `live_runs` script runs **CycloneDDS** — the
   `CYCLONEDDS_URI` line above is silently inert without the RMW export, including the `lo` loopback
   setting that fixed the VSLAM jitter. Worse, a diagnosing shell on the other DDS sees an empty
   system. Export it in *every* shell that talks to this stack.
 
-- **`localize_isaac_vslam_on_startup:=False` is what stops the map looking rotated** (2026-08-10,
+- **RESOLVED — the guard is engaged by default since 2026-08-11 and was confirmed live 2026-08-27 (`ekf_map_node odom1` reads `...__NOT_FUSED`). bug-231 is CLOSED: parked `odom→base_link` measured (0.003, 0.005, −0.13°).** Original text: **`localize_isaac_vslam_on_startup:=False` is what stops the map looking rotated** (2026-08-10,
   bug-232). `ekf_map` fuses `odom1 = visual_slam/vis/slam_odometry` as an **absolute map-frame
   anchor**, which is only valid if VSLAM started localized into a saved, co-registered map. A guard
   exists (`ekf_map.launch.py:141` renames the topic to `…__NOT_FUSED`) and
@@ -168,7 +321,7 @@ state estimate. This costs one extra straight leg at the top of Run A.
   ros2 param get /ekf_map_node odom1     # must read  visual_slam/vis/slam_odometry__NOT_FUSED
   ```
 
-- **Seeding the pose is now optional insurance, not a required step.** With the guard engaged,
+- **SUPERSEDED 2026-08-27 — seeding is now AUTOMATIC and verified on hardware (bug-241, 6/6 cold launches). Do not seed by hand; see §0★.4.** Original text: **Seeding the pose is now optional insurance, not a required step.** With the guard engaged,
   `pose0 = amcl_pose` is the only global input and AMCL's own `set_initial_pose: True` (from
   `localizer_amcl.yaml`) propagates into `ekf_map` unaided — verified 2026-08-10 with **no seed at
   all**: `map→base_link` came up at `(0.463, -0.602, -79.31°)` and AMCL-vs-EKF agreement was 0.56°.

@@ -28,6 +28,11 @@ is the plan.
 
 ## 1 · Before the battery — five parked items
 
+**STATUS 2026-08-27: (a) ACCEPTED, (b) PASS, (d) PASS. (c) and (e) NOT DONE — they are what is
+left here.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
+at (the topic exists as `nav2_msgs/msg/ParticleCloud` but stays silent parked, because AMCL is
+motion-gated — so this needs a drive *and* an operator at RViz).
+
 These need the robot powered and the stack launched, but no drive. Do them first; each is minutes.
 
 **(a) bug-241 seed acceptance — the one that gates Nav2.** The `initialpose` auto-seed
@@ -205,6 +210,66 @@ launch fail" because the node is not installed. It is installed, source-built in
 ---
 
 ## 4 · Drive session, arm B — Nav2 closed-loop
+
+> ### RESULTS 2026-08-27 — the car drove itself under Nav2. Read this before re-planning arm B.
+>
+> **What is now done:** goal accepted end-to-end, planner, controller, `twist_to_ackermann`, mux,
+> `command_gate` and the VESC all exercised live; costmaps against a live LiDAR; the CPU comparison;
+> lifecycle-ACTIVE gating; bug-231 closed; bug-232's guard confirmed engaged.
+>
+> **Best run** (`nav2_drive4`, goal (−3.902, −2.459) yaw −178.85°):
+>
+> | | |
+> |---|---|
+> | Commanded drive | 10.10 s, 203 non-zero commands |
+> | Commands reaching the VESC | **203 of 203** (R1 held throughout) |
+> | Path / net displacement | **5.781 m** / 4.555 m |
+> | Speed | 0.500 commanded, `odometry/local` peak **0.622 m/s** |
+> | Final error | **0.379 m** (tol 0.25) and **4.8°** (tol 14.3°) |
+>
+> **It never formally reached a goal.** Heading is comfortably inside tolerance; position stops
+> ~0.38 m short. Two candidate causes, neither confirmed — do not "fix" either blind:
+> * The last command before it quit was **0.269 m/s**, against this car's measured ground breakaway
+>   of **0.20–0.26 m/s**. RPP decelerates straight into the speed below which the car cannot move.
+>   Carry this in ERPM, not m/s, if `speed_to_erpm_gain` is ever recalibrated.
+> * `nav2_params.yaml` `movement_time_allowance: 100.0` (default 10.0). Nav2 therefore sits
+>   commanding zero for 100 s instead of failing and running a recovery. **Restoring 10.0 is the
+>   single highest-value next experiment**: it tests the stall fix *and* delivers the never-observed
+>   "`BackUp` reached by the BT itself".
+>
+> **SAFETY — a real hazard found the hard way.** After the stall, Nav2 keeps the goal active and
+> keeps replanning. On the previous run it decided to **reverse at 0.5 m/s**. With R1 held that
+> would have driven the car backwards with no warning. **Cancel the goal before relaxing**, do not
+> just release R1:
+> ```bash
+> ros2 service call /navigate_to_pose/_action/cancel_goal action_msgs/srv/CancelGoal \
+>   "{goal_info: {goal_id: {uuid: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}, stamp: {sec: 0, nanosec: 0}}}"
+> ```
+> An all-zero UUID cancels every active goal. Humble has no `ros2 action cancel` CLI.
+>
+> **BLOCKER for repeat runs — bug-257.** `f1tenth_container` aborts with a silent SIGABRT **while
+> executing a goal** (1.9 s in on one run, 7.2 s on another; never idle). It did **not** fire across
+> two full runs with **`use_composition:=False`**, which is the strongest lead but is n=2, not proof.
+> Until it is understood, run Nav2 diagnostics non-composed — each server is then its own process and
+> the launch system names the one that dies. Expect higher CPU; that run's performance is not
+> representative.
+>
+> **Two diagnosis traps this cost a session to learn.** A goal clicked before the servers are ACTIVE
+> is discarded silently (bug-126); a goal clicked after the container aborted looks *identical* —
+> both give no plan, no `cmd_vel`, and nothing in any log. Check `ros2 node list | grep bt_navigator`
+> **first**. And `ros2 topic info /goal_pose` reporting `Subscription count: 1` proved to be a
+> `ros2 topic echo` of my own, not `bt_navigator` — use `--verbose` and read the node *name*, never
+> the count. Same lesson as bug-238.
+>
+> **Still open in arm B:** obstacle avoidance (no obstacles were placed), a formally SUCCEEDED goal,
+> `BackUp` reached by the BT, and `map_frequency`.
+>
+> **`min_turning_r: 0.462`** (`nav2_params.yaml:185`) is stale — its own comment derives it from 30°
+> of steering, and this car has 18.0° (0.314 rad), giving 0.788 m. It is currently **inert**, because
+> it lives under `AckermannConstraints`, which belongs to MPPI, and the active plugin is RPP. Fix it
+> before anyone switches controllers. Related: steering hit the ±0.314 limit in **12 %** of commands,
+> so the planner is routinely asking for turns the car cannot execute.
+
 
 **Everything left in Nav2 is closed-loop.** Offline is finished and passed: goals accepted in 1–2 ms,
 first plan in 0.00–0.05 s against the 5 s `max_planning_time`, `cmd_vel` continuous at 20 Hz bounded
@@ -457,13 +522,13 @@ same commit as the work.
 | § | Item | Marker | Where |
 |---|---|---|---|
 | 1 | Acceleration limit / throttle interpolator | `[!]` | **Won't-fix while MPC is the controller.** Enabling it breaks steering; keep `launch_throttle_interpolator_node:=False` |
-| 2 | joy_teleop starts without warnings | `[!]` | §1(d) — parked, and the record predates the heartbeat rework |
-| 5 | Odometry loop closure over ~5 m | `[ ]` | §3 — drive |
-| 6 | Particle cloud visible in RViz | `[!]` | §1(e) parked for the display; convergence-under-motion in §3 |
+| 2 | joy_teleop starts without warnings | **`[x]` 2026-08-27** | Zero warnings; the `[!]` was stale |
+| 5 | Odometry loop closure over ~5 m | `[ ]` | §3 — drive. **Note 2026-08-27**: `nav2_drive4` holds a 5.781 m driven path with `odometry/local`, `vesc_odom`, VSLAM and rf2o all recorded — that bag may close this offline with no further driving, if a tape measurement of the start/end marks can be recovered. It was NOT taped, so treat it as a candidate, not a result. |
+| 6 | Particle cloud visible in RViz | `[!]` | §1(e) — **still open**; needs an operator at RViz *and* motion, since AMCL is motion-gated |
 | 8 | VSLAM frame-delta warnings at high playback rates | `[!]` | Offline replay artefact; no live action |
-| 9 | Send a navigation goal | `[!]` | §4 — drive |
-| 9 | CPU load during navigation | `[!]` | §4 — drive, with the `top -b -n2 -d2` method |
-| 10 | Teleop mode: full stack launches | `[ ]` | §1(b) — parked |
+| 9 | Send a navigation goal | **`[x]` 2026-08-27** | Drove 5.781 m under Nav2; stopped 0.379 m short of tolerance. See §4 RESULTS |
+| 9 | CPU load during navigation | **`[x]` 2026-08-27** | No Nav2 CPU problem; the container is under ~3.5 %. See §4 RESULTS |
+| 10 | Teleop mode: full stack launches | **`[x]` 2026-08-27** | Full TF chain resolves, 41 nodes |
 | 10 | Mapping mode: no TF conflicts | `[!]` | §1(c) — parked, with `launch_2d_mapping:=True` |
 
 Update the markers in `testing_checklist.md` as each closes, in the same commit as the work.

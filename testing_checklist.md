@@ -521,12 +521,35 @@ Add bug notes inline under the failing item.
   ```
   > **Confirmed**: `5.0`. Rename took effect correctly.
 
-- [!] **Send a navigation goal** — 2D Nav Goal in RViz. Robot should plan and drive without crashing.
+- [x] **Send a navigation goal** — 2D Nav Goal in RViz. Robot should plan and drive without crashing.
+  **[2026-08-27] The car drove itself under Nav2 for the first time.** Four goals across three
+  launches. Best run (`nav2_drive4`): goal (−3.902, −2.459) yaw −178.85°, **10.10 s of commands,
+  203 of 203 reaching the VESC**, path **5.781 m**, net displacement 4.555 m, no crash.
+  **It did not formally reach the goal**: it stopped **0.379 m** short (tolerance 0.25 m) with
+  heading error **4.8°** (tolerance 14.3°) — heading good, position short. Two leads, neither yet
+  confirmed: the last command before it quit was **0.269 m/s**, and this car's measured ground
+  breakaway is 0.20–0.26 m/s, so RPP decelerated into the physical floor; and
+  `movement_time_allowance: 100.0` (default 10.0) means Nav2 then idles for 100 s instead of
+  declaring failure and firing a recovery. Bags `nav2_drive3` / `nav2_drive4` on the SSD (SIGINT-
+  stopped, so no `metadata.yaml` — read the `.db3` with sqlite).
+  **Prerequisite learned the hard way**: a goal clicked before the servers reach lifecycle ACTIVE is
+  discarded silently (bug-126), and a goal clicked after `f1tenth_container` has aborted (bug-257)
+  looks identical. Check `ros2 node list | grep bt_navigator` before debugging a dead goal.
   - Path should appear on map.
   - Robot should not oscillate or hesitate excessively at 10 Hz controller rate.
   > **[2026-08-26] The cited blocker is stale** — the `component_container_isolated` crash was fixed 2026-08-04. Live history since: **one** goal has ever driven this car under Nav2 (2026-08-06 21:47, a −44.8° right turn over 2.628 m, recorded as the bug-140 steering-sign verification). The 2026-08-10 demo attempt never got a clean goal — costmap out-of-bounds (bug-228) and the rotated-frame report (bug-231). Four fixes have landed since and **none has run as a set with Nav2**: bug-232 (VSLAM startup localization defaults False), bug-237 (map paths → `20260805`), bug-234 (AMCL yaw seed), bug-241 (auto-seed at t+20 s). Re-test is a drive-session item; pass `launch_twist_to_ackermann:=True` or `cmd_vel` never reaches the VESC.
 
-- [!] **CPU load during navigation** — with the reduced costmap frequencies, CPU on Nano should be lower than before. **[2026-08-04] Inconclusive**: stationary with no goal ever sent, `planner_server` appeared to run at 94.1% of one core. **[2026-08-06] That measurement was wrong (bug-127)** — `top -b -n1` reports cumulative-since-start, not an interval, and zombies were counted as live copies. Corrected: `planner_server` peaks ~100% of one core **during `on_configure`** while the global costmap is built, and sits at **2.5–5.5%** while actually planning. There is no standing CPU defect. What remains is a clean pre/post-tuning comparison on a quiet machine with a real goal pending — sample with `top -b -n2 -d2` and read only the second block.
+- [x] **CPU load during navigation**
+  **[2026-08-27] Measured live with a goal pending, `top -b -n2 -d2`, second block only.**
+  **There is no Nav2 CPU problem.** `f1tenth_container` — which holds every Nav2 server under the
+  default `use_composition:=True` — does not appear in the top 11 processes at all, i.e. under
+  ~3.5 %. The load is RViz (70 %), `sensing_container` (50 %) and `visual_slam_container` (34–72 %).
+  System 44.7 % idle with a goal pending vs 48.0 % idle after, load ~5.3 on 6 cores.
+  **Why the old per-process figures cannot be reproduced**: under composition `planner_server` is
+  **not a process**, it is a component inside a container — so bug-009's 94 % and even bug-127's
+  corrected 2.5–5.5 % only apply to a non-composed launch. Ask for the container, not the node.
+  *(Original entry retained below for history.)*
+   — with the reduced costmap frequencies, CPU on Nano should be lower than before. **[2026-08-04] Inconclusive**: stationary with no goal ever sent, `planner_server` appeared to run at 94.1% of one core. **[2026-08-06] That measurement was wrong (bug-127)** — `top -b -n1` reports cumulative-since-start, not an interval, and zombies were counted as live copies. Corrected: `planner_server` peaks ~100% of one core **during `on_configure`** while the global costmap is built, and sits at **2.5–5.5%** while actually planning. There is no standing CPU defect. What remains is a clean pre/post-tuning comparison on a quiet machine with a real goal pending — sample with `top -b -n2 -d2` and read only the second block.
   ```bash
   top -b -n1 | grep -E 'controller|costmap|planner'
   ```
