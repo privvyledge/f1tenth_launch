@@ -49,6 +49,27 @@ discovery-timing race.
 | — | container default (static DDS, domain 0) | (0.441, −0.577, −84.73°) | pass, **not counted** |
 | 1 | `_lo` + domain 42 | (0.445, −0.575, −84.46°) | **pass** |
 | 2 | `_lo` + domain 42 | (0.444, −0.574, −84.50°) | **pass** |
+| 3 | `_lo` + domain 42 | (0.441, −0.578, −84.40°) | **pass** |
+| 4 | `_lo` + domain 42 | (0.447, −0.576, −84.55°) | **pass** |
+| 5 | `_lo` + domain 42 | (0.449, −0.575, −84.60°) | **pass** |
+
+**ACCEPTED 2026-08-27. bug-241 is verified on hardware.** Five cold launches under the §6
+environment, plus one under the container default, **6 passes and 0 identities**. Spread across the
+five: 8 mm in x, 4 mm in y, **0.20° in yaw** — the auto-seed lands on `localizer_amcl.yaml`'s
+(0.445, −0.575, −1.4748) every time, and `ekf_map` takes it every time.
+
+Residual, stated honestly: at the doc's own 2:1 per-launch odds, five consecutive passes leave
+roughly a 13 % chance of a lucky streak, so this is ~87 % confidence, not proof. That is the bar
+this doc set and it is met. If a future run ever reads identity, the diagnosis is unchanged —
+`ros2 topic info /amcl_pose --verbose` and read the **durability** of both ends, not the subscriber
+count.
+
+**bug-245 also verified across the same six launches: 6/6**, `/visual_slam/tracking/odometry` at
+29.94–30.19 Hz every time, no exit −6. The crash half of that bug is closed. What remains is
+bug-256, the unconditional `visual_slam/initial_pose` remap — cuVSLAM still eats the seed as a
+relocalization hint and logs `Error 4` five times per launch. Harmless with an empty map path,
+noisy, and it re-arms under `localize_on_startup:=True`.
+
 
 ### Parked fusion baseline, 2026-08-27 (launch 2, `yaw_drift.py 60`)
 
