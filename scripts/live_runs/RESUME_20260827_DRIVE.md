@@ -48,6 +48,35 @@ discovery-timing race.
 |---|---|---|---|
 | — | container default (static DDS, domain 0) | (0.441, −0.577, −84.73°) | pass, **not counted** |
 | 1 | `_lo` + domain 42 | (0.445, −0.575, −84.46°) | **pass** |
+| 2 | `_lo` + domain 42 | (0.444, −0.574, −84.50°) | **pass** |
+
+### Parked fusion baseline, 2026-08-27 (launch 2, `yaw_drift.py 60`)
+
+Take the drive session's moving numbers against this, not against the 2026-08-06 figures.
+
+| source | n | °/min |
+|---|---|---|
+| **EKF local (`odometry/local`)** | 1800 | **+0.04** |
+| Isaac VSLAM (VO) | 1799 | +0.04 |
+| rf2o LiDAR odom | 524 | −0.17 |
+| EKF global (map) | 600 | −0.42 |
+| VESC wheel odom | 3002 | 0.00 |
+| VESC IMU (orientation) | 6005 | −14.89 |
+| RealSense IMU (orientation) | 12002 | +5.46 |
+| AMCL | 0 | — (motion-gated parked, expected) |
+
+z-gyro bias while stationary: **VESC +0.004584 rad/s** (15.76 °/min, the bug-129 defect, still
+correctly excluded by `imu0` yaw `false`); **RealSense −0.002114 rad/s**.
+
+**Two findings worth carrying forward.** (a) `rf2o` chatters its zero-velocity gate on a parked car
+— alternating "Motion detected (v 0.021–0.029 m/s)" / "Zero-velocity detected" on 0.006–0.012 m scan
+diffs, i.e. sitting on the 0.02 m/s threshold — but it costs only −0.17 °/min and fused yaw is
+unaffected. **Cosmetic; do not retune it before the drive.** (b) The RealSense z-bias −0.002114
+rad/s agrees with the bias remover's offline converged estimate of −0.00214 to **2.6e−05**, live, on
+a different day and launch. That independently corroborates `BIAS_REMOVER_OFFLINE_20260826.md`,
+which until now rested only on a bag replay. It does **not** discharge the `remove_imu_bias`
+decision — §3's owed evidence is *driven* heading, which no parked run can reach.
+
 
 
 Identity means `ekf_map` started from a zero state (bug-238: `amcl_pose` is published
