@@ -5,6 +5,23 @@
         --goals-csv /mnt/shared_dir/maps/20260805/truth_mapping_drive_170025.csv \
         --goal-rows 150,250,350 --out-json /mnt/shared_dir/run/nav2_probe.json
 
+LIVE ROBOT
+----------
+    python3 nav2_goal_probe.py --ns "" --no-use-sim-time \
+        --goals "x,y,yaw" --out-json /mnt/shared_dir/run/nav2_live.json
+
+Both flags are required and neither is the default. `--ns ""` because bringup
+defaults use_f1tenth_namespace:=False, and `--no-use-sim-time` because a live
+stack publishes no /clock -- a sim-time node sees time frozen at 0, so every
+timeout here either fires instantly or never. Defaults were left at the replay
+values so existing invocations are unchanged.
+
+`--cmd-topic` defaults to cmd_vel_nav2, which pairs with launching Nav2 as
+`cmd_vel_topic:=cmd_vel_nav2`: the smoother AND behavior_server both move off
+cmd_vel (bug-125), so nothing reaches the VESC and the car cannot move. That is
+the safe parked configuration. For a real closed-loop drive, launch with the
+default cmd_vel and pass --cmd-topic cmd_vel.
+
 WHY A NODE AND NOT `ros2 action send_goal`
 ------------------------------------------
 The CLI can send the goal, but it cannot answer the questions this test exists
@@ -83,15 +100,25 @@ def path_length(path_msg):
 
 class Probe(Node):
 
-    def __init__(self, ns, cmd_topic):
-        super().__init__('nav2_goal_probe', namespace=ns,
+    def __init__(self, ns, cmd_topic, use_sim_time=True):
+        # use_sim_time has to be set at construction -- the clock is built when
+        # the node is, so setting it afterwards leaves a node already bound to
+        # the wrong clock. Same reason as seed_initialpose.py.
+        super().__init__('nav2_goal_probe', namespace=ns or '/',
                          parameter_overrides=[
-                             Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+                             Parameter('use_sim_time', Parameter.Type.BOOL,
+                                       use_sim_time)])
         self.ns = ns
+        # An empty ns is the un-namespaced live stack (bringup defaults
+        # use_f1tenth_namespace:=False). Building '/{ns}/plan' with ns '' gives
+        # '//plan', which is not the same topic as '/plan' -- so every name has
+        # to go through here rather than through an f-string.
+        self.pfx = f'/{ns}' if ns else ''
         self.buf = Buffer()
         TransformListener(self.buf, self)
 
-        self.client = ActionClient(self, NavigateToPose, f'/{ns}/navigate_to_pose')
+        self.client = ActionClient(self, NavigateToPose,
+                                   f'{self.pfx}/navigate_to_pose')
 
         # Everything below is reset per goal by arm().
         self.plans = []          # (sim_t, n_poses, length_m)
@@ -100,9 +127,9 @@ class Probe(Node):
         self.feedback = []       # (sim_t, distance_remaining, n_recoveries)
         self.recording = False
 
-        self.create_subscription(Path, f'/{ns}/plan', self._on_plan, 10)
-        self.create_subscription(Path, f'/{ns}/local_plan', self._on_local_plan, 10)
-        self.create_subscription(Twist, f'/{ns}/{cmd_topic}', self._on_cmd, 10)
+        self.create_subscription(Path, f'{self.pfx}/plan', self._on_plan, 10)
+        self.create_subscription(Path, f'{self.pfx}/local_plan', self._on_local_plan, 10)
+        self.create_subscription(Twist, f'{self.pfx}/{cmd_topic}', self._on_cmd, 10)
 
         # The recovery behaviours do not honour cmd_vel_topic — nav2_behaviors
         # creates its publisher on the relative name `cmd_vel` and neither this
@@ -110,7 +137,7 @@ class Probe(Node):
         # plain topic separately so a recovery that escapes the diversion is
         # counted rather than inferred.
         self.raw_cmds = []
-        self.create_subscription(Twist, f'/{ns}/cmd_vel', self._on_raw_cmd, 10)
+        self.create_subscription(Twist, f'{self.pfx}/cmd_vel', self._on_raw_cmd, 10)
 
     # -- sim clock -----------------------------------------------------------
     def now(self):
@@ -185,7 +212,7 @@ class Probe(Node):
         onward, but nav2_util::SimpleActionServer rejects every goal while
         inactive and logs nothing when it does. Asking the node its own state
         is the only gate that means what it looks like it means."""
-        cli = self.create_client(GetState, f'/{self.ns}/{server}/get_state')
+        cli = self.create_client(GetState, f'{self.pfx}/{server}/get_state')
         if not cli.wait_for_service(timeout_sec=wall_timeout):
             self.get_logger().error(f'{server}/get_state never appeared')
             return False
@@ -277,7 +304,18 @@ def load_goals(args):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--ns', default='gosling1')
+    ap.add_argument('--ns', default='gosling1',
+                    help='pass --ns "" for a live un-namespaced bringup '
+                         '(use_f1tenth_namespace defaults False)')
+    # Defaults True so every existing bag-replay invocation is unchanged.
+    # A live stack has no /clock, so a sim-time node sees time frozen at 0 and
+    # every timeout below either fires instantly or never.
+    ap.add_argument('--use-sim-time', dest='use_sim_time',
+                    action='store_true', default=True,
+                    help='default; for a bag replay')
+    ap.add_argument('--no-use-sim-time', dest='use_sim_time',
+                    action='store_false',
+                    help='REQUIRED on a live robot')
     ap.add_argument('--cmd-topic', default='cmd_vel_nav2',
                     help='velocity smoother output to watch (the launch arg '
                          'cmd_vel_topic; cmd_vel_nav2 in a dry/bag run)')
@@ -305,17 +343,23 @@ def main():
     # Same /tf remap trap as seed_initialpose.py: TransformListener subscribes
     # to the absolute /tf, so a namespaced node without this listens to a topic
     # nobody publishes and reports an empty tree.
-    rclpy.init(args=['--ros-args',
+    # An empty --ns is the un-namespaced live stack: remapping /tf to //tf
+    # would point the listener at a topic nobody publishes and report an empty
+    # tree, so skip the remap entirely in that case.
+    init_args = None
+    if args.ns:
+        init_args = ['--ros-args',
                      '-r', f'/tf:=/{args.ns}/tf',
-                     '-r', f'/tf_static:=/{args.ns}/tf_static'])
-    p = Probe(args.ns, args.cmd_topic)
+                     '-r', f'/tf_static:=/{args.ns}/tf_static']
+    rclpy.init(args=init_args)
+    p = Probe(args.ns, args.cmd_topic, use_sim_time=args.use_sim_time)
     log = p.get_logger()
 
     report = {'ns': args.ns, 'cmd_topic': args.cmd_topic, 'goals': []}
 
     # The action server has to exist before anything else is worth trying.
     if not p.client.wait_for_server(timeout_sec=args.settle):
-        log.error(f'/{args.ns}/navigate_to_pose action server never appeared')
+        log.error(f'{p.pfx}/navigate_to_pose action server never appeared')
         report['fatal'] = 'no navigate_to_pose action server'
         _finish(report, args, p, rc=1)
 
