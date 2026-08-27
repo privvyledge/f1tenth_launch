@@ -31,9 +31,13 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0827.sh"     # ~1 min, idempotent
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0827b.sh"    # ~1 min, idempotent
 ```
 
+- **`stage_0827b.sh` supersedes `stage_0827.sh`** — it carries `f1tenth_stage_20260827b.tgz`
+  (md5 `e61a8151d0d074f7b581808d41b1e912`, cut from `aced708`), which adds the
+  `container_multi_threaded` fix, and checks eleven values instead of nine. The 0827 entry below is
+  kept because its md5 is what the earlier runs of that evening were staged from.
 - **`stage_0827.sh` supersedes `stage_0826c.sh`** (which superseded `prep_container.sh` in §2
   below). It carries `f1tenth_stage_20260827.tgz`, md5 `9c1c6b66fb8531e8fb4c48e917908655`, cut from
   git HEAD `614c463` with `git archive` over the same path set as 0826c — so it adds
@@ -107,7 +111,8 @@ below is now a fallback, not a step.
 # ... the 0*.3 exports first, then:
 ros2 launch f1tenth_launch bringup.launch.py \
   slam:=False launch_navigation:=True launch_visualization:=True \
-  launch_twist_to_ackermann:=True log_level:=info use_composition:=False
+  launch_twist_to_ackermann:=True log_level:=info \
+  > $ROS_LOG_DIR/launch_stdout.log 2>&1
 ```
 
 1. **`launch_twist_to_ackermann:=True` is required** — it is the only `cmd_vel → drive` bridge, and
@@ -115,10 +120,16 @@ ros2 launch f1tenth_launch bringup.launch.py \
    happily and the car never moves. It is **not** declared in `bringup.launch.py`; it reaches
    `vehicle.launch.py` by launch-config inheritance. That works — verified — but confirm the node
    exists rather than assuming: `ros2 node list | grep twist_to_ackermann`.
-2. **`use_composition:=False` is a bug-257 workaround**, not a normal setting. Composed, the Nav2
-   container aborts with a silent SIGABRT *while executing a goal* (1.9 s and 7.2 s in, on two
-   runs). Non-composed it survived two full runs. n=2 — a lead, not a fix. Non-composed also gives
-   each server its own process, so an abort names itself, and costs zero-copy IPC.
+2. **`use_composition:=False` is NO LONGER NEEDED — bug-257 is fixed** (2026-08-27 evening,
+   `aced708`). The abort was `--use_multi_threaded_executor` on `f1tenth_container`, not composition:
+   under a multi-threaded executor rclcpp can call `is_ready()`/`take_data()`/`execute()` for an
+   action **client** out of order across threads, and the client throws
+   `std::runtime_error("Taking data from action client but no ready event")`, aborting the process
+   (ros2/rclcpp#2242; the upstream fixes #2250/#2495 are not in Humble). `bt_navigator` is an action
+   client of the servers in its own container, which is why only an *executing goal* triggered it.
+   The flag is now the `container_multi_threaded` argument, default `False`. Composed runs then took
+   three consecutive 70 s goals across two launches with no abort. Leave composition on.
+   **The redirect on the launch line is not optional** — see §0★.7.
 3. **WAIT for lifecycle ACTIVE before clicking.** A goal sent earlier is discarded with **no log
    line at all** (bug-126), and looks exactly like a goal sent after a container abort.
    ```bash
@@ -152,7 +163,12 @@ against a measured ground breakaway of 0.20–0.26 m/s; and `movement_time_allow
   `$ROS_LOG_DIR/<container>_<pid>_<t>.log` — top level, **not** the dated subdirectory.
 - That file is **buffered**: on an abort it truncates at a 16384-byte boundary mid-word and the last
   ~3 s are lost. `RCUTILS_LOGGING_BUFFERED_STREAM=0` does **not** fix it (console stream only).
-  This is why `use_composition:=False` is the diagnostic that actually works.
+- **Redirect `ros2 launch`'s own STDOUT to a file instead** — `ros2 launch … > $ROS_LOG_DIR/launch_stdout.log 2>&1`.
+  The launch system pipes every process's stdout through with a `[<process>-N]` prefix, so the C++
+  runtime's dying words (`terminate called after throwing…`, `what(): …`) land there even though
+  they never reach the rcutils log file or `launch.log`. Three sessions hunted bug-257 inside the
+  truncated log; the stdout redirect produced the exact exception on the first try. Do it on every
+  run — it costs nothing and it is the only place an abort explains itself.
 - `launch.log` is drowned by the safety publisher: it is a `ros2 topic pub --rate 40` that prints
   every message — **10 MB in 5 minutes** (bug-259). Filter `[ros2-N]` before reading anything.
 - Bags stopped with SIGINT have **no `metadata.yaml`**, so `ros2 bag info` fails. The `.db3` is

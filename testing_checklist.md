@@ -535,6 +535,22 @@ Add bug notes inline under the failing item.
   **Prerequisite learned the hard way**: a goal clicked before the servers reach lifecycle ACTIVE is
   discarded silently (bug-126), and a goal clicked after `f1tenth_container` has aborted (bug-257)
   looks identical. Check `ros2 node list | grep bt_navigator` before debugging a dead goal.
+  **[2026-08-27 evening, parked on AC — no battery, no VESC, no joystick]** Three further goals,
+  and the two blockers above are closed. **bug-257 is fixed** (`aced708`): the abort was
+  `--use_multi_threaded_executor` on `f1tenth_container` triggering the rclcpp action-client race
+  ros2/rclcpp#2242, not composition and not Nav2; the flag is now the `container_multi_threaded`
+  argument, default `False`, and composed runs took 3 × 70 s goals across 2 launches with no abort.
+  **`movement_time_allowance: 10.0` is verified on hardware**: `FollowPath` failed at 10.01, 10.22,
+  10.01, 10.02 and 10.03 s. Safety held throughout — `/vehicle/ackermann_cmd` carried **0 messages**
+  against 2678 on `/drive`, because the `command_gate` never saw a joystick heartbeat.
+
+- [x] **Recovery behaviours reached by the behavior tree itself** — not invoked directly.
+  **[2026-08-27]** First observation, parked. On a progress-checker failure the BT ran the recovery
+  ladder in order: `ClearingActions` (local + global costmap clears) → `Wait` (5.0 s) →
+  **`BackUp` IDLE→RUNNING→FAILURE** at t+50.90 s. `BackUp` failing in 30 ms is correct — the car
+  physically could not move. Read from `/behavior_tree_log` in `bag_parked2_nocomp`
+  (`scripts/live_runs/RESUME_20260827_DRIVE.md` §4a); the bag has no `metadata.yaml` (SIGINT), so
+  read the `.db3` with sqlite3.
   - Path should appear on map.
   - Robot should not oscillate or hesitate excessively at 10 Hz controller rate.
   > **[2026-08-26] The cited blocker is stale** — the `component_container_isolated` crash was fixed 2026-08-04. Live history since: **one** goal has ever driven this car under Nav2 (2026-08-06 21:47, a −44.8° right turn over 2.628 m, recorded as the bug-140 steering-sign verification). The 2026-08-10 demo attempt never got a clean goal — costmap out-of-bounds (bug-228) and the rotated-frame report (bug-231). Four fixes have landed since and **none has run as a set with Nav2**: bug-232 (VSLAM startup localization defaults False), bug-237 (map paths → `20260805`), bug-234 (AMCL yaw seed), bug-241 (auto-seed at t+20 s). Re-test is a drive-session item; pass `launch_twist_to_ackermann:=True` or `cmd_vel` never reaches the VESC.

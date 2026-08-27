@@ -18,7 +18,12 @@
 > check for that value. Both are on the robot at `/mnt/f1tenth_ssd/shared_dir/`. **Use `stage_0827.sh`
 > — re-staging `0826c` silently reverts to 100.0.** The change is still **UNTESTED on hardware**.
 >
-> **First job, ~20 minutes, and it tests two things at once:**
+> **RESULT 2026-08-27 evening — both of the first two jobs are DONE, parked, with no battery.**
+> See §4a. `movement_time_allowance: 10.0` is **verified on hardware**, `BackUp` reached by the BT
+> itself is **observed for the first time**, and **bug-257 is root-caused and fixed** (`aced708`).
+> Stage with **`stage_0827b.sh`** from here on; `use_composition:=False` is no longer needed.
+>
+> **Original first job, kept for the record:**
 > 1. Stage with `stage_0827.sh`, launch per §0★.6 of the runbook — **`use_composition:=False` is
 >    required** until bug-257 is understood.
 > 2. Wait for lifecycle **ACTIVE** (not just for the nodes to exist), start a bag *including*
@@ -320,6 +325,76 @@ launch fail" because the node is not installed. It is installed, source-built in
 > so the planner is routinely asking for turns the car cannot execute.
 
 
+### 4a · Parked session, 2026-08-27 evening — what a car with no battery settled
+
+Run on AC only: **no drive battery, no VESC** (`/dev/sensors/vesc` absent, `vesc_driver_node`
+respawning harmlessly), **no joystick**. Nothing could actuate — `/vehicle/ackermann_cmd` carried
+**0 messages** against 2678 on `/drive`, because the `command_gate` never saw a heartbeat. That is
+the whole safety argument for doing this parked, and it held.
+
+**bug-257 — ROOT-CAUSED AND FIXED (`aced708`).** Not a Nav2 bug, not a config fault, nothing to do
+with the vehicle. The container's dying words were never lost, only never captured:
+
+```
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Taking data from action client but no ready event
+process has died [pid 324, exit code -6 ... __node:=f1tenth_container]
+```
+
+That is **ros2/rclcpp#2242** — under a multi-threaded executor, `is_ready()`, `take_data()` and
+`execute()` for an action **client** can run on different threads out of order while the pimpl
+assumes they are serial. `bt_navigator` is an action client of the controller/planner/behavior
+servers *in the same container*, which is exactly why it fired only while a goal was executing and
+never idle. The upstream fixes (#2250, #2495) never reached Humble. The trigger is
+`--use_multi_threaded_executor`, **not composition** — that flag is now the `container_multi_threaded`
+launch argument, default `False`. `component_container_isolated` already gives each component its
+own executor thread, so this costs concurrency only *within* a component.
+
+| | with the flag | without it |
+|---|---|---|
+| Parked goals | died 3.1 s in | 3 goals × 70 s, 2 launches, **0 aborts** |
+| Driving goals (earlier) | died 1.9 s, 7.2 s in | — |
+| Container log | 16384 B, truncated mid-word | 24–59 kB, still growing |
+
+**How it was finally read, and the lesson worth more than the bug:** redirect `ros2 launch`'s own
+**stdout** to a file. The launch system pipes each process's stdout through with a `[<process>-N]`
+prefix, so the C++ runtime's `terminate called` message lands there — while `$ROS_LOG_DIR`'s
+container log truncates at 16384 bytes and `launch.log` never sees it at all. Three sessions
+searched the truncated log; the redirect gave the exception on the first attempt.
+
+**`movement_time_allowance: 10.0` — VERIFIED ON HARDWARE.** With the car unable to move, the
+`SimpleProgressChecker` failed `FollowPath` at **10.01, 10.22, 10.01, 10.02, 10.03 s** — the
+parameter is on the robot and it bites at 10 s, not 100 s. Parked is arguably the *better* test of
+the parameter, since there is no 0.269 m/s breakaway confound; what it cannot judge is whether 10 s
+is too tight for a slow real approach. Arithmetic says there is an order of magnitude of headroom:
+`required_movement_radius: 0.5` in 10 s is an average of **0.05 m/s**, against 0.5 m/s commanded.
+
+**Why it had been 100.0**, recovered from the author 2026-08-27: it was buying *operator* setup time
+on a Jetson TX2 — a goal sent before R1 is held makes no motion and aborts in 10 s. That is the
+checker working, and it is separable from approach time. Confirmed against the Humble source:
+`progress_checker_->reset()` runs in `ControllerServer::computeControl()` at goal acceptance and
+`baseline_time_` is stamped at the *first* `check()` inside the control loop, so **bringup startup
+time is never counted**. The fix is to hold R1 before sending the goal, not to widen the window.
+
+**`BackUp` reached by the BT itself — OBSERVED, first time ever.** From `/behavior_tree_log` on
+`bag_parked2_nocomp`: `FollowPath RUNNING→FAILURE` ×10, and the recovery ladder ran in order —
+`ClearingActions` (local + global costmap clears) → `Wait` (5.0 s) → **`BackUp` IDLE→RUNNING→FAILURE**
+at t+50.90 s. `BackUp` failing in 30 ms is correct here: the car cannot move. This closes the
+never-observed item in `testing_checklist.md`.
+
+**Cold launch #7 also passed the bug-241 seed** — `map→base_link` = (0.445, −0.583, **−84.500°**),
+and VSLAM held 29.95 Hz (bug-245). Both under `_lo` + domain 42.
+
+**One new observation, not chased:** `visual_slam_container` died with **exit −11 (SIGSEGV)** during
+the third launch — a segfault, distinct from bug-257's `-6`, and consistent with the standing
+"VSLAM aborts roughly one launch in three and does not respawn". Nav2 was unaffected. Bags and logs
+in `/mnt/shared_dir/claude_bringup_0827/` (`log_parked1` … `log_parked4_committed`).
+
+**Still open in arm B, and all of it needs the battery:** the 0.379 m stall, obstacle avoidance, a
+formally SUCCEEDED goal, and `map_frequency`.
+
+---
+
 **Everything left in Nav2 is closed-loop.** Offline is finished and passed: goals accepted in 1–2 ms,
 first plan in 0.00–0.05 s against the 5 s `max_planning_time`, `cmd_vel` continuous at 20 Hz bounded
 to ±0.5 m/s, recovery subtree fires and completes, nothing crashed or pegged a core
@@ -347,8 +422,8 @@ Then, on the drive:
   exercised live. **Confirm the container carries the `atan` fix before trusting a turn direction**
   (`/mnt/shared_dir/apply_twist_fix.sh <container>`, idempotent) — `/workspaces` is a container
   layer, so a fresh container starts from the image's pre-fix source.
-- **`BackUp` reached by the BT itself**, inside a goal window. It has only ever been invoked
-  directly.
+- ~~**`BackUp` reached by the BT itself**, inside a goal window.~~ **DONE 2026-08-27 parked** — see
+  §4a. The recovery ladder ran `ClearCostmaps → Wait → BackUp` on a progress-checker failure.
 - **Costmaps against a live LiDAR** rather than a replayed one.
 - **A clean CPU comparison** — §9. Sample with `top -b -n2 -d2` and parse **only the second block**;
   a single-shot `top -b -n1` reports cumulative-since-start and is what produced the discredited
