@@ -40,6 +40,16 @@ passing by luck, budget **five or six**. Per launch, read `map→base_link` once
 ros2 run tf2_ros tf2_echo map base_link      # expect ~(0.445, -0.575, -84.5 deg), NOT identity
 ```
 
+**Tally, 2026-08-27** — the acceptance sample runs under the §6 launch environment (`_lo` + domain
+42); a launch under the container-default DDS config is recorded separately, since bug-238 is a
+discovery-timing race.
+
+| # | Env | `map→base_link` | Verdict |
+|---|---|---|---|
+| — | container default (static DDS, domain 0) | (0.441, −0.577, −84.73°) | pass, **not counted** |
+| 1 | `_lo` + domain 42 | (0.445, −0.575, −84.46°) | **pass** |
+
+
 Identity means `ekf_map` started from a zero state (bug-238: `amcl_pose` is published
 TRANSIENT_LOCAL but `robot_localization` subscribes VOLATILE, so a late subscriber gets nothing and
 AMCL is motion-gated, so parked there is no second chance). **Diagnose with
@@ -92,6 +102,12 @@ t+20 s exactly matching the seed delay.
 
 `load_map_folder_path` is now gated on `localize_on_startup_effective`, the same condition as
 `localize_on_startup`, so both map paths are symmetric: no intent, no path.
+
+**VERIFIED 2026-08-27 — PASS on 2 of 2 cold launches.** `/visual_slam/tracking/odometry` at
+**30.3 Hz** and **29.99 Hz** several minutes past t+20 s, no exit −6, `visual_slam_node` alive in
+`ros2 node list`. The `load_map_folder_path` gate holds. Keep counting across the §1(a) launches —
+VSLAM aborts on roughly one launch in three for unrelated reasons, so 2 passes is encouraging, not
+conclusive; the §1(a) run gives the sample for free.
 
 **Verify** — VSLAM should survive past t+20 s and `/visual_slam/tracking/odometry` should be
 publishing. If it aborts again, move `/mnt/data/maps/nvidia/vslam_map` aside (making `map_exists`
@@ -254,6 +270,10 @@ Then, from the host or inside the container:
 FLIP=1 bash /mnt/shared_dir/stage_0826c.sh      # ~1 min
 ```
 
+**`/mnt/shared_dir` is the in-container path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`** —
+there is no `/mnt/shared_dir` on the Jetson itself, so the command above only runs inside the
+container (or via `docker exec`). Corrected 2026-08-27 after a session lost minutes to it.
+
 `stage_0826c.sh` supersedes `stage_0826.sh`. It carries **`f1tenth_stage_20260826c.tgz`**
 (md5 `5e39c50d3512756b524a339029450f76`, cut from git HEAD with `git archive`; it carries the
 bug-245 gate), clones the `imu_pipeline` fork and rebuilds `imu_processors`, and verifies eight
@@ -268,7 +288,36 @@ ros2 param get /realsense_imu_bias_removal_node stationary_timeout   # 0.5 -> th
 ros2 param get /realsense_imu_filter constant_dt                     # 0.005 -> bug-248 fix present
 ```
 
-The first is the only reliable proof of the fork: **stock `imu_processors` does not declare
+### The launch environment — set these, they are not in the container env
+
+The container ships `CYCLONEDDS_URI` pointing at `cyclonedds_config_static.xml` and **no
+`ROS_DOMAIN_ID` at all** (= domain 0). Neither is what a run should use. Every launch, and **every
+`docker exec` shell that checks it**, wants:
+
+```bash
+source /workspaces/f1tenth/install/setup.bash                            # bug-254: not in ~/.bashrc
+export ROS_DOMAIN_ID=42
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+export ROS_LOG_DIR=/mnt/shared_dir/claude_bringup_<date>/log_run<n>       # never the Jetson home
+```
+
+**A check shell on the wrong domain or URI sees an empty graph and reads as a dead stack.** This is
+the same trap as suppressing stderr on `ros2 topic hz`: a configuration mistake that presents as a
+negative measurement.
+
+Why `_lo` and not the container default, measured 2026-08-27: both configs already carry `lo` at
+priority 10, so the loopback fix behind the VSLAM-jitter result is in **both** — the difference is
+that the static config also binds `wlP1p1s0` and lists four remote robots as static peers, and on
+that day **all three reachable-in-principle peers pinged ABSENT**, costing ~200 failed `sendto`/sec
+per process across 41 nodes. `_lo` drops that. RViz is unaffected: it runs same-host and reaches the
+operator through SSH X11 forwarding, not through DDS. Pair `_lo` with a non-zero domain — its own
+header says so, and domain 0 is where a second agent's stack would collide.
+
+**Keep this constant across a multi-launch acceptance.** bug-238 is a discovery-timing race, so the
+DDS config is not neutral with respect to it; a five-launch seed acceptance split across two configs
+is not a homogeneous sample.
+
+The `stationary_timeout` check is the only reliable proof of the fork: **stock `imu_processors` does not declare
 `stationary_timeout` and silently ignores it** — the node starts and logs nothing — so a stock build
 reads as configured and is not. That query errors on stock.
 
@@ -339,10 +388,11 @@ same commit as the work.
 - **`command_gate_require_heartbeat:=False` does NOT hold the gate shut** — it collapses the logic to
   always-open. To keep it closed, leave the default `True` and disconnect the joystick.
 - CycloneDDS spams `ddsi_udp_conn_write … retcode -3` at absent peers. Harmless, but it will drown a
-  `ros2 param get` — pipe through `grep -v ddsi`. The config at
-  `/mnt/shared_dir/cyclonedds_config_static.xml` includes `lo` at priority 10 and applies to
-  **any** domain, and both `CYCLONEDDS_URI` and `RMW_IMPLEMENTATION` are set in the container
-  environment, so `docker exec` shells inherit them.
+  `ros2 param get` — pipe through `grep -v ddsi`. **The right fix is `cyclonedds_offline_lo.xml`,
+  not the grep** — see the launch-environment block in §6. `RMW_IMPLEMENTATION` and a
+  `CYCLONEDDS_URI` pointing at the *static* config are set in the container environment and are
+  inherited by `docker exec` shells; `ROS_DOMAIN_ID` is **not set**, so an unexported shell is on
+  domain 0. Both need overriding per shell.
 - Docker's default **bridge** network is broken on this kernel — `docker run` needs `--network host`.
 - `jetson-containers` bind-mounts `/tmp/argus_socket`, a *socket* on R36.4.3 but a *directory* in the
   image; **a fresh checkout reintroduces this** (bug-242).

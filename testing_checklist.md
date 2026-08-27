@@ -89,7 +89,12 @@ Add bug notes inline under the failing item.
   # Expected: 0.01
   ```
 
-- [!] **Joy_teleop starts without error** — should not log any missing parameter warnings.
+- [x] **Joy_teleop starts without error** — should not log any missing parameter warnings.
+  **[2026-08-27] PASS.** Zero `joy_teleop` WARN/ERROR lines across a full `bringup.launch.py`
+  launch log; `/joy` and `/joy_teleop` both present under CycloneDDS. The prior `[!]` predated the
+  two-heartbeat-command rework (bug-048) and was stale. The only WARNs in that launch are benign
+  startup-order ones: `rf2o` waiting for scans/TF at t=0, camera `unite_imu_method` param notes,
+  and `visual_slam_node` frame-delta messages during init.
   ```bash
   ros2 node list | grep joy_teleop
   ros2 node info /joy_teleop
@@ -530,7 +535,12 @@ Add bug notes inline under the failing item.
 
 ## 10. Integration — Full Bringup
 
-- [ ] **Teleop mode: full stack launches**.
+- [x] **Teleop mode: full stack launches**.
+  **[2026-08-27] PASS.** `bringup.launch.py slam:=False launch_navigation:=False`, 41 nodes.
+  Full chain resolves from `map`: `odom`, `base_link`, `lidar`, `camera_link`, `imu_link`,
+  `base_footprint`, `front_axle`. `/odometry/local` 30.0 Hz, `/visual_slam/tracking/odometry`
+  30.0 Hz, `/lidar/scan_filtered` 8.7 Hz, `/odom/rf2o` 8.2 Hz (the ~8 Hz YDLidar rate on this
+  Jetson, not CPU starvation).
   ```bash
   ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=False
   ros2 run tf2_tools view_frames
