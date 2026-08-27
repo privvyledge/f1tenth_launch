@@ -66,6 +66,7 @@ def launch_setup(context, *args, **kwargs):
                                       default=nav2_params_file_path)
     autostart = LaunchConfiguration('autostart', default='True')
     use_composition = LaunchConfiguration('use_composition', default='True')
+    container_multi_threaded = LaunchConfiguration('container_multi_threaded', default='False')
     use_respawn = LaunchConfiguration('use_respawn', default='True')
     log_level = LaunchConfiguration('log_level')
 
@@ -262,6 +263,20 @@ def launch_setup(context, *args, **kwargs):
     declare_use_composition_cmd = DeclareLaunchArgument(
             'use_composition', default_value=use_composition,
             description='Whether to use composed bringup')
+
+    declare_container_multi_threaded_cmd = DeclareLaunchArgument(
+            'container_multi_threaded', default_value=container_multi_threaded,
+            description="Run f1tenth_container's per-component executors multi-threaded. "
+                        "Default False: under a multi-threaded executor rclcpp may call "
+                        "is_ready()/take_data()/execute() for an action CLIENT from different "
+                        "threads out of order, and the client throws "
+                        "std::runtime_error('Taking data from action client but no ready event'), "
+                        "aborting the whole container (exit -6). bt_navigator is an action client "
+                        "of the controller/planner/behavior servers in this container, so it fired "
+                        "a few seconds into every Nav2 goal and never while idle. Upstream "
+                        "ros2/rclcpp#2242; the fixes (#2250, #2495) are not in Humble. "
+                        "component_container_isolated already gives each component its own "
+                        "executor thread, so this costs concurrency only within a component.")
 
     declare_use_respawn_cmd = DeclareLaunchArgument(
             'use_respawn', default_value=use_respawn,
@@ -628,6 +643,7 @@ def launch_setup(context, *args, **kwargs):
         declare_params_file_cmd,
         declare_autostart_cmd,
         declare_use_composition_cmd,
+        declare_container_multi_threaded_cmd,
         declare_use_respawn_cmd,
         declare_log_level_cmd,
         launch_joystick_arg,
@@ -752,6 +768,13 @@ def launch_setup(context, *args, **kwargs):
         _params_file_with_prefix,
         allow_substs=True)
 
+    # '--use_multi_threaded_executor' is what aborts this container a few seconds into every Nav2
+    # goal (rclcpp action-client race; see declare_container_multi_threaded_cmd above). Opt in only
+    # if something in here genuinely needs intra-component concurrency.
+    container_arguments = ['--ros-args', '--log-level', log_level]
+    if container_multi_threaded.perform(context).lower() in ('true', '1'):
+        container_arguments.insert(0, '--use_multi_threaded_executor')
+
     component_container_node = Node(
             condition=IfCondition(use_composition),
             name='f1tenth_container',  # todo: set as a launch argument
@@ -766,10 +789,7 @@ def launch_setup(context, *args, **kwargs):
                     'thread_num': os.cpu_count(),
                 }
             ],
-            arguments=[
-                '--use_multi_threaded_executor',
-                '--ros-args', '--log-level', log_level
-            ],
+            arguments=container_arguments,
             remappings=remappings,
             output='screen')
 
