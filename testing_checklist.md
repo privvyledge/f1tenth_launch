@@ -217,7 +217,7 @@ Add bug notes inline under the failing item.
   ros2 topic hz /lidar/scan_filtered
   ```
 
-- [!] **LiDAR intensity field is populated** — `intensity: true` is now set in `ydlidar_X4.yaml`; verify the field is non-empty.
+- [x] **LiDAR intensity field is populated** — **CLOSED, won't-fix (hardware limitation).** `ydlidar_X4.yaml:16` ships `intensity: false` and must stay there; the line above previously claimed `intensity: true` "is now set", which was never true of the committed config.
   ```bash
   ros2 topic echo /lidar/scan --once | grep -A5 intensities
   # Expected: array of non-zero values (typically 0–255 for X4)
@@ -225,7 +225,7 @@ Add bug notes inline under the failing item.
   ```
   > **Bug confirmed**: YDLidar X4 does NOT support per-return intensity. Setting `intensity: true` causes continuous checksum errors and driver failure. With `intensity: false` (current config), the driver publishes `intensities: [0.0, 1008.0, ...]` — constant 1008.0 values that are internal status bits, not real intensity. **Conclusion**: intensity filter in `laser_filter.yaml` is unusable on the X4. Keep `intensity: false`; disable the `filter1` intensity filter entry permanently (leave it commented). See https://github.com/YDLIDAR/ydlidar_ros2_driver/blob/humble/details.md for X4 channel details.
 
-- [!] **Intensity filter tuning** — N/A: YDLidar X4 does not support real intensity data; skip this item.
+- [x] **Intensity filter tuning** — **CLOSED, won't-fix**: the YDLidar X4 has no real intensity data, so the `laser_filter.yaml` intensity filter is permanently unusable. Leave it commented out and skip this item; it is not pending work.
   ```bash
   # Step 1: observe raw intensity distribution while driving near walls and across open space
   ros2 topic echo /lidar/scan | grep -A2 intensities
@@ -519,9 +519,9 @@ Add bug notes inline under the failing item.
 - [!] **Send a navigation goal** — 2D Nav Goal in RViz. Robot should plan and drive without crashing.
   - Path should appear on map.
   - Robot should not oscillate or hesitate excessively at 10 Hz controller rate.
-  > **Blocked**: `component_container_isolated` crashes before a goal can be sent — see crash bug below. Fix the container crash first, then retest.
+  > **[2026-08-26] The cited blocker is stale** — the `component_container_isolated` crash was fixed 2026-08-04. Live history since: **one** goal has ever driven this car under Nav2 (2026-08-06 21:47, a −44.8° right turn over 2.628 m, recorded as the bug-140 steering-sign verification). The 2026-08-10 demo attempt never got a clean goal — costmap out-of-bounds (bug-228) and the rotated-frame report (bug-231). Four fixes have landed since and **none has run as a set with Nav2**: bug-232 (VSLAM startup localization defaults False), bug-237 (map paths → `20260805`), bug-234 (AMCL yaw seed), bug-241 (auto-seed at t+20 s). Re-test is a drive-session item; pass `launch_twist_to_ackermann:=True` or `cmd_vel` never reaches the VESC.
 
-- [!] **CPU load during navigation** — with the reduced costmap frequencies, CPU on Nano should be lower than before. **[2026-08-04] Inconclusive + new issue**: stationary with no goal ever sent, `planner_server` ran at **94.1% of one core**; system load 12.60/6 cores. A concurrent MPC sim shared the host, so total load is not attributable to this stack — but the per-process 94% is. No clean pre/post-tuning comparison yet: needs a quiet machine plus an actual nav goal.
+- [!] **CPU load during navigation** — with the reduced costmap frequencies, CPU on Nano should be lower than before. **[2026-08-04] Inconclusive**: stationary with no goal ever sent, `planner_server` appeared to run at 94.1% of one core. **[2026-08-06] That measurement was wrong (bug-127)** — `top -b -n1` reports cumulative-since-start, not an interval, and zombies were counted as live copies. Corrected: `planner_server` peaks ~100% of one core **during `on_configure`** while the global costmap is built, and sits at **2.5–5.5%** while actually planning. There is no standing CPU defect. What remains is a clean pre/post-tuning comparison on a quiet machine with a real goal pending — sample with `top -b -n2 -d2` and read only the second block.
   ```bash
   top -b -n1 | grep -E 'controller|costmap|planner'
   ```
