@@ -82,8 +82,8 @@ is the plan.
 
 ## 1 · Before the battery — five parked items
 
-**STATUS 2026-08-27: (a) ACCEPTED, (b) PASS, (d) PASS. (c) and (e) NOT DONE — they are what is
-left here.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
+**STATUS 2026-08-27 evening: (a) ACCEPTED, (b) PASS, (d) PASS. (c) RE-TESTED AND FAILING (bug-260,
+hand off to a fresh session). (e) attempted — both blockers identified, needs the drive session.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
 at (the topic exists as `nav2_msgs/msg/ParticleCloud` but stays silent parked, because AMCL is
 motion-gated — so this needs a drive *and* an operator at RViz).
 
@@ -172,8 +172,31 @@ ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=Fals
 ros2 run tf2_tools view_frames     # expect map -> odom -> base_link -> lidar/camera/imu
 ```
 
-**(c) Mapping mode, no TF conflicts** — §10, `[!]`. The blocker cited there (double-launched
-localization) was bug-022, fixed 2026-08-04. Re-test:
+**(c) Mapping mode, no TF conflicts** — §10, still `[!]`. **RE-TESTED 2026-08-27 20:15: TF is clean,
+but the double-launch is NOT fixed. The "bug-022, fixed 2026-08-04" line below is a stale blocker —
+this is the seventh.** Logged as **bug-260**; picking it up is a self-contained next task.
+
+*What passes:* **0** `TF_REPEATED`, **0** authority warnings, **0** extrapolation warnings, and no
+duplicate `/command_gate` (that suppression works, so the bug-016 safety hazard did not recur).
+
+*What fails,* on a clean launch verified by process ages forming one 136–164 s cluster:
+- `/ekf_odom_node`, `/rf2o_laser_odometry`, `/rtabmap_stereo_odom` and `/pointcloud_map_publisher`
+  each appear **twice**. `rf2o` is instantiated into `localization_container` at **t+11 s**
+  (bringup's own localization, 10 s timer) *and* into `f1tenth_container` at **t+26 s**
+  (mapping's 15 s + teleop's 10 s).
+- The t+26 batch also instantiates `nav2_amcl::AmclNode` and `nav2_map_server::MapServer`, so
+  **AMCL and map_server run under `slam:=True`** and `/map` has **2 publishers** (`map_server` and
+  `slam_toolbox`) — that is bug-027, and it means a map saved during a mapping run may come from the
+  stale file rather than from the run.
+
+*Where it is not:* `bringup.launch.py` (~1089–1091) **does** pass `launch_localization:'False'`,
+`launch_local_localization:'False'` and `launch_global_localization:'False'` to mapping;
+`mapping.launch.py` (~630–632) **does** forward all three to teleop; and `teleop.launch.py:674`
+**is** gated on `condition=IfCondition(launch_localization)`. One of those three hops drops the
+value — trace it by logging the *performed* value in mapping and teleop, do not guess. Same family
+as bug-022 and the launch-config inheritance leak.
+
+*Reproduce with:*
 
 ```bash
 ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False launch_2d_mapping:=True
@@ -185,10 +208,29 @@ backend, so there is no `/map`, no `slam_toolbox` node and no save service, sile
 **(d) joy_teleop parameter warnings** — §2, `[!]`, and the record predates the two-heartbeat-command
 rework, so it may already be clean. `ros2 node info /joy_teleop` plus a look at the launch log.
 
-**(e) Particle cloud in RViz** — §6, `[!]`. The publishing half is confirmed (8.97 Hz). What is
-untested is the display: it is `/particle_cloud`, type **`nav2_msgs/msg/ParticleCloud`**, so add it
-via **Add → By display type → nav2_rviz_plugins → Particle Cloud** — the generic PoseArray display
-cannot render it. Convergence *under motion* belongs to the drive session.
+**(e) Particle cloud in RViz** — §6, `[!]`. **Attempted 2026-08-27 20:20; still open, but both
+blockers are now identified and the doc's own contradiction is resolved.**
+
+1. **The display's QoS must be set to Best Effort.** `nav2_rviz_plugins` *is* installed and the
+   display was added successfully — `ros2 topic info /particle_cloud --verbose` showed
+   `Subscription count: 1` and that subscriber *was* rviz2. It still rendered nothing, because
+   **AMCL publishes `BEST_EFFORT` and the RViz display defaults to `RELIABLE`**, which is an
+   incompatible pair: the subscription exists and no message is ever delivered. Read the
+   *reliability* of both ends, never the subscriber count — the same lesson as bug-238's durability.
+2. **It cannot be closed parked.** `/particle_cloud` was silent across 14 s even after the car was
+   carried by hand, because AMCL is gated on *odometry* motion and `odometry/local` moved
+   **0.000 m** during the carry: with no VESC the only odom sources are rf2o and VSLAM, and a lifted
+   car gives neither a usable scan delta nor VSLAM tracking. **The "publishing half is confirmed
+   (8.97 Hz)" note is not wrong, it is just from a run where odom was actually moving** — which is
+   what the §1 status line meant by "stays silent parked". Both halves now agree.
+
+   So: add the display via **Add → By display type → nav2_rviz_plugins → Particle Cloud** (the
+   generic PoseArray display cannot render `nav2_msgs/msg/ParticleCloud`), **set Reliability Policy
+   to Best Effort**, and check it on the drive session, not parked.
+
+*Noticed in passing, not chased:* `odometry/local` was running at **8.4 Hz** rather than the usual
+~30 Hz on that launch (RViz was up). Worth a look before trusting a fusion measurement from a run
+with visualization enabled.
 
 ---
 
