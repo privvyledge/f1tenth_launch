@@ -33,13 +33,63 @@
 >    itself", never once observed. If instead a legitimately slow approach aborts early, revert to
 >    100.0; the comment in the file says so.
 >
-> **Then, in order:** the second lead on the 0.379 m stall (last command 0.269 m/s vs a measured
-> 0.20–0.26 m/s ground breakaway — carry it in **ERPM**, not m/s); bug-257 proper, now that
-> non-composed runs name the dying process; obstacle avoidance; §1(c) mapping mode and §1(e) the
-> particle-cloud display; then arm A (§3), which needs a battery and a taped floor.
+> ---
 >
-> **Read §7 before planning around any blocker named here.** Six stale ones have been caught in this
-> family so far. Verify each against the machine first — `git log @{u}..HEAD`, `git status`, read the
+> ## ★★ NEXT SESSION STARTS HERE — appended 2026-08-27 ~20:30 EDT
+>
+> The three items above are **done** (bug-257 fixed, `movement_time_allowance` verified, `BackUp`
+> reached by the BT). What follows is what a fresh chat should pick up, in order. The first two need
+> **no battery and no VESC** — see §4a for why a parked car exercises Nav2 fully.
+>
+> **1. bug-260 — `slam:=True` double-launches localization.** Fully specified in §1(c): TF is clean,
+> but `/ekf_odom_node`, `/rf2o_laser_odometry`, `/rtabmap_stereo_odom` and
+> `/pointcloud_map_publisher` each run twice, and **AMCL + `map_server` run under `slam:=True`** so
+> `/map` has two publishers (bug-027 — a map saved during a mapping run may come from the stale
+> file). The mechanism is pinned to one of three hops; §1(c) names the exact files and line ranges
+> and says to trace the *performed* value rather than guess. Self-contained, parked.
+>
+> **2. `odometry/local` at 8.4 Hz instead of ~30 Hz.** Measured 2026-08-27 20:20 on the
+> `particlecloud_e` launch (`slam:=False`, `launch_navigation:=True`, **`launch_visualization:=True`**,
+> one RViz, car parked after a hand-carry): `ros2 topic hz /odometry/local` → **8.356 then 8.649 Hz**,
+> min 0.097 s / max 0.200 s. The healthy baseline for this stack is **29.70 Hz with a 0.180 s max
+> gap**, and the parked fusion baseline earlier the same evening had 1800 samples in 60 s (= 30 Hz).
+> **This gates every fusion measurement taken with visualization on, so settle it before trusting
+> one.** Candidates, cheapest first, and none of them checked yet:
+> - **CPU contention.** RViz was measured at **70 %** of a core in the 2026-08-27 CPU comparison
+>   (§4 / `testing_checklist.md`). §8's rule applies: *low-but-nonzero sensor rates can be CPU
+>   contention, not a fault — check `uptime` first.* The controlled test is one launch with
+>   `launch_visualization:=False` and one with `:=True`, nothing else changed.
+> - **A degraded EKF input.** The known signature is `ekf_odom` logging
+>   `Failed to meet update rate!` — with `launch_icp_odometry:=True` that produced **12.78 Hz with
+>   2.44 s gaps**. `launch_icp_odometry` defaults `False`, so confirm it really is off rather than
+>   assuming. Check the `yaw_drift.py` source table for a source with **0 samples** (see §2 — a dead
+>   VSLAM is silent because `odometry/local` normally *stays* at 30 Hz on the remaining sources;
+>   here it did not, which is itself informative).
+> - **The hand-carry.** The car had just been lifted and set down, which can leave rf2o and VSLAM
+>   unhappy. Re-measure on a launch where nothing touched the car — that alone may retire this.
+>
+> **3. Then, needing the battery:** the second lead on the 0.379 m stall (last command 0.269 m/s vs a
+> measured 0.20–0.26 m/s ground breakaway — carry it in **ERPM**, not m/s); obstacle avoidance;
+> §1(e) the particle cloud (§1(e) names both blockers — the RViz display's Reliability must be set to
+> **Best Effort**, and AMCL's motion gate cannot be satisfied by hand-carrying); then arm A (§3),
+> which needs a battery and a taped floor.
+>
+> **Machine state as of 20:30:** container `jetson_container_20260827_185401` up and warm, stack torn
+> down, staged with **`stage_0827b.sh`** (md5 `e61a8151d0d074f7b581808d41b1e912`, from `aced708`).
+> **Ten commits local and unpushed** — check with `git log @{u}..HEAD`, do not trust this number.
+> Drive battery and DualSense still off; `/dev/sensors/vesc` and `/dev/input/js0` absent until the
+> operator connects them.
+>
+> **Teardown warning, learned the hard way this session:** a kill pattern matching only
+> `/opt/ros/humble/` leaves every node under `/workspaces/f1tenth/install/` alive, and those orphans
+> then read as duplicate nodes and double-launched subsystems on the *next* launch — it voided one
+> run of §1(c) before the ages were checked. Use `/mnt/shared_dir/teardown2.sh`, which matches both,
+> and confirm a launch is clean by checking that `ps -eo etimes` forms **one** age cluster.
+>
+> ---
+>
+> **Read §7 before planning around any blocker named here.** **Seven** stale ones have now been caught
+> in this family — §1(c)'s "bug-022, fixed 2026-08-04" was the seventh, found 2026-08-27. Verify each against the machine first — `git log @{u}..HEAD`, `git status`, read the
 > shipping source — then fix the doc in the same commit.
 >
 > **Six commits are local and unpushed**, checked 2026-08-27 18:04 with `git log @{u}..HEAD`:
