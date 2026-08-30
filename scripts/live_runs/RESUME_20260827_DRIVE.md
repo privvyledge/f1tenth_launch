@@ -214,7 +214,7 @@
 > warm, stack torn down, staged with **`stage_0830.sh`** (md5 `137531c39628609afe260cb19fba27c0`,
 > from `e07c2e1`), 12/12 installed-tree checks pass. Jetson on **AC**, clock correct, root fs 12 %
 > used, RealSense and YDLidar present.
-> **Twelve commits local and unpushed as of 2026-08-30 15:10** (the line here said ten; that was the eighth stale claim caught in this family) — check with `git log @{u}..HEAD`, do not trust this number.
+> **Sixteen commits local and unpushed as of 2026-08-30 16:30** (`git log @{u}..HEAD | wc -l` — re-run it, do not trust this number) (the line here said ten; that was the eighth stale claim caught in this family) — check with `git log @{u}..HEAD`, do not trust this number.
 > Drive battery and DualSense still off; `/dev/sensors/vesc` and `/dev/input/js0` absent until the
 > operator connects them.
 >
