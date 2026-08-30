@@ -1,10 +1,26 @@
 #!/usr/bin/env python3
-"""Measure whether the 2D occupancy grid and the 3D point cloud of a map set agree.
+"""Compare the 2D occupancy grid and the 3D point cloud of a map set, offline.
 
-Answers one question: is the apparent rotation between the grid and the cloud in RViz
-supported by the data, and if so how much. Sweeps yaw (and optionally x/y shift), scoring
-each candidate by the median distance from an occupied grid cell to the nearest projected
-cloud cell. Purely offline -- reads the .pgm/.yaml pair and the .pcd, needs no robot.
+Reads the .pgm/.yaml pair and the .pcd; needs no robot. Two modes:
+
+  --overlay   render both, as published, to a PNG. USE THIS FIRST.
+  (default)   sweep yaw/shift, scoring by median distance from an occupied grid cell
+              to the nearest projected cloud cell.
+
+READ THIS BEFORE TRUSTING THE SWEEP. The median-nearest-neighbour score is BIASED and
+on the 20260805 map set it reports a confident, entirely spurious optimum at +31 deg
+(median 0.018 m, against 0.051 m at zero). The cause: the cloud is much denser than the
+grid and does not cover the grid's full footprint, so a rotation that packs grid cells
+into the cloud's dense annulus scores well without any structural agreement at all. The
+overlay shows the two maps tracing the same ring with no rotation, which is what the
+2026-08-10 co-registration measurement found independently.
+
+The trap is worse than a wrong number: +31 deg happened to match a rotation the operator
+believed they were seeing, so the score would have "confirmed" it. Render the overlay and
+look before reporting any alignment figure from this file.
+
+Note also that this lab is NOT rectangular -- it is a closed ring -- so wall-orientation
+histograms and any other method assuming dominant perpendicular walls do not apply here.
 """
 import argparse
 import re
@@ -108,6 +124,9 @@ def main():
     ap.add_argument('--yaw-step', type=float, default=1.0)
     ap.add_argument('--shift', type=float, default=0.0, help='+/- metres of x/y shift to sweep')
     ap.add_argument('--shift-step', type=float, default=0.1)
+    ap.add_argument('--overlay', metavar='PNG',
+                    help='render grid and cloud as published to this PNG and exit '
+                         '(do this before running the sweep)')
     args = ap.parse_args()
 
     grid_xy, meta = grid_occupied_xy(args.pgm, args.yml)
@@ -131,6 +150,27 @@ def main():
     print('cloud after z filter: %d points' % len(cl))
     if len(cl) == 0:
         sys.exit('no cloud points survive the z filter')
+
+    if args.overlay:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(10, 9))
+        ax.scatter(cl[:, 0], cl[:, 1], s=0.5, c='tab:red', alpha=0.3, linewidths=0,
+                   label='cloud %s (n=%d)' % (args.pcd.split('/')[-1], len(cl)))
+        ax.scatter(grid_xy[:, 0], grid_xy[:, 1], s=3.5, c='k', marker='s',
+                   label='grid %s (n=%d)' % (args.pgm.split('/')[-1], len(grid_xy)))
+        ax.plot(0, 0, marker='+', ms=14, mew=2, c='tab:green', label='map origin')
+        ax.set_aspect('equal')
+        ax.grid(alpha=0.25)
+        ax.legend(loc='upper left', fontsize=8)
+        ax.set_xlabel('x [m], map frame')
+        ax.set_ylabel('y [m], map frame')
+        ax.set_title('grid vs cloud, as published, no alignment applied')
+        fig.tight_layout()
+        fig.savefig(args.overlay, dpi=110)
+        print('wrote %s' % args.overlay)
+        return
 
     tree = cKDTree(cl[:, :2])
     cx, cy = grid_xy[:, 0].mean(), grid_xy[:, 1].mean()

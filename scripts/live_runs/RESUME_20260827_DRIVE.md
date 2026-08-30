@@ -62,48 +62,64 @@
 > `stereo_fps` for this**; a warning appearing more than a second after tracker init would be a
 > different finding.
 >
-> ### 2. The map-alignment question the operator has been carrying for a while
+> ### 2. The map-alignment question — (a) ANSWERED 2026-08-30, (b) still needs one look
 >
-> **Two observations, and they may or may not be the same defect. Do not assume they are.**
+> **(a) The 2D grid and the 3D cloud are NOT rotated relative to each other. The 2026-08-10
+> measurement stands; the ~30 deg appearance comes from somewhere else.** Settled offline, no robot,
+> with `scripts/analysis/map_cloud_align.py --overlay`: rendered as published, with no alignment
+> applied, `rtabmap_2d_final` and `cloud_voxel_0p05.pcd` trace **the same closed ring**, the outer
+> occupied cells sitting on the cloud boundary. A 30 deg rotation of a 12 m map would be
+> unmistakable at that scale and is simply not there. The doc's own `origin:` hypothesis is refuted
+> in the same picture: `origin: [-9.29, -6.06]` places the grid exactly co-located with the PCD's own
+> coordinates, so the two anchorings agree.
 >
-> **(a) The 2D grid and the 3D cloud look ~30 deg unaligned in RViz, despite coming from the same
-> RTABMap database.** This **directly contradicts a measurement already in the repo**, so the first
-> job is to work out which is wrong — do not re-measure blind and do not "fix" the maps first.
-> CLAUDE.md records, from an offline check on 2026-08-10: median distance from an occupied grid cell
-> to the nearest projected cloud cell is **0.05 m — one cell — at zero shift, and no rotation is
-> supported by the data**; absolute overlap is low (~16 %) for a structural reason, the grid being
-> LiDAR-built (`Grid/Sensor: 0`) and the cloud RGB-D. Both were exported from **`rtabmap_final_nf.db`**.
-> **This is checkable entirely offline, with no robot** — `data/maps/20260805/` holds the grid and
-> the voxel-downsampled cloud, and `scripts/analysis/` has the tooling.
+> **Two things this cost, both worth not repeating.**
 >
-> Concrete hypothesis worth testing early, because it would produce exactly this appearance without
-> either map being wrong: the cloud is published by `pcl_ros/pcd_to_pointcloud` with **`tf_frame: map`**,
-> i.e. the PCD's own coordinates are taken as map coordinates directly, while the occupancy grid is
-> placed through the **`origin:` field of `rtabmap_2d_final.yaml`**. If the PCD was exported in a
-> different anchoring from the one that `origin:` encodes, the two render offset — and if the export
-> applied its own gravity/yaw alignment, rotated. Check what `origin:` says and what frame the PCD was
-> actually exported in **before** touching either file.
+> **The obvious metric lies here, and it lies in agreement with the hypothesis.** A yaw sweep scored
+> by median distance from each occupied grid cell to the nearest projected cloud point reports a
+> confident optimum at **+31 deg** (median 0.018 m vs 0.051 m at zero) — a number that matches the
+> operator's ~30 deg almost exactly, and is **entirely spurious**. The cloud is far denser than the
+> grid and does not cover the grid's full footprint, so any rotation that packs grid cells into the
+> dense annulus scores well with no structural agreement whatsoever. The caveat is now written into
+> the top of `map_cloud_align.py`. **Render the overlay and look before reporting any alignment
+> figure.**
 >
-> **(b) Starting the car at the origin — the spot where every bag was recorded — `odom` correctly
-> shows the car at the origin (confirmed visually against the 2D costmap), but the `map` frame reads
-> ~90 deg rotated and offset right and back.**
+> **This lab is not rectangular — it is a closed ring.** Wall-orientation histograms and anything else
+> assuming dominant perpendicular walls do not apply (attempted here: n=45-278 with peak/mean 2.7-2.9,
+> i.e. no dominant direction to find). CLAUDE.md's recurring "a rectangular lab is symmetric to a
+> planar LiDAR" framing describes the *localization* discussion, not this map's geometry.
 >
-> **Check the already-documented explanation first, because it predicts almost exactly this and is
-> NOT a bug.** The map frame is not aligned with the car's parking spot: a car parked there reads
-> **(0.445, -0.575, -84.5 deg)** in map, and CLAUDE.md is explicit that this is *correct, not drift* —
-> "a ~90 deg reading in a rectangular lab invites exactly that mistake". The -84.5 deg was measured
-> 2026-08-11 with no localizer in the loop (`heading_from_scan.py`, five samples over two cold
-> launches agreeing to 1.03 deg, single unambiguous peak), and the 2026-08-30 launches reproduced it
-> to within a few mm and 0.5 deg on cold launch #8. **So the question to answer is not "why is it
-> rotated" but "is the observed rotation the documented -84.5 deg, or something else".** Read
-> `map->base_link` with `ros2 run tf2_ros tf2_echo map base_link` and compare against -84.5 deg
-> before concluding anything.
+> **What almost certainly produced the appearance: the OLD cloud.**
+> `data/maps/rtabmap/raslab/cloud.pcd` (Jan 2024, 76 122 pts) spans **x [-5.65, 15.04], y [-8.27,
+> 7.20]** against the grid's x [-8.76, 3.49], y [-5.53, 3.37] — a different room extent entirely,
+> sitting in the upper-right quadrant and spraying out to x=15. Paired with the current grid it looks
+> exactly like a rotated, offset 3D map. **That file is still present on the robot.** Until bug-237
+> was fixed on 2026-08-11, `teleop.launch.py`'s `pointcloud_map_file` defaulted to it, so an
+> observation made before that date is fully explained.
 >
-> If it **is** -84.5 deg, then (b) is not a defect at all and the real question is why the map frame's
-> origin does not coincide with the bag-recording spot — a map-build/export question, which makes (b)
-> a facet of (a) rather than a localization problem. If it is **not**, suspect localization rather than
-> the maps: CLAUDE.md's standing rule is that a bad `odom->base_link` rotates the live scan and
-> footprint inside a correct static costmap and looks exactly like a rotated map (bug-231/bug-232).
+> **Verified 2026-08-30: today's stack cannot reproduce it by default** — the *installed tree* on
+> gosling1 (`/workspaces/f1tenth/install/f1tenth_launch/share/f1tenth_launch`) defaults
+> `pointcloud_map_file` to `data/maps/20260805/cloud_voxel_0p05.pcd` at **both** entry points, and
+> `data/maps/20260805/` there symlinks to the correct source files. So this is checked at the level
+> that matters (the installed tree, not the repo — cf. the staged-tarball trap).
+>
+> **What is left on (a):** confirm with the operator *when* they saw it and whether it still
+> reproduces on a current launch with `launch_visualization:=True`. If it does reproduce today, the
+> old-cloud explanation is wrong and the next suspect is an explicit `pointcloud_map_file` override
+> in whatever script was used.
+>
+> **(b) The `map` frame reading ~90 deg rotated and offset — almost certainly the documented
+> -84.5 deg, i.e. not a defect.** Unchanged from the analysis below; it takes one command to settle
+> and was not run this session because the localization stack was not up:
+> ```bash
+> ros2 run tf2_ros tf2_echo map base_link   # expect ~(0.445, -0.575, -84.5 deg), NOT identity
+> ```
+> Cold launch #8 on 2026-08-30 already reproduced (0.445, -0.575, -84.5 deg) to within a few mm and
+> 0.5 deg, so the prior is strong. If it **is** -84.5 deg, (b) is not a defect and the real question
+> is why the map frame's origin does not coincide with the bag-recording spot — a map-build/export
+> question. If it is **not**, suspect localization rather than the maps (bug-231/bug-232: a bad
+> `odom->base_link` rotates the live scan and footprint inside a correct static costmap and looks
+> exactly like a rotated map).
 >
 > **Related, and worth reading before starting:** three conflicting parking-spot headings are on
 > record for one spot (-79.8 / -86.5 / -92.1 deg), and figure-8 waypoint 0 (-92.08 deg) does not fit
