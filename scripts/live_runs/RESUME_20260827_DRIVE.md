@@ -42,17 +42,25 @@
 > `testing_checklist.md` is at 2 open items, from 9.**
 >
 > **The operator has set the next two tasks, in this order. Neither needs the drive battery.**
+> **Task 1 is closed (2026-08-30, below); task 2 is the live one.**
 >
-> ### 1. VSLAM frame-delta warnings — `testing_checklist.md` §8, `[!]`
+> ### ~~1. VSLAM frame-delta warnings~~ — CLOSED 2026-08-30, `testing_checklist.md` §8 is now `[x]`
 >
-> `Delta between current and previous frame [66ms] is above threshold [34ms]` from
-> `visual_slam_node`. The existing note calls it an artefact of 100x bag playback plus the old
-> `use_gpu` bug, and predicts it "will not launch with `use_gpu:=False`, eliminating this warning
-> entirely". **Treat that prediction as unverified** — this is exactly the class of claim §7 is
-> about, and the entry has never been re-checked since the `use_gpu` fix. Cheap to settle: the
-> 2026-08-30 launches all ran VSLAM healthy at 29.9-30.2 Hz live, so start by grepping the
-> `claude_bringup_0830/` logs for the warning at **1x realtime** before replaying anything. If it
-> is absent live and present only in fast replay, close it as a replay artefact and say so.
+> **The checklist's prediction was wrong and the item closes anyway.** The warning is present
+> **live, at 1x realtime, with `use_gpu:=True`, on every launch** — settled by grepping the
+> `claude_bringup_0830/` logs, no replay needed. So it is not a 100x-playback artefact, and the
+> `use_gpu` fix did not eliminate it (with `use_gpu:=False` VSLAM does not run at all, which is
+> evasion rather than a fix).
+>
+> It is nonetheless benign: a **cuVSLAM tracker startup transient**. Across all three
+> `use_gpu:=True` runs the burst begins **39-134 ms after `cuVSLAM tracker was successfully
+> initialized`**, lasts **129-615 ms**, and then never recurs — including **1107 s (18.4 min) of
+> silence** in `log_pcloud`. Deltas are marginal (34.0-37.0 ms against a 34 ms threshold) and
+> **decay monotonically back under it**, with one ~190-197 ms outlier per burst: the tracker
+> draining frames queued during `CUVSLAM_WarmUpGPU()` + `CUVSLAM_CreateTracker()`. VSLAM odometry
+> held 29.9-30.2 Hz throughout. Full table in the checklist entry. **Do not tune the threshold or
+> `stereo_fps` for this**; a warning appearing more than a second after tracker init would be a
+> different finding.
 >
 > ### 2. The map-alignment question the operator has been carrying for a while
 >
@@ -101,18 +109,29 @@
 > record for one spot (-79.8 / -86.5 / -92.1 deg), and figure-8 waypoint 0 (-92.08 deg) does not fit
 > the map. Do not seed anything from waypoint 0.
 >
-> ### 3. Also queued — the throttle interpolator, `testing_checklist.md` §1
+> ### ~~3. The throttle interpolator~~ — CLOSED 2026-08-30, `testing_checklist.md` §1 is now `[x]`
 >
-> **The operator reports this was diagnosed and fixed in an earlier session, cause attributed to the
-> mux and the joystick — but no record of the fix exists anywhere.** Searched 2026-08-30:
-> `git log --all --grep=throttle` shows only the two original setup commits, `git log -S` on
-> `vehicle.launch.py` shows nothing since the original wiring, and **none of the 141 buglog entries is
-> this bug**. Nearest match is **bug-049** (mux `joystick.timeout` 0.1 -> 0.3 s), whose mechanism is
-> adjacent but whose symptom is different, so it is not established to be the same fix. The item stays
-> `[!]`. **Re-test needs no battery** — connect the DualSense, launch with
-> `launch_throttle_interpolator_node:=True`, and echo `steering_angle` **values** on `/ackermann_drive`
-> and `/vehicle/ackermann_cmd` while sweeping the stick. Full procedure in the checklist entry. This is
-> §7's problem inverted: a fix that happened and was never written down.
+> **The fix existed all along and this doc was searching the wrong repository.** It is
+> **`63673f5` in `f1tenth_system`** ("throttle_interpolator: add startup guard and safety timeout",
+> authored by the operator 2026-05-26). `throttle_interpolator.py` lives in
+> `f1tenth_system/f1tenth_stack/`, **not in `f1tenth_launch`** — so `git log --all --grep=throttle`
+> here, `git log -S` on `vehicle.launch.py`, and all 141 buglog entries were guaranteed to come up
+> empty. **General lesson: before concluding a fix does not exist, check which repo owns the file.**
+> The operator's recollection of "the mux and the joystick" does not match the commit; the actual
+> cause was the node publishing servo *center* at 75 Hz from t=0, as that topic's sole publisher,
+> before any upstream command existed.
+>
+> **Verified on hardware 2026-08-30, parked, on AC, no drive battery, `/dev/sensors/vesc` absent.**
+> 60 s of full stick sweeps with `launch_throttle_interpolator_node:=True`
+> (`scripts/live_runs/throttle_interp_check.py`, staged as `/mnt/shared_dir/throttle_launch.sh`):
+> mux and gate both ±0.3140 rad, interpolator **in** and **out** both servo 0.2005–0.9195, output at
+> 75 Hz. Nothing saturates on either side. Logged as **bug-262**.
+>
+> **Two traps this cost:** the test topics this doc previously named (`ackermann_drive`,
+> `vehicle/ackermann_cmd`) are both **upstream** of the interpolator, which sits in VESC command
+> space downstream of `ackermann_to_vesc` — they look identical with it on and off and can never see
+> the bug. And parked idle reads **0.56** on `commands/servo/position` by design (the 0.5 s
+> watchdog), which is not the old centering bug.
 >
 > ### Then, needing the battery
 >
@@ -214,7 +233,7 @@
 > warm, stack torn down, staged with **`stage_0830.sh`** (md5 `137531c39628609afe260cb19fba27c0`,
 > from `e07c2e1`), 12/12 installed-tree checks pass. Jetson on **AC**, clock correct, root fs 12 %
 > used, RealSense and YDLidar present.
-> **Sixteen commits local and unpushed as of 2026-08-30 16:30** (`git log @{u}..HEAD | wc -l` — re-run it, do not trust this number) (the line here said ten; that was the eighth stale claim caught in this family) — check with `git log @{u}..HEAD`, do not trust this number.
+> **Zero commits local and unpushed as of 2026-08-30 17:05** — `origin/perf/config-tuning` is at `c3b5c4d`, i.e. everything through the bug-260 fix and the particle-cloud work is pushed. The line here previously said sixteen; that was the **ninth** stale claim caught in this family. Re-run `git log @{u}..HEAD`, do not trust this number.
 > Drive battery and DualSense still off; `/dev/sensors/vesc` and `/dev/input/js0` absent until the
 > operator connects them.
 >

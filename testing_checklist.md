@@ -71,17 +71,25 @@ Add bug notes inline under the failing item.
     '{drive: {speed: 0.0, steering_angle: 0.0}}'
   ```
 
-- [!] **Acceleration limit works** — with the lower limit (1.0 m/s²), the car should accelerate more gradually. Drive forward with joystick and observe start behavior.
-  > **Bug**: When `launch_throttle_interpolator_node:=True`, throttle acceleration is limited correctly but steering misbehaves — returns to center instead of responding to joystick.
+- [x] **Acceleration limit works / throttle interpolator passes steering through**. **[2026-08-30] PASS on hardware, and the missing fix has been located.**
+  > **Original bug**: with `launch_throttle_interpolator_node:=True`, throttle acceleration was limited correctly but steering misbehaved — returned to center instead of responding to the joystick.
   >
-  > **[2026-08-30] The operator reports this was diagnosed and fixed in an earlier session, cause attributed to the mux and the joystick — but the fix was never recorded, so the item stays `[!]` until it is re-verified.** Searched and found nothing: `git log --all --grep=throttle` shows only the two original "Setup actuation interpolation/smoothing" commits, `git log -S throttle_interpolator -- launch/vehicle/vehicle.launch.py` shows nothing since the original wiring, and **none of the 141 entries in the buglog is this bug**. The nearest match is **bug-049** (mux `joystick.timeout` 0.1 → 0.3 s, because the joystick's priority-100 claim lapsed ~155×/min and let `navigation` command the car). Its mechanism is adjacent — a competing publisher winning mux arbitration and zeroing what the joystick asked for — but its recorded symptom is spurious parked servo twitches, not steering centering under the interpolator, so it is **not** established to be the same fix.
+  > **The fix exists and is `63673f5` in the `f1tenth_system` repo** ("throttle_interpolator: add startup guard and safety timeout", authored 2026-05-26). **That is why no search of this repo found it** — `throttle_interpolator.py` is not in `f1tenth_launch`; it lives in `f1tenth_system/f1tenth_stack/`, a separate repository, so `git log --all --grep=throttle` here, `git log -S` on `vehicle.launch.py`, and the buglog were all looking in the wrong place. The operator's recollection of "the mux and the joystick" does not match the commit, which suppresses the node's own output until the first upstream command arrives (previously it published center at 75 Hz from t=0, unconditionally, as the *sole* publisher of `commands/servo/position`) and adds a 0.5 s watchdog that returns both channels to safe values.
   >
-  > **Re-test, and it needs NO battery and no VESC** — steering passthrough is visible in the command stream. Connect the DualSense (that also supplies the `command_gate` heartbeat), launch with `launch_throttle_interpolator_node:=True`, hold the deadman and sweep the steering stick while echoing **values**, not rates:
-  > ```bash
-  > ros2 topic echo /ackermann_drive --field drive.steering_angle        # mux output
-  > ros2 topic echo /vehicle/ackermann_cmd --field drive.steering_angle  # gate output -> VESC
-  > ```
-  > Steering tracking the stick on both = fixed, tick the box. Pinned at 0.0 on either = still broken, and the difference between the two topics localises it to the mux or to the gate. Then reconcile `CLAUDE.md` and the RESUME §10 table, which both still call this open.
+  > **Verified 2026-08-30 on gosling1, parked, on AC, with no drive battery and `/dev/sensors/vesc` absent** — the steering command chain is fully observable without the VESC. 60 s recording, full stick sweeps, `scripts/live_runs/throttle_interp_check.py`:
+  >
+  > | stage | n | min | max | range |
+  > |---|---|---|---|---|
+  > | `ackermann_drive` (mux out) | 10556 | −0.3140 | +0.3140 | 0.6280 rad |
+  > | `vehicle/ackermann_cmd` (gate out) | 10556 | −0.3140 | +0.3140 | 0.6280 rad |
+  > | `vehicle/commands/servo/unsmoothed_position` (interpolator **in**) | 10520 | 0.2005 | 0.9195 | 0.7189 |
+  > | `vehicle/commands/servo/position` (interpolator **out**) | 4488 | 0.2005 | 0.9195 | 0.7189 |
+  >
+  > The interpolator output covers its input range exactly, at 75 Hz (4488 msgs / 60 s). The extremes are also the documented ones: ±0.314 rad is `max_steering`, and servo 0.2005/0.9195 is the no-clip range under `-1.1448 * angle + 0.56`, i.e. nothing saturates on either side.
+  >
+  > **The test topics the previous revision of this entry named were the wrong ones.** `ackermann_drive` and `vehicle/ackermann_cmd` are both **upstream** of the interpolator, which sits in VESC command space (`commands/servo/unsmoothed_position` → `commands/servo/position`), downstream of `ackermann_to_vesc`. Echoing only those two topics would look identical with the interpolator on and off and could never see this bug. Use the script, or echo the two `commands/servo/*` topics.
+  >
+  > **Parked idle reads 0.56 on `commands/servo/position` and that is correct** — the 0.5 s watchdog actively drives to `steering_angle_to_servo_offset` when no command is arriving. Do not read that as the old centering bug; sweep the stick and check the range.
 
 ---
 
@@ -492,8 +500,20 @@ Add bug notes inline under the failing item.
 - [x] **SLAM Toolbox message filter queue full at high playback rates**.
   > **Resolved**: No longer occurs at `--clock 10` with `--rate 0.2`. Not a code bug — at 100× the slam_toolbox internal TF message filter cannot drain fast enough. Fix is to reduce bag playback rate; `--clock 10` / `--rate 0.2` is sufficient. If higher-speed replay is needed, increase `message_filter_queue_size` in the slam_toolbox YAML config.
 
-- [!] **Visual SLAM frame delta warnings at high playback rates**.
-  > **Observed**: `Delta between current and previous frame [66ms] is above threshold [34ms]` from `visual_slam_node` during 100× bag playback. Expected: the Jetson Orin Nano GPU pipeline cannot process stereo frames at 100× realtime. This warning also appeared because `visual_slam_node` was incorrectly launched due to the `use_gpu` bug above. After the bug fix, `visual_slam_node` will not launch with `use_gpu:=False`, eliminating this warning entirely in CPU mode.
+- [x] **Visual SLAM frame delta warnings — benign tracker-startup transient**.
+  > **Originally observed**: `Delta between current and previous frame [66ms] is above threshold [34ms]` from `visual_slam_node` during 100× bag playback, and attributed to the Jetson GPU being unable to keep up at 100× realtime plus the (then-unfixed) `use_gpu` leak that launched `visual_slam_node` in CPU mode. The entry predicted the warning would disappear "entirely" after the `use_gpu` fix.
+  >
+  > **[2026-08-30] That prediction is refuted, and the item is closed anyway.** The warning is present **live, at 1× realtime, with `use_gpu:=True`, on every launch** — so it is not a replay artefact and it is not something the `use_gpu` fix removed (with `use_gpu:=False` VSLAM simply does not run, which is evasion, not a fix). What the logs do show is that it is a **startup transient of the cuVSLAM tracker, confined to its first few frames**, after which it never recurs. Measured across the three `use_gpu:=True` launches in `claude_bringup_0830/` (log grep, no replay):
+  >
+  > | run | tracker init → first warning | burst length | warnings | remainder of run, warnings |
+  > |---|---|---|---|---|
+  > | `log_hz_noviz` | +134 ms | 129 ms | 6 | 121 s, **0** |
+  > | `log_hz_viz` | +39 ms | 615 ms | 20 | 148 s, **0** |
+  > | `log_pcloud` | +83 ms | 168 ms | 2 | **1107 s (18.4 min), 0** |
+  >
+  > Every burst starts within 40–140 ms of `cuVSLAM tracker was successfully initialized` and ends inside a second. The deltas are marginal (34.0–37.0 ms against the 34 ms threshold — i.e. 27 Hz instead of 30 Hz) and **decay monotonically back under the threshold**, plus one ≈190–197 ms outlier per burst. That is the tracker draining the frames that queued during `CUVSLAM_WarmUpGPU()` + `CUVSLAM_CreateTracker()` and then catching up. VSLAM odometry ran 29.9–30.2 Hz through all three launches with no exit −6.
+  >
+  > **Do not tune the threshold or the camera FPS on account of this.** If the warning ever appears in *steady state* — more than a second after tracker init — that is a different, real finding; check `ros2 topic hz /visual_slam/tracking/odometry` against the 30 Hz baseline before acting.
 
 ---
 
