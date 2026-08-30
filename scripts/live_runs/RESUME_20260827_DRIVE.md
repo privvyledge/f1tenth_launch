@@ -107,10 +107,21 @@
 > - **The hand-carry.** The car had just been lifted and set down, which can leave rf2o and VSLAM
 >   unhappy. Re-measure on a launch where nothing touched the car — that alone may retire this.
 >
+> **§1(e) particle cloud — CLOSED 2026-08-30, and it did NOT need the battery.** Both blockers
+> cleared with the car rolled by hand on AC. The QoS half is fixed in the tracked config —
+> `config/f1tenth.rviz` now carries a `nav2_rviz_plugins/ParticleCloud` display with
+> `Reliability Policy: Best Effort`, so no GUI steps. The motion half turned on a distinction this
+> doc had not drawn: **rolling the car works, carrying it does not.** A lifted car gives rf2o no
+> scan delta and VSLAM no tracking, so `odometry/local` reads 0.000 m — which is why 2026-08-27
+> failed. Measured with `pcloud_watch.py`: parked 0 msgs over 40 s, the push (odom path → 3.4 m)
+> produced 42 msgs of 4000 particles, then publishing froze when motion stopped. **Caveat:** spread
+> *expanded* 0.076 → 0.364 m over the ~4 s push, so **convergence under sustained motion is still
+> unproven** — carry that into the drive session.
+>
 > **3. Then, needing the battery:** the second lead on the 0.379 m stall (last command 0.269 m/s vs a
 > measured 0.20–0.26 m/s ground breakaway — carry it in **ERPM**, not m/s); obstacle avoidance;
-> §1(e) the particle cloud (§1(e) names both blockers — the RViz display's Reliability must be set to
-> **Best Effort**, and AMCL's motion gate cannot be satisfied by hand-carrying); then arm A (§3),
+> ~~§1(e) the particle cloud~~ (closed 2026-08-30, see above; only convergence under sustained
+> motion is left, and it rides along with any driven goal); then arm A (§3),
 > which needs a battery and a taped floor.
 >
 > **Machine state as of 2026-08-30 15:45:** container `jetson_container_20260830_151510` up and
