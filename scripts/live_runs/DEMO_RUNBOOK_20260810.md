@@ -1,6 +1,6 @@
 # Demo runbook — MPC, then Nav2 with obstacles
 
-**gosling1 · image `humble-devel-08092026` · `ROS_DOMAIN_ID=42` · map `20260805/rtabmap_2d_final.yaml`**
+**gosling1 · image `humble-devel-08302026` · `ROS_DOMAIN_ID=42` · map `20260805/rtabmap_2d_final.yaml`**
 
 ---
 
@@ -31,9 +31,42 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0827b.sh"    # ~1 min, idempotent
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0830b.sh"    # ~1 min, idempotent, NO NETWORK
 ```
 
+- **The image changed on 2026-08-30: `humble-devel-08302026`.** It is a `docker commit` of a
+  container already staged by `stage_0830b.sh`, so **a fresh container off it is staged at birth** —
+  `stagecheck.sh` passes on it, the 20260805 map set is in the installed tree, `imu_processors`
+  carries `stationary_timeout`, and the rviz ParticleCloud display is present. Verified by running
+  the checks inside a throwaway container off the new image, not just inside the one that was
+  committed. `~/bolus_ws/f1tenth_launch.sh` now points at it; the previous tag is on a commented
+  line one above, and `f1tenth_launch.sh.bak-20260830` is the untouched original.
+- **Still run the stage script after pulling new commits.** The image is a snapshot of a working
+  tree, not a reproducible build — it freezes the repo at `9f97980` and nothing later.
+  `stage_0830b.sh` is the reproducible artifact.
+- **`humble-devel-08092026` (the previous tag) is UNSTAGED** and serves the retired raslab map and
+  the Jan-2024 cloud, which renders exactly like a rotated 3D map. If you roll back to it, stage
+  before launching.
+
+- **`stage_0830b.sh` is CURRENT (2026-08-30 evening) and is the one to run.** It carries
+  `f1tenth_stage_20260830b.tgz` (md5 `19faed92cc4e6188efd66b37630ad916`, 189 entries, `git archive`
+  over git HEAD `9f97980`) and verifies **fourteen** values in the installed tree. On top of
+  `stage_0830.sh` it adds the `f1tenth.rviz` ParticleCloud display (`07c5149`, bug-261) and the
+  stagecheck guards (`9f97980`), plus two checks the earlier scripts did not make: that
+  `data/maps/20260805/` is present in the **installed** tree, and that the rviz display is there.
+- **It needs no network, and that is the point.** `stage_0830.sh`'s step 2 cloned
+  `privvyledge/imu_pipeline` from github, and that clone **fails on the lab network** — TCP 443
+  connects and the transfer then times out at ~130 s, reproduced three times on 2026-08-30. Because
+  the script is `set -eo pipefail`, it aborted *after* unpacking the tarball and *before* the build,
+  leaving the launch files pointing at `data/maps/20260805/` while the installed tree had no such
+  directory — **a state strictly worse than an unstaged container**, since `map_file` then resolves
+  to a path that does not exist and `map_server` loads no map at all. `stage_0830b.sh` unpacks the
+  same tree from `/mnt/shared_dir/imu_pipeline_58d227e.tgz` (= `humble-devel` @ `58d227e`, the commit
+  adding `ImuBiasRemover`'s `stationary_timeout`) instead of cloning it.
+- **If you ever must re-fetch that fork:** clone it on a machine with working internet, `tar czf`
+  it, `scp` it to `/mnt/f1tenth_ssd/shared_dir/`. Do not wait on the Jetson's clone.
+- **`stage_0830.sh` (superseded)** carried `f1tenth_stage_20260830.tgz` from `e07c2e1` and the
+  bug-260 teleop fix; twelve checks; requires internet.
 - **`stage_0827b.sh` supersedes `stage_0827.sh`** — it carries `f1tenth_stage_20260827b.tgz`
   (md5 `e61a8151d0d074f7b581808d41b1e912`, cut from `aced708`), which adds the
   `container_multi_threaded` fix, and checks eleven values instead of nine. The 0827 entry below is
@@ -153,9 +186,20 @@ ros2 launch f1tenth_launch bringup.launch.py \
 
 **What to expect**, from `nav2_drive4`: ~10 s of commands, ~5.8 m of path, 203/203 commands reaching
 the VESC, and a stop **0.379 m short** of the 0.25 m tolerance with heading well inside it. **No
-goal has yet formally SUCCEEDED.** Two open leads: the last command before it quits is 0.269 m/s
-against a measured ground breakaway of 0.20–0.26 m/s; and `movement_time_allowance: 100.0` (default
-10.0) makes Nav2 idle for 100 s rather than failing and recovering.
+goal has yet formally SUCCEEDED.**
+
+- **One open lead remains**: the last command before it quits is **0.269 m/s** against a measured
+  ground breakaway of **0.20–0.26 m/s** — RPP decelerates into the speed below which this car
+  physically cannot move. Carry that number in **ERPM**, not m/s, if `speed_to_erpm_gain` is ever
+  recalibrated.
+- **The `movement_time_allowance` lead is CLOSED.** It is `10.0` (the nav2 default) as of `614c463`,
+  and that was **verified on hardware 2026-08-27**, parked: `SimpleProgressChecker` failed
+  `FollowPath` at 10.01–10.03 s and the recovery ladder ran `ClearCostmaps → Wait → BackUp`, which
+  is the first time `BackUp` has been reached by the BT itself. Every stage script from `0827` on
+  carries it. It had been `100.0` deliberately — it bought *operator* setup time, because a goal sent
+  before R1 is held produces no motion and aborts in 10 s. **Hold R1 before sending the goal** and
+  10.0 is plenty: bringup time is never counted (the checker resets at goal acceptance), and
+  `required_movement_radius: 0.5` in 10 s is 0.05 m/s against 0.5 m/s commanded.
 
 ## 0★.7 · Reading a crashed run
 
@@ -173,6 +217,46 @@ against a measured ground breakaway of 0.20–0.26 m/s; and `movement_time_allow
   every message — **10 MB in 5 minutes** (bug-259). Filter `[ros2-N]` before reading anything.
 - Bags stopped with SIGINT have **no `metadata.yaml`**, so `ros2 bag info` fails. The `.db3` is
   complete — read it with sqlite3 + `rclpy.serialization.deserialize_message`.
+
+## 0★.8 · Keeping the container alive, and the display — learned 2026-08-30
+
+**Start the container under `tmux` on the HOST.** It runs with `--rm` and its main process is the
+shell of the session that created it, so when that session drops the container **exits and is
+auto-removed**. That cost a warm 3-hour stack on 2026-08-30; only the logs survived, because they
+are on the SSD.
+
+```bash
+tmux new -s f1tenth        # on the Jetson desktop session (T1)
+bash ~/bolus_ws/f1tenth_launch.sh
+# Ctrl-b d to detach; `tmux attach -t f1tenth` to come back
+```
+
+`~/bolus_ws/f1tenth_launch_detached.sh` is a no-tmux fallback that detaches via a FIFO.
+
+**Validate `$DISPLAY` BEFORE creating the container.** `jetson-containers` bakes `$DISPLAY` in at
+creation and it **cannot be repointed afterwards** — a wrong value means recreating the container.
+
+```bash
+xdpyinfo -display $DISPLAY     # the ONLY valid check
+```
+
+A dead forwarded display still shows an sshd listener on its port, so `ss -ltn` proves **nothing**.
+
+**The xauth key form matters.** `xauth extract` writes a key of the form `<host>/unix:N`, which
+matches only a **Unix-socket** connection. A container connecting over **TCP** to `localhost:N.0`
+needs the **FamilyWild** form, or you get `MoTTY X11 proxy: No authorisation provided`:
+
+```bash
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+**The launch wrappers now refuse to start an unstaged container.** `/mnt/shared_dir/stagecheck.sh`
+is sourced by `viz_launch.sh`, `mapcheck_launch.sh`, `throttle_launch.sh` and `launch_run.sh`; it
+fails if the installed tree lacks `data/maps/20260805` or still defaults `map_file` to
+`raslab.yaml`. **Read the map fingerprint off `/map`, never off a filename**: origin
+**(−9.29, −6.06)** = current 20260805, **(−3.95, −9.87)** = retired raslab.
+
+---
 
 ---
 
@@ -512,7 +596,9 @@ from `install/` until you rebuild.
 - **Never `pkill -f <pattern>` from a `bash -c`** whose own command line contains that pattern — it kills itself first and the rest of the list silently survives.
 - **Logs go to the SSD** (`/mnt/shared_dir/…`). ROS logs on the 28 GB SD card filled it to 100 % once.
 - **`docker exec` dead, `read-only file system`?** The card has gone ro. Reboot; don't fight it.
-- **Prefer `tmux` inside the container** for the stack (`tmux new -s f1t`), not on the host — the host has no tmux, and the container's session survives `docker exec` dying.
+- **Use `tmux` on the HOST for the container itself, and optionally inside it for the stack.**
+  The "host has no tmux" half of this is **STALE** — tmux was installed on gosling1 on
+  2026-08-30, and the host session is the one that matters. See §0★.8.
 
 ## 5b · The heading question — SETTLED 2026-08-10, CONFIRMED AND APPLIED 2026-08-11
 

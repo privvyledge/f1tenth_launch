@@ -35,27 +35,50 @@
 >
 > ---
 >
-> ## ★★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~18:35 EDT
+> ## ★★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~19:00 EDT
 >
-> **STOP. The container is in a BROKEN PARTIAL-STAGE state. Fix that before anything else.**
+> **RESOLVED — the partial-stage blocker below is CLEARED, and the fix is now baked into the image.**
+> `jetson_container_20260830_181631` is fully staged (14/14 checks) and `stagecheck.sh` passes.
 >
-> `jetson_container_20260830_181631` is up, but `stage_0830.sh` **died halfway** — the lab network
-> lost internet and step 2 (`imu_processors` from the `privvyledge/imu_pipeline` fork) failed with
-> `SSL connection timeout`. `set -eo pipefail` aborted the script there. Measured state right now:
+> **What was wrong:** `stage_0830.sh` died at step 2, the `privvyledge/imu_pipeline` clone. That is
+> **not** an internet outage — DNS resolves and TCP 443 to github connects from both host and
+> container; the *transfer* then times out at ~130 s, reproduced **three** times. `set -eo pipefail`
+> aborted after unpacking the tarball and before the build, leaving the launch files pointing at
+> `data/maps/20260805/` with no such directory in the installed tree — `map_file` resolving to a
+> path that does not exist, so `map_server` would load no map at all. Worse than unstaged.
 >
-> | | state | consequence |
-> |---|---|---|
-> | `src/.../data/maps/20260805/` | **present** (step 1 ran) | — |
-> | `install/.../launch/*.launch.py` | **updated**, defaults point at `20260805` | symlinked to src |
-> | `install/.../data/maps/20260805/` | **MISSING** (a later step never ran) | **`map_file` resolves to a path that does not exist — `map_server` will not load any map** |
+> **What was done about it, in order:**
+> 1. Cloned the fork on a machine with working internet, tarred it, `scp`'d it to
+>    `/mnt/f1tenth_ssd/shared_dir/imu_pipeline_58d227e.tgz` (`humble-devel` @ `58d227e`, the commit
+>    adding `ImuBiasRemover`'s `stationary_timeout`). **The question the old text asked is answered:
+>    the image's existing `imu_processors` did NOT have it** — `strings libimu_bias_remover.so |
+>    grep -c '^stationary_timeout$'` returned **0** before, **1** after. Skipping step 2 was not
+>    harmless, though `remove_imu_bias` is `'False'` at both call sites so nothing depended on it yet.
+> 2. Cut a fresh tarball at git HEAD `9f97980` — `stage_0830.sh` carried `e07c2e1`, seven commits
+>    behind, and one of those (`07c5149`) is the f1tenth.rviz ParticleCloud display, a functional
+>    change rather than docs.
+> 3. Wrote **`stage_0830b.sh`** (`/mnt/shared_dir/`, md5 `5a9d4503735cc15bb66f6ac52827dc67`):
+>    same as 0830 but **needs no network**, carries `f1tenth_stage_20260830b.tgz` (md5
+>    `19faed92cc4e6188efd66b37630ad916`, 189 entries) and verifies **fourteen** values, adding a check
+>    that `data/maps/20260805/` exists in the **installed** tree — the exact thing that went wrong.
+>    **This is the stage script to use from here on.**
+> 4. **`docker commit` → `privvyledge/f1tenth:humble-devel-08302026`** (sha256 `9033dbb5…`, 55.4 GB,
+>    2m11s), so a month of fixes survives the next container loss. **Verified by running the checks
+>    inside a throwaway container off the new image**, not merely inside the one committed: installed
+>    maps present, map origin (−9.29, −6.06), fork param in the `.so`, `movement_time_allowance:
+>    10.0`, bug-260 gate, ParticleCloud, `max_steering` 0.314 — 7/7.
+> 5. `~/bolus_ws/f1tenth_launch.sh` now launches that tag, with the old tag on a commented rollback
+>    line and `f1tenth_launch.sh.bak-20260830` kept untouched. All ten runtime flags were checked
+>    present after the edit (a past hand-copy of this script dropped X11/USB flags and killed the
+>    RealSense).
 >
-> **So a launch right now is worse than an unstaged one**: the launch files ask for the current map
-> and the file is not there. **Re-run `stage_0830.sh` to completion once the lab network is back.**
-> If internet is still down, its step 2 is the only part that needs it — the rest can be run by hand,
-> but check whether the image's existing `imu_processors` (present at
-> `/workspaces/f1tenth/install/imu_processors`) is the 0.5.2 build with `stationary_timeout` before
-> assuming the skip is harmless. **`remove_imu_bias` is `False` at both call sites anyway**, so it is
-> not on the critical path for a map or Nav2 session.
+> **Two caveats on the committed image, which matter more than the convenience:**
+> - It is a snapshot of a **working tree, not a reproducible build**. It freezes the repo at
+>   `9f97980` and nothing later. **Keep running `stage_0830b.sh` after pulling new commits** —
+>   that script, not the image, is the reproducible artifact.
+> - **`humble-devel-08092026` (the previous tag) is UNSTAGED**: it serves the retired raslab map and
+>   the Jan-2024 cloud, which renders exactly like a rotated 3D map. Stage before launching if you
+>   roll back.
 >
 > **New guards, added 2026-08-30 — they will catch this class of failure for you.**
 > `scripts/live_runs/10_preflight.sh` now fails if the installed tree lacks `data/maps/20260805` or
@@ -886,19 +909,31 @@ bash ~/bolus_ws/f1tenth_launch.sh
 Then, from the host or inside the container:
 
 ```bash
-bash /mnt/shared_dir/stage_0830.sh             # ~1 min (omit FLIP=1: that is the
-                                               # temporary remove_imu_bias wiring test)
+bash /mnt/shared_dir/stage_0830b.sh            # ~1 min, no network needed
 ```
 
 **`/mnt/shared_dir` is the in-container path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`** —
 there is no `/mnt/shared_dir` on the Jetson itself, so the command above only runs inside the
 container (or via `docker exec`). Corrected 2026-08-27 after a session lost minutes to it.
 
-**`stage_0830.sh` is current** (2026-08-30). It carries **`f1tenth_stage_20260830.tgz`**
+**`stage_0830b.sh` is current** (2026-08-30 evening, md5 `5a9d4503735cc15bb66f6ac52827dc67`). It
+carries **`f1tenth_stage_20260830b.tgz`** (md5 `19faed92cc4e6188efd66b37630ad916`, `git archive HEAD`
+at **`9f97980`**, 189 entries) and verifies **fourteen** values in the installed tree — adding, over
+0830, the rviz ParticleCloud display and, critically, that `data/maps/20260805/` is present in the
+**installed** tree. Verified end to end 2026-08-30: 14/14. **It needs no network** — it unpacks
+`imu_pipeline` from `/mnt/shared_dir/imu_pipeline_58d227e.tgz` rather than cloning it, because the
+github clone fails reproducibly here (TCP 443 connects, transfer times out ~130 s).
+
+Since the container is now launched from `humble-devel-08302026`, which is a commit of an
+already-staged tree, **a fresh container is staged at birth** — run the script anyway after pulling
+new commits, since the image freezes the repo at `9f97980`.
+
+**`stage_0830.sh` (superseded)** carried **`f1tenth_stage_20260830.tgz`**
 (md5 `137531c39628609afe260cb19fba27c0`, `git archive HEAD` at **`e07c2e1`** over the same 180-entry
-path set as 0827b) and verifies **twelve** values in the installed tree — the twelfth being the
-bug-260 `IfCondition(launch_localization_string)` gate. Verified end to end on the container
-2026-08-30: 12/12. **Re-staging `0827b` or earlier silently reverts the bug-260 fix.**
+path set as 0827b) and verified **twelve** values, the twelfth being the bug-260
+`IfCondition(launch_localization_string)` gate. **It requires internet and will abort mid-stage
+without it, leaving the container worse off than unstaged.** **Re-staging `0827b` or earlier
+silently reverts the bug-260 fix.**
 
 The superseded lineage, for the record: `stage_0827b.sh` carried
 **`f1tenth_stage_20260827b.tgz`** (md5 `e61a8151d0d074f7b581808d41b1e912`, from `aced708`);
