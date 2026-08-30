@@ -34,12 +34,20 @@ class Check(Node):
         super().__init__('map_overlay_check')
         self.grid = None
         self.cloud = None
-        qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST)
-        qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
-        qos.reliability = ReliabilityPolicy.RELIABLE
+        # /map is latched by map_server: transient_local + reliable, and a volatile
+        # subscriber would miss the one-shot publish.
+        grid_qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST)
+        grid_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        grid_qos.reliability = ReliabilityPolicy.RELIABLE
+        # /map/pointcloud is pcd_to_pointcloud, which publishes VOLATILE and repeats
+        # every 3 s. Asking for TRANSIENT_LOCAL here is *incompatible*, so the
+        # subscription forms and then delivers nothing -- same trap as bug-261.
+        cloud_qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST)
+        cloud_qos.durability = DurabilityPolicy.VOLATILE
+        cloud_qos.reliability = ReliabilityPolicy.BEST_EFFORT
         p = ('/' + ns.strip('/') + '/') if ns.strip('/') else '/'
-        self.create_subscription(OccupancyGrid, p + 'map', self._grid, qos)
-        self.create_subscription(PointCloud2, p + 'map/pointcloud', self._cloud, qos)
+        self.create_subscription(OccupancyGrid, p + 'map', self._grid, grid_qos)
+        self.create_subscription(PointCloud2, p + 'map/pointcloud', self._cloud, cloud_qos)
         self.prefix = p
 
     def _grid(self, m):
@@ -85,8 +93,13 @@ def main():
               '(launch_pointcloud_map follows launch_visualization -- is RViz up?)'
               % (node.prefix, args.timeout))
     else:
-        pts = np.array([p[:3] for p in point_cloud2.read_points(
-            node.cloud, field_names=('x', 'y', 'z'), skip_nans=True)], dtype=np.float64)
+        # read_points returns a *structured* array in Humble, whose elements are
+        # 0-d voids -- p[:3] raises IndexError. Take the fields by name instead.
+        raw = point_cloud2.read_points(
+            node.cloud, field_names=('x', 'y', 'z'), skip_nans=True)
+        pts = np.column_stack(
+            [np.asarray(raw['x']), np.asarray(raw['y']), np.asarray(raw['z'])]
+        ).astype(np.float64)
         print('%smap/pointcloud : %d points, frame %s'
               % (node.prefix, len(pts), node.cloud.header.frame_id))
         print('%s                 extent x [%.2f, %.2f]  y [%.2f, %.2f]  z [%.2f, %.2f]'

@@ -35,6 +35,44 @@
 >
 > ---
 >
+> ## ★★★★ THE MAP-ALIGNMENT QUESTION IS CLOSED — 2026-08-30 ~19:25 EDT
+>
+> **There is no misalignment. There never was one in the published data.** Measured live in
+> `jetson_container_20260830_181631`, staged, parked, no drive battery, RViz up:
+>
+> | | measured | means |
+> |---|---|---|
+> | `/map` | 265x199 @ 0.05, origin **(-9.29, -6.06)**, orientation **identity** | 20260805 grid |
+> | `/map/pointcloud` | **96 199 pts**, x max **3.82 m**, frame `map` | `20260805/cloud_voxel_0p05.pcd` |
+> | `map->base_link` | (0.578, -0.544, **-86.82 deg**) | parking spot, 13 cm / 2.3 deg off the seed |
+> | `odometry/local` twist | 0.006 / 0.038 m/s | no bug-244 runaway on this image |
+>
+> Both artifacts are positively the archived pair whose co-registration was measured offline at
+> **0.05 m median -- one cell -- at zero shift**, and both are placed into `map` with **identity**
+> orientation (the map yaml's third origin element is `0`, and the live `info.origin.orientation`
+> is `w=1`). There is no transform in the path that could introduce a rotation. The left-hand
+> column of the old table is what came back, so the stale-cloud explanation is **dead**, as that
+> block predicted it would be.
+>
+> **What the operator was actually looking at: the RViz camera.** The `Grid` display's Reference
+> Frame is `<Fixed Frame>` = `map`, so orbiting rotates the reference grid and the map rectangle
+> **together**; a screenshot compared against a north-up `.pgm` then shows the whole scene yawed by
+> the camera angle. Operator identified this themselves. **Do not judge map alignment from an orbit
+> view against a north-up image** -- read the grid origin and the cloud fingerprint off the wire, as
+> above, or set the camera to the saved `Top Down (old default)` view first.
+>
+> This closes the last of the three questions this document family was carrying. The only remaining
+> item in `testing_checklist.md` is loop closure, which **needs the drive battery**.
+>
+> **Two bugs in the diagnostic itself, both fixed, logged as bug-264** (`map_overlay_check.py`,
+> committed): it reused one TRANSIENT_LOCAL QoS for both topics, which is *incompatible* with
+> `pcd_to_pointcloud`'s VOLATILE publisher -- so it reported `NO MESSAGE in 30 s` and **blamed the
+> stack** while RViz was rendering the cloud perfectly. Third instance of this class after bug-238
+> (durability) and bug-261 (reliability). **When a checker says a topic is silent, check the
+> checker's QoS before believing it.** It also crashed on Humble's structured `read_points` array.
+>
+> ---
+>
 > ## ★★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~19:05 EDT
 >
 > **This block is written for the OPERATOR to run alone. Nothing here needs the drive battery, the
