@@ -35,20 +35,59 @@
 >
 > ---
 >
-> ## ★★ NEXT SESSION STARTS HERE — appended 2026-08-27 ~20:30 EDT
+> ## ★★ NEXT SESSION STARTS HERE — updated 2026-08-30 ~15:40 EDT
+>
+> **Items 1 and 2 below are DONE, parked, on AC. Both are struck through and their results
+> recorded. What is left needs the battery — go to item 3.**
+>
+> **bug-260 — FIXED and verified 2026-08-30.** Root cause was **not** one of the three hops this
+> doc named; all three were correct, and in-launch probes proved it (`bringup` -> `mapping` ->
+> `teleop` all carry `launch_localization='False'`). The defect is that teleop's localization
+> include sits inside `TimerAction(period=10.0)`, so its `IfCondition(launch_localization)` is
+> evaluated **~10 s later** — by which time the enclosing `GroupAction` scope that carried
+> bringup's `'False'` has been **popped**, and the unevaluated `LaunchConfiguration` resolves
+> against bringup's own top-level default `'True'`. Measured directly: `teleop launch_setup`
+> reads `'False'`, `teleop@fire` reads `'True'`. Fixed by freezing the value at `launch_setup`
+> time (`teleop.launch.py:499`, used at `:682`). Verified on a clean launch: **0 duplicate node
+> names, no `/amcl`, no `/map_server` under `slam:=True`, `/map` Publisher count 1
+> (`slam_toolbox` only — bug-027 closed), TF still 0/0/0, 42 nodes.** `testing_checklist.md` §10
+> mapping mode is now `[x]`.
+>
+> **This is a general trap, not a teleop one:** a condition on an action inside a `TimerAction`
+> is evaluated after enclosing scopes have popped. Any `LaunchConfiguration` a parent set for a
+> child, and the child consumes at deferred-execution time, is at risk. bringup's own timers are
+> safe **only** because they read bringup's own top-level arguments.
+>
+> **The 8.4 Hz `odometry/local` finding — RESOLVED 2026-08-30, and it was not what was feared.**
+> Controlled A/B, same launch (`slam:=False launch_navigation:=True`), parked, nothing else
+> changed:
+>
+> | `launch_visualization` | `odometry/local` | VSLAM | `Failed to meet update rate` |
+> |---|---|---|---|
+> | `False` | **30.10 / 30.02 / 30.05 Hz** | 29.96 Hz | 0 |
+> | `True` (RViz up) | **30.06 / 30.02 / 30.01 Hz** | 30.23 Hz | 0 |
+>
+> **Visualization does not gate fusion measurements.** With RViz up it took **98 % of one core**
+> (higher than the 70 % previously measured — this run rendered over forwarded X11) and the system
+> still showed **41.5 % idle**; `ekf_node` sat at 9 %. Both named candidates are refuted: CPU
+> contention does not do it, and there was no degraded EKF input (`launch_icp_odometry` confirmed
+> off, no ICP node, VSLAM alive both arms). By elimination the surviving explanation is the
+> doc's own third one — **the hand-carry** immediately before the 2026-08-27 reading. 8.4 Hz was
+> **not reproduced**, so treat that as the likely cause rather than a proven one, and re-measure
+> rather than assume if it ever reappears.
 >
 > The three items above are **done** (bug-257 fixed, `movement_time_allowance` verified, `BackUp`
 > reached by the BT). What follows is what a fresh chat should pick up, in order. The first two need
 > **no battery and no VESC** — see §4a for why a parked car exercises Nav2 fully.
 >
-> **1. bug-260 — `slam:=True` double-launches localization.** Fully specified in §1(c): TF is clean,
+> **~~1. bug-260 — `slam:=True` double-launches localization.~~ DONE 2026-08-30 — see above.** Fully specified in §1(c): TF is clean,
 > but `/ekf_odom_node`, `/rf2o_laser_odometry`, `/rtabmap_stereo_odom` and
 > `/pointcloud_map_publisher` each run twice, and **AMCL + `map_server` run under `slam:=True`** so
 > `/map` has two publishers (bug-027 — a map saved during a mapping run may come from the stale
 > file). The mechanism is pinned to one of three hops; §1(c) names the exact files and line ranges
 > and says to trace the *performed* value rather than guess. Self-contained, parked.
 >
-> **2. `odometry/local` at 8.4 Hz instead of ~30 Hz.** Measured 2026-08-27 20:20 on the
+> **~~2. `odometry/local` at 8.4 Hz instead of ~30 Hz.~~ RESOLVED 2026-08-30 — see above.** Measured 2026-08-27 20:20 on the
 > `particlecloud_e` launch (`slam:=False`, `launch_navigation:=True`, **`launch_visualization:=True`**,
 > one RViz, car parked after a hand-carry): `ros2 topic hz /odometry/local` → **8.356 then 8.649 Hz**,
 > min 0.097 s / max 0.200 s. The healthy baseline for this stack is **29.70 Hz with a 0.180 s max
@@ -76,7 +115,7 @@
 >
 > **Machine state as of 20:30:** container `jetson_container_20260827_185401` up and warm, stack torn
 > down, staged with **`stage_0827b.sh`** (md5 `e61a8151d0d074f7b581808d41b1e912`, from `aced708`).
-> **Ten commits local and unpushed** — check with `git log @{u}..HEAD`, do not trust this number.
+> **Twelve commits local and unpushed as of 2026-08-30 15:10** (the line here said ten; that was the eighth stale claim caught in this family) — check with `git log @{u}..HEAD`, do not trust this number.
 > Drive battery and DualSense still off; `/dev/sensors/vesc` and `/dev/input/js0` absent until the
 > operator connects them.
 >
@@ -132,8 +171,9 @@ is the plan.
 
 ## 1 · Before the battery — five parked items
 
-**STATUS 2026-08-27 evening: (a) ACCEPTED, (b) PASS, (d) PASS. (c) RE-TESTED AND FAILING (bug-260,
-hand off to a fresh session). (e) attempted — both blockers identified, needs the drive session.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
+**STATUS 2026-08-30: (a) ACCEPTED, (b) PASS, (c) FIXED AND PASSING (bug-260), (d) PASS.
+(e) attempted — both blockers identified, needs the drive session. Four of the five parked items
+are closed; only (e) remains, and it needs the car to move.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
 at (the topic exists as `nav2_msgs/msg/ParticleCloud` but stays silent parked, because AMCL is
 motion-gated — so this needs a drive *and* an operator at RViz).
 
@@ -222,9 +262,12 @@ ros2 launch f1tenth_launch bringup.launch.py slam:=False launch_navigation:=Fals
 ros2 run tf2_tools view_frames     # expect map -> odom -> base_link -> lidar/camera/imu
 ```
 
-**(c) Mapping mode, no TF conflicts** — §10, still `[!]`. **RE-TESTED 2026-08-27 20:15: TF is clean,
-but the double-launch is NOT fixed. The "bug-022, fixed 2026-08-04" line below is a stale blocker —
-this is the seventh.** Logged as **bug-260**; picking it up is a self-contained next task.
+**(c) Mapping mode, no TF conflicts** — §10, now **`[x]`**. **FIXED AND VERIFIED 2026-08-30
+(bug-260).** TF was already clean; the double-launch is now gone too — 0 duplicate node names, no
+`/amcl` or `/map_server` under `slam:=True`, `/map` Publisher count 1. **The "one of those three
+hops drops the value" diagnosis below was wrong** — all three hops were correct, and probing them
+is what proved it. The real cause was `TimerAction` deferral outliving the `GroupAction` scope;
+see the ★★ block at the top. Kept below for the record.
 
 *What passes:* **0** `TF_REPEATED`, **0** authority warnings, **0** extrapolation warnings, and no
 duplicate `/command_gate` (that suppression works, so the bug-016 safety hazard did not recur).

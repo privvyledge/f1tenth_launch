@@ -489,6 +489,14 @@ def launch_setup(context, *args, **kwargs):
     container_name_string = container_name.perform(context)
     odom_tf_publisher_string = odom_tf_publisher.perform(context)
     map_tf_publisher_string = map_tf_publisher.perform(context)
+    # Frozen here on purpose, and consumed as a plain string by localization_launch's
+    # condition below. That include sits inside a TimerAction, whose actions execute ~10 s
+    # later — by which time any enclosing GroupAction scope a parent set this value in has
+    # been popped, and an unevaluated LaunchConfiguration would resolve against the
+    # top-level value instead of the parent's. Measured: bringup -> mapping -> teleop under
+    # slam:=True reads 'False' here and 'True' at fire time, which started a second
+    # localization stack (bug-260).
+    launch_localization_string = launch_localization.perform(context)
 
     if camera_name_string != '':
         camera_name_string += '/'
@@ -671,7 +679,7 @@ def launch_setup(context, *args, **kwargs):
                         PythonLaunchDescriptionSource(
                                 PathJoinSubstitution([localization_include_dir, 'localization.launch.py'])
                         ),
-                        condition=IfCondition(launch_localization),
+                        condition=IfCondition(launch_localization_string),
                         launch_arguments={
                             "use_composition": use_composition,
                             "container_name": container_name if (use_composition_string.lower() == 'true' or attach_to_shared_component_container_string.lower() == 'true') else 'localization_container',

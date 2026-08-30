@@ -586,7 +586,7 @@ Add bug notes inline under the failing item.
   # Expected TF chain: map -> odom -> base_link -> lidar, camera_link, etc.
   ```
 
-- [!] **Mapping mode: no TF conflicts**. **[2026-08-04]** No TF extrapolation/TF_REPEATED/authority warnings (0 in log), but `slam:=True` **double-launches localization** → duplicate `icp_odometry`/`stereo_odometry` and a map_server lifecycle abort. See the 2026-08-04 double-include bug. Re-test after that fix.
+- [x] **Mapping mode: no TF conflicts**. **[2026-08-30]** PASS. 0 TF extrapolation / TF_REPEATED / authority warnings, **0 duplicate node names**, no `/amcl` or `/map_server` under `slam:=True`, and `/map` has **1 publisher** (`slam_toolbox` only — bug-027 closed). 42 nodes. The double-launch (bug-260) was `teleop.launch.py`'s localization `TimerAction`: its `IfCondition(launch_localization)` was evaluated ~10 s after `launch_setup`, by which time the enclosing `GroupAction` scope carrying bringup's `'False'` had been popped, so it resolved against bringup's top-level `'True'`. Fixed by freezing the value at `launch_setup` time. Verified with `bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False launch_2d_mapping:=True`.
   ```bash
   ros2 launch f1tenth_launch bringup.launch.py slam:=True launch_navigation:=False use_gpu:=False
   # Watch for TF extrapolation errors or duplicate TF warnings in the log
