@@ -113,8 +113,10 @@
 > **Best Effort**, and AMCL's motion gate cannot be satisfied by hand-carrying); then arm A (§3),
 > which needs a battery and a taped floor.
 >
-> **Machine state as of 20:30:** container `jetson_container_20260827_185401` up and warm, stack torn
-> down, staged with **`stage_0827b.sh`** (md5 `e61a8151d0d074f7b581808d41b1e912`, from `aced708`).
+> **Machine state as of 2026-08-30 15:45:** container `jetson_container_20260830_151510` up and
+> warm, stack torn down, staged with **`stage_0830.sh`** (md5 `137531c39628609afe260cb19fba27c0`,
+> from `e07c2e1`), 12/12 installed-tree checks pass. Jetson on **AC**, clock correct, root fs 12 %
+> used, RealSense and YDLidar present.
 > **Twelve commits local and unpushed as of 2026-08-30 15:10** (the line here said ten; that was the eighth stale claim caught in this family) — check with `git log @{u}..HEAD`, do not trust this number.
 > Drive battery and DualSense still off; `/dev/sensors/vesc` and `/dev/input/js0` absent until the
 > operator connects them.
@@ -641,21 +643,30 @@ bash ~/bolus_ws/f1tenth_launch.sh
 Then, from the host or inside the container:
 
 ```bash
-FLIP=1 bash /mnt/shared_dir/stage_0827.sh      # ~1 min
+bash /mnt/shared_dir/stage_0830.sh             # ~1 min (omit FLIP=1: that is the
+                                               # temporary remove_imu_bias wiring test)
 ```
 
 **`/mnt/shared_dir` is the in-container path. On the host it is `/mnt/f1tenth_ssd/shared_dir/`** —
 there is no `/mnt/shared_dir` on the Jetson itself, so the command above only runs inside the
 container (or via `docker exec`). Corrected 2026-08-27 after a session lost minutes to it.
 
-`stage_0827.sh` supersedes `stage_0826c.sh` (which superseded `stage_0826.sh`). It carries
+**`stage_0830.sh` is current** (2026-08-30). It carries **`f1tenth_stage_20260830.tgz`**
+(md5 `137531c39628609afe260cb19fba27c0`, `git archive HEAD` at **`e07c2e1`** over the same 180-entry
+path set as 0827b) and verifies **twelve** values in the installed tree — the twelfth being the
+bug-260 `IfCondition(launch_localization_string)` gate. Verified end to end on the container
+2026-08-30: 12/12. **Re-staging `0827b` or earlier silently reverts the bug-260 fix.**
+
+The superseded lineage, for the record: `stage_0827b.sh` carried
+**`f1tenth_stage_20260827b.tgz`** (md5 `e61a8151d0d074f7b581808d41b1e912`, from `aced708`);
+`stage_0827.sh` superseded `stage_0826c.sh` (which superseded `stage_0826.sh`) and carried
 **`f1tenth_stage_20260827.tgz`** (md5 `9c1c6b66fb8531e8fb4c48e917908655`, cut from git HEAD
 `614c463` with `git archive` over the same path set as 0826c — it carries the bug-245 gate,
 `movement_time_allowance: 10.0` and the `nav2_goal_probe.py` live-robot fix), clones the
 `imu_pipeline` fork and rebuilds `imu_processors`, and verifies **nine** values in the **installed**
 tree. `FLIP=1` applies a temporary `remove_imu_bias:='True'` for wiring tests; **omit it** for the
-committed `'False'`. **Re-staging `0826c`, `0826b` or `0825` silently reverts today's work** — 0826c
-predates `movement_time_allowance`.
+committed `'False'`. **Re-staging any earlier script silently reverts later work** — 0826c
+predates `movement_time_allowance`, and everything before 0830 predates the bug-260 fix.
 
 Two live checks worth running after any stage:
 
