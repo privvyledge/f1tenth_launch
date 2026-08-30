@@ -35,6 +35,117 @@
 >
 > ---
 >
+> ## ★★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~18:35 EDT
+>
+> **STOP. The container is in a BROKEN PARTIAL-STAGE state. Fix that before anything else.**
+>
+> `jetson_container_20260830_181631` is up, but `stage_0830.sh` **died halfway** — the lab network
+> lost internet and step 2 (`imu_processors` from the `privvyledge/imu_pipeline` fork) failed with
+> `SSL connection timeout`. `set -eo pipefail` aborted the script there. Measured state right now:
+>
+> | | state | consequence |
+> |---|---|---|
+> | `src/.../data/maps/20260805/` | **present** (step 1 ran) | — |
+> | `install/.../launch/*.launch.py` | **updated**, defaults point at `20260805` | symlinked to src |
+> | `install/.../data/maps/20260805/` | **MISSING** (a later step never ran) | **`map_file` resolves to a path that does not exist — `map_server` will not load any map** |
+>
+> **So a launch right now is worse than an unstaged one**: the launch files ask for the current map
+> and the file is not there. **Re-run `stage_0830.sh` to completion once the lab network is back.**
+> If internet is still down, its step 2 is the only part that needs it — the rest can be run by hand,
+> but check whether the image's existing `imu_processors` (present at
+> `/workspaces/f1tenth/install/imu_processors`) is the 0.5.2 build with `stationary_timeout` before
+> assuming the skip is harmless. **`remove_imu_bias` is `False` at both call sites anyway**, so it is
+> not on the critical path for a map or Nav2 session.
+>
+> **New guards, added 2026-08-30 — they will catch this class of failure for you.**
+> `scripts/live_runs/10_preflight.sh` now fails if the installed tree lacks `data/maps/20260805` or
+> still defaults `map_file` to `raslab.yaml`. On the robot, `/mnt/shared_dir/stagecheck.sh` does the
+> same and is sourced by `viz_launch.sh`, `mapcheck_launch.sh`, `throttle_launch.sh` and
+> `launch_run.sh`, which now **refuse to launch** an unstaged container. `testing_checklist.md` §7b
+> records the map-origin fingerprint: **(−9.29, −6.06) = current 20260805, (−3.95, −9.87) = retired
+> raslab** — read it off `/map` rather than trusting a filename.
+>
+> ### The map-alignment question — what is settled and what is NOT
+>
+> **Settled, offline, no robot:** the repo's 2D grid and 3D cloud **are not rotated relative to each
+> other.** Rendered as published with no alignment applied they trace the same closed ring
+> (`scripts/analysis/map_cloud_align.py --overlay`). The 2026-08-10 co-registration measurement
+> stands, and the `origin:` hypothesis is refuted in the same picture.
+>
+> **Two traps recorded in that script's header, both of which nearly produced a false finding:**
+> a yaw sweep scored by median nearest-cloud distance reports a confident **+31 deg** optimum that is
+> **entirely spurious** (the cloud is denser than the grid and does not cover its footprint, so any
+> rotation packing grid cells into the dense annulus wins) — and it agrees with the operator's
+> reported ~30 deg to within a degree, so it would have "confirmed" the wrong answer. Also: **this lab
+> is a closed ring, not a rectangle**, so wall-orientation methods do not apply here at all.
+>
+> **NOT settled — do not repeat this session's overreach.** A fresh, unstaged container was measured
+> serving the retired raslab grid (live `/map` origin **(−3.950, −9.870)**, 173x258), the **Jan-2024**
+> `rtabmap/raslab/cloud.pcd`, and no `data/maps/20260805/` at all — a pairing that renders exactly
+> like a rotated 3D map. That is a **real and reproducible failure mode**, and it is now guarded. But
+> it is **not established to be what the operator saw**: the operator points out that the run in
+> question was in the *earlier, staged* container (`..._151510`), whose installed tree was verified
+> this session to carry the correct 20260805 defaults at both entry points. **So the cause of the
+> observed misalignment is still open.** Do not write it up as solved.
+>
+> **How to actually settle it, in one run:** stage properly, launch with
+> `launch_visualization:=True`, and run `scripts/live_runs/map_overlay_check.py --ns ""` — it matches
+> the live `/map/pointcloud` against both candidate `.pcd` files by point count and bounding box
+> (current = 96199 pts, x max 3.82 m; Jan-2024 = 76122 pts, x max 15.04 m), so the cloud on the wire
+> is **named**, not inferred, and it prints the grid extent and `map→base_link` alongside. Then take
+> the screenshot. **The screenshot is the part that distinguishes the two live hypotheses**: cloud
+> offset from grid (a map problem) versus car, footprint and live scan rotated inside a correct map
+> (a localization problem, bug-231/232). Topic data alone cannot separate those.
+>
+> ### Also measured this session, and unexplained
+>
+> On that unstaged container, parked with no drive battery, **`map→base_link` read (6303, 1795) m and
+> was growing ~71 m/s**. That is the bug-244 signature, and the image predates the bug-248
+> `imu_filter_constant_dt` fix, with `vesc_odom` silent (no VESC) so nothing arrests it — consistent,
+> but **not verified**, because the run was abandoned. Re-check on a properly staged container; if it
+> persists *after* staging, bug-244 is not as closed as `BUG244_CLOSEOUT_20260826.md` claims.
+>
+> ### Display / container operations — learned the hard way this session
+>
+> **The container was lost once tonight.** It runs with `--rm` and its main process is the shell of
+> the session that created it; when that MobaXterm session dropped, the container exited and was
+> auto-removed, taking a warm 3-hour stack. Logs survived only because they are on the SSD.
+> **Always start it under `tmux`** (now installed) — `tmux new -s f1tenth`, run
+> `~/bolus_ws/f1tenth_launch.sh`, `Ctrl-b d`. A no-tmux fallback that detaches via a FIFO is staged at
+> `~/bolus_ws/f1tenth_launch_detached.sh`.
+>
+> **`jetson-containers` bakes `$DISPLAY` in at container creation and it cannot be repointed
+> afterwards.** Validate the display *before* creating the container:
+> `xdpyinfo -display $DISPLAY`. A dead forwarded display still shows an sshd listener on its port, so
+> `ss -ltn` proves nothing — only `xdpyinfo` does.
+>
+> **The xauth key form matters, and this is the detail CLAUDE.md was missing.**
+> `xauth extract` writes a key of the form `<host>/unix:N`, which matches only a **Unix-socket**
+> connection; a container connecting over TCP to `localhost:N.0` needs the **FamilyWild** form. The
+> symptom is `MoTTY X11 proxy: No authorisation provided`. The fix:
+> ```bash
+> xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+> ```
+>
+> ### What this session closed
+>
+> **VSLAM frame-delta warnings — CLOSED**, `testing_checklist.md` §8 now `[x]`. Present live at 1x
+> with `use_gpu:=True` on every launch (so the standing "replay artefact, eliminated by the use_gpu
+> fix" prediction is **refuted**), but benign: a cuVSLAM tracker startup transient beginning 39-134 ms
+> after tracker init, lasting 129-615 ms, never recurring — 1107 s of silence in the longest run.
+>
+> **Throttle interpolator — CLOSED**, §1 now `[x]`, logged as **bug-262**. PASS on hardware, parked,
+> no battery. **The fix the operator remembered does exist**: `63673f5` in **`f1tenth_system`** — a
+> *different repository*, which is why every search of this repo came up empty. General lesson:
+> establish which repo owns the file before concluding a fix does not exist. Measured over 60 s of
+> stick sweeps: mux and gate ±0.3140 rad, interpolator in and out both servo 0.2005-0.9195, output at
+> 75 Hz. The test topics this doc previously named were both *upstream* of the interpolator and could
+> never have seen the bug.
+>
+> **Commits:** `3b55711`, `ab99d59` and the guards commit, all pushed to `origin/perf/config-tuning`.
+>
+> ---
+>
 > ## ★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~16:25 EDT
 >
 > **All five parked items in §1 are now closed. The 2026-08-30 session closed (c) bug-260 and (e)

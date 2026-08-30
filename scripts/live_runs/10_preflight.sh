@@ -41,6 +41,32 @@ else
   fail "f1tenth_launch not on the ROS package path — did you source the overlay?"
 fi
 
+# --- staging guard -----------------------------------------------------------
+# /workspaces is a CONTAINER LAYER, not a bind mount, so a fresh container serves
+# the IMAGE's source -- frozen at the image build date, not git HEAD. Every check
+# against "the installed tree" is meaningless until the stage script has run.
+# The cheapest fingerprint is the map set: the current maps live in 20260805/,
+# and the pre-2026-08-11 (bug-237) defaults point at the retired raslab map.
+# Cost of not checking: on 2026-08-30 an unstaged container served the raslab grid
+# (origin -3.95,-9.87) and the Jan-2024 cloud, which looks exactly like a rotated
+# 3D map, plus the pre-bug-248 IMU chain that ran map->base_link out to 6.3 km.
+if PKG_SHARE="$(ros2 pkg prefix f1tenth_launch 2>/dev/null)/share/f1tenth_launch"; then
+  if [[ -d "$PKG_SHARE/data/maps/20260805" ]]; then
+    info "map set staged: data/maps/20260805 present"
+  else
+    fail "data/maps/20260805 MISSING from the installed tree ($PKG_SHARE).
+          This container has not been staged -- it is serving the image's source,
+          which predates the bug-237 map fix. It will silently load the retired
+          raslab map (origin -3.95,-9.87 instead of -9.29,-6.06) and the Jan-2024
+          point cloud, and the pair looks misaligned in RViz. Run the current
+          stage script before launching anything."
+  fi
+  if grep -q "maps', 'raslab.yaml'" "$PKG_SHARE/launch/bringup.launch.py" 2>/dev/null; then
+    fail "bringup.launch.py still defaults map_file to the retired raslab.yaml.
+          Unstaged container (pre-2026-08-11). Stage before launching."
+  fi
+fi
+
 info "RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 case "$DDS_PROFILE" in
   static)

@@ -426,6 +426,40 @@ Add bug notes inline under the failing item.
 
 ---
 
+## 7b. Which map is actually loaded — read the origin, not the filename
+
+**One number tells you, in one command, and it has cost a session.** The map set in use is
+identified by the occupancy grid's `origin`, which differs between the current and the retired map:
+
+| map set | grid size | `origin` | status |
+|---|---|---|---|
+| `data/maps/20260805/rtabmap_2d_final` | 265 x 199 | **(−9.29, −6.06)** | current — pairs with `cloud_voxel_0p05.pcd` and the `localizer_amcl.yaml` seed |
+| `data/maps/raslab` | 173 x 258 | **(−3.95, −9.87)** | retired 2026-08-11 (bug-237); deleted from the repo, still inside older container images |
+
+```bash
+ros2 topic echo /map --field info --once      # read width/height and origin.position
+```
+
+**Why the filename is not enough:** a launch argument, an inherited `LaunchConfiguration`, or an
+unstaged container can all put a different file behind the same command line. The origin comes off
+the wire and cannot lie.
+
+**The usual cause of the wrong answer is an unstaged container.** `/workspaces` is a container layer,
+not a bind mount, so a fresh container serves the **image's** source, frozen at the image build date
+— which for `humble-devel-08092026` predates the bug-237 map fix. Measured 2026-08-30 on a fresh,
+unstaged container: `map_file` defaulted to `raslab.yaml`, `pointcloud_map_file` to the **Jan-2024**
+`rtabmap/raslab/cloud.pcd`, and `data/maps/20260805/` did not exist at all. That pairing renders as a
+3D cloud grossly offset and rotated against the 2D grid — indistinguishable by eye from a genuine
+map-alignment defect. `scripts/live_runs/10_preflight.sh` now fails on exactly this.
+
+**A second symptom rides along, from the same cause:** that image also predates the bug-248
+`imu_filter_constant_dt` fix, so on a parked car with no drive battery (silent `vesc_odom`, nothing
+to arrest it) `map→base_link` ran out to **(6303, 1795) m and growing ~71 m/s**. If you see both a
+misaligned 3D map and an absurd `map→base_link` in the same run, do not debug them separately —
+check staging first.
+
+---
+
 ## 8. Mapping
 
 **What changed**: `use_sim_time` default in `mapping.launch.py` changed **True → False** (was accidentally enabling sim time for online mapping). `odom_tf_publisher` and `map_tf_publisher` are now proper top-level args.
