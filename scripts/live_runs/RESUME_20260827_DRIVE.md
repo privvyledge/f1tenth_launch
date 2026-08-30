@@ -35,9 +35,47 @@
 >
 > ---
 >
-> ## ★★★★ THE MAP-ALIGNMENT QUESTION IS CLOSED — 2026-08-30 ~19:25 EDT
+> ## ★★★★★ THE MAP ROTATION IS REAL — 2026-08-30 ~19:40 EDT. The operator was right.
 >
-> **There is no misalignment. There never was one in the published data.** Measured live in
+> **RETRACTION.** The block below, written 15 minutes earlier, said there was no misalignment. It
+> was wrong, and so were the two sessions before it. **The cloud is yawed ~+25.75 deg against the
+> grid** (bug-265). Correction: **-25.75 deg about the grid centroid (-0.627, -0.797), then
+> (+0.20, -0.25) m**.
+>
+> **What to use:** `scripts/analysis/map_cloud_align2.py`. F1 0.308 -> 0.427 at 334.25 deg with
+> **both** coverage directions improving (0.556 -> 0.785 and 0.213 -> 0.293); peak stable at
+> 334-336 deg across nine z-band x tolerance settings; overlay agrees by eye.
+>
+> **Why three sessions got this wrong, which is the part worth carrying:** every dismissal rested on
+> one number in CLAUDE.md -- "0.05 m median at zero shift" -- from `map_cloud_align.py`'s **one-way**
+> score. The cloud is a dense annulus not covering the grid's footprint, so every pose scores well
+> and the metric cannot tell alignment from density. This document already warned that the same
+> metric yields a spurious +31 deg under a yaw sweep; nobody noticed that this equally invalidates
+> the zero-shift reading being quoted as proof. Then this session added a fourth wrong argument --
+> that identity orientation on both published messages precludes a rotation. It only precludes a
+> *transform*-introduced one, never a rotation baked into the PCD data.
+>
+> **The grid is the trustworthy one**: AMCL localizes against it and `heading_from_scan.py`
+> validated it against live LiDAR to 1.03 deg. **Impact today is visualization-only** --
+> `pcd_to_pointcloud` publishes `map/pointcloud` and only RViz subscribes -- but it must be fixed
+> before the cloud feeds nvblox, 3D nav, or any VSLAM co-registration claim.
+>
+> **STILL OPEN, and this is the next job:** *why* is it rotated? First thing to check is whether
+> `cloud_clean.pcd` and `rtabmap_2d_final.pgm` really were exported from the same database
+> (`rtabmap_final_nf.db`, on the SSD, not in the repo) -- see `MAP_BUILD_HANDOFF.md`. Until that is
+> answered, do not "fix" it by baking the measured yaw into the .pcd; that would paper over a
+> provenance bug with a fudge factor.
+>
+> **Method note for whoever is next: when the operator reports seeing something and a script says
+> otherwise, re-derive the script's claim before arguing with them.** The screenshot with the cloud
+> toggled off settled in one glance what four instrument-based arguments had gotten wrong.
+>
+> ---
+>
+> ## ~~★★★★ THE MAP-ALIGNMENT QUESTION IS CLOSED~~ — RETRACTED, see above
+>
+> ~~**There is no misalignment.**~~ **WRONG -- superseded by the block above.** Kept because its
+> measurements are still valid and still useful: Measured live in
 > `jetson_container_20260830_181631`, staged, parked, no drive battery, RViz up:
 >
 > | | measured | means |
