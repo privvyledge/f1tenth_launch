@@ -72,7 +72,16 @@ Add bug notes inline under the failing item.
   ```
 
 - [!] **Acceleration limit works** — with the lower limit (1.0 m/s²), the car should accelerate more gradually. Drive forward with joystick and observe start behavior.
-  > **Bug**: When `launch_throttle_interpolator_node:=True`, throttle acceleration is limited correctly but steering misbehaves — returns to center instead of responding to joystick. TODO: investigate throttle_interpolator package for steering passthrough.
+  > **Bug**: When `launch_throttle_interpolator_node:=True`, throttle acceleration is limited correctly but steering misbehaves — returns to center instead of responding to joystick.
+  >
+  > **[2026-08-30] The operator reports this was diagnosed and fixed in an earlier session, cause attributed to the mux and the joystick — but the fix was never recorded, so the item stays `[!]` until it is re-verified.** Searched and found nothing: `git log --all --grep=throttle` shows only the two original "Setup actuation interpolation/smoothing" commits, `git log -S throttle_interpolator -- launch/vehicle/vehicle.launch.py` shows nothing since the original wiring, and **none of the 141 entries in the buglog is this bug**. The nearest match is **bug-049** (mux `joystick.timeout` 0.1 → 0.3 s, because the joystick's priority-100 claim lapsed ~155×/min and let `navigation` command the car). Its mechanism is adjacent — a competing publisher winning mux arbitration and zeroing what the joystick asked for — but its recorded symptom is spurious parked servo twitches, not steering centering under the interpolator, so it is **not** established to be the same fix.
+  >
+  > **Re-test, and it needs NO battery and no VESC** — steering passthrough is visible in the command stream. Connect the DualSense (that also supplies the `command_gate` heartbeat), launch with `launch_throttle_interpolator_node:=True`, hold the deadman and sweep the steering stick while echoing **values**, not rates:
+  > ```bash
+  > ros2 topic echo /ackermann_drive --field drive.steering_angle        # mux output
+  > ros2 topic echo /vehicle/ackermann_cmd --field drive.steering_angle  # gate output -> VESC
+  > ```
+  > Steering tracking the stick on both = fixed, tick the box. Pinned at 0.0 on either = still broken, and the difference between the two topics localises it to the mux or to the gate. Then reconcile `CLAUDE.md` and the RESUME §10 table, which both still call this open.
 
 ---
 

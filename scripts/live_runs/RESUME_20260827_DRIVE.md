@@ -35,7 +35,93 @@
 >
 > ---
 >
-> ## ★★ NEXT SESSION STARTS HERE — updated 2026-08-30 ~15:40 EDT
+> ## ★★ NEXT SESSION STARTS HERE — rewritten 2026-08-30 ~16:25 EDT
+>
+> **All five parked items in §1 are now closed. The 2026-08-30 session closed (c) bug-260 and (e)
+> the particle cloud, and resolved the 8.4 Hz odometry finding — details further down this block.
+> `testing_checklist.md` is at 2 open items, from 9.**
+>
+> **The operator has set the next two tasks, in this order. Neither needs the drive battery.**
+>
+> ### 1. VSLAM frame-delta warnings — `testing_checklist.md` §8, `[!]`
+>
+> `Delta between current and previous frame [66ms] is above threshold [34ms]` from
+> `visual_slam_node`. The existing note calls it an artefact of 100x bag playback plus the old
+> `use_gpu` bug, and predicts it "will not launch with `use_gpu:=False`, eliminating this warning
+> entirely". **Treat that prediction as unverified** — this is exactly the class of claim §7 is
+> about, and the entry has never been re-checked since the `use_gpu` fix. Cheap to settle: the
+> 2026-08-30 launches all ran VSLAM healthy at 29.9-30.2 Hz live, so start by grepping the
+> `claude_bringup_0830/` logs for the warning at **1x realtime** before replaying anything. If it
+> is absent live and present only in fast replay, close it as a replay artefact and say so.
+>
+> ### 2. The map-alignment question the operator has been carrying for a while
+>
+> **Two observations, and they may or may not be the same defect. Do not assume they are.**
+>
+> **(a) The 2D grid and the 3D cloud look ~30 deg unaligned in RViz, despite coming from the same
+> RTABMap database.** This **directly contradicts a measurement already in the repo**, so the first
+> job is to work out which is wrong — do not re-measure blind and do not "fix" the maps first.
+> CLAUDE.md records, from an offline check on 2026-08-10: median distance from an occupied grid cell
+> to the nearest projected cloud cell is **0.05 m — one cell — at zero shift, and no rotation is
+> supported by the data**; absolute overlap is low (~16 %) for a structural reason, the grid being
+> LiDAR-built (`Grid/Sensor: 0`) and the cloud RGB-D. Both were exported from **`rtabmap_final_nf.db`**.
+> **This is checkable entirely offline, with no robot** — `data/maps/20260805/` holds the grid and
+> the voxel-downsampled cloud, and `scripts/analysis/` has the tooling.
+>
+> Concrete hypothesis worth testing early, because it would produce exactly this appearance without
+> either map being wrong: the cloud is published by `pcl_ros/pcd_to_pointcloud` with **`tf_frame: map`**,
+> i.e. the PCD's own coordinates are taken as map coordinates directly, while the occupancy grid is
+> placed through the **`origin:` field of `rtabmap_2d_final.yaml`**. If the PCD was exported in a
+> different anchoring from the one that `origin:` encodes, the two render offset — and if the export
+> applied its own gravity/yaw alignment, rotated. Check what `origin:` says and what frame the PCD was
+> actually exported in **before** touching either file.
+>
+> **(b) Starting the car at the origin — the spot where every bag was recorded — `odom` correctly
+> shows the car at the origin (confirmed visually against the 2D costmap), but the `map` frame reads
+> ~90 deg rotated and offset right and back.**
+>
+> **Check the already-documented explanation first, because it predicts almost exactly this and is
+> NOT a bug.** The map frame is not aligned with the car's parking spot: a car parked there reads
+> **(0.445, -0.575, -84.5 deg)** in map, and CLAUDE.md is explicit that this is *correct, not drift* —
+> "a ~90 deg reading in a rectangular lab invites exactly that mistake". The -84.5 deg was measured
+> 2026-08-11 with no localizer in the loop (`heading_from_scan.py`, five samples over two cold
+> launches agreeing to 1.03 deg, single unambiguous peak), and the 2026-08-30 launches reproduced it
+> to within a few mm and 0.5 deg on cold launch #8. **So the question to answer is not "why is it
+> rotated" but "is the observed rotation the documented -84.5 deg, or something else".** Read
+> `map->base_link` with `ros2 run tf2_ros tf2_echo map base_link` and compare against -84.5 deg
+> before concluding anything.
+>
+> If it **is** -84.5 deg, then (b) is not a defect at all and the real question is why the map frame's
+> origin does not coincide with the bag-recording spot — a map-build/export question, which makes (b)
+> a facet of (a) rather than a localization problem. If it is **not**, suspect localization rather than
+> the maps: CLAUDE.md's standing rule is that a bad `odom->base_link` rotates the live scan and
+> footprint inside a correct static costmap and looks exactly like a rotated map (bug-231/bug-232).
+>
+> **Related, and worth reading before starting:** three conflicting parking-spot headings are on
+> record for one spot (-79.8 / -86.5 / -92.1 deg), and figure-8 waypoint 0 (-92.08 deg) does not fit
+> the map. Do not seed anything from waypoint 0.
+>
+> ### 3. Also queued — the throttle interpolator, `testing_checklist.md` §1
+>
+> **The operator reports this was diagnosed and fixed in an earlier session, cause attributed to the
+> mux and the joystick — but no record of the fix exists anywhere.** Searched 2026-08-30:
+> `git log --all --grep=throttle` shows only the two original setup commits, `git log -S` on
+> `vehicle.launch.py` shows nothing since the original wiring, and **none of the 141 buglog entries is
+> this bug**. Nearest match is **bug-049** (mux `joystick.timeout` 0.1 -> 0.3 s), whose mechanism is
+> adjacent but whose symptom is different, so it is not established to be the same fix. The item stays
+> `[!]`. **Re-test needs no battery** — connect the DualSense, launch with
+> `launch_throttle_interpolator_node:=True`, and echo `steering_angle` **values** on `/ackermann_drive`
+> and `/vehicle/ackermann_cmd` while sweeping the stick. Full procedure in the checklist entry. This is
+> §7's problem inverted: a fix that happened and was never written down.
+>
+> ### Then, needing the battery
+>
+> The 0.379 m Nav2 stall, obstacle avoidance, particle-cloud convergence under *sustained* motion
+> (the 2026-08-30 close left that one caveat open), and arm A (§3).
+>
+> ---
+>
+> ### What the 2026-08-30 session settled
 >
 > **Items 1 and 2 below are DONE, parked, on AC. Both are struck through and their results
 > recorded. What is left needs the battery — go to item 3.**
@@ -804,14 +890,14 @@ same commit as the work.
 
 | § | Item | Marker | Where |
 |---|---|---|---|
-| 1 | Acceleration limit / throttle interpolator | `[!]` | **Won't-fix while MPC is the controller.** Enabling it breaks steering; keep `launch_throttle_interpolator_node:=False` |
+| 1 | Acceleration limit / throttle interpolator | `[!]` | **No longer a won't-fix.** The operator reports it was fixed (mux + joystick), but no record of the fix exists — see item 3 of the ★★ block. Re-test parked, no battery. |
 | 2 | joy_teleop starts without warnings | **`[x]` 2026-08-27** | Zero warnings; the `[!]` was stale |
 | 5 | Odometry loop closure over ~5 m | `[ ]` | §3 — drive. **Note 2026-08-27**: `nav2_drive4` holds a 5.781 m driven path with `odometry/local`, `vesc_odom`, VSLAM and rf2o all recorded — that bag may close this offline with no further driving, if a tape measurement of the start/end marks can be recovered. It was NOT taped, so treat it as a candidate, not a result. |
-| 6 | Particle cloud visible in RViz | `[!]` | §1(e) — **still open**; needs an operator at RViz *and* motion, since AMCL is motion-gated |
-| 8 | VSLAM frame-delta warnings at high playback rates | `[!]` | Offline replay artefact; no live action |
+| 6 | Particle cloud visible in RViz | **`[x]` 2026-08-30** | Closed with the car rolled by hand, no battery. Display now in `config/f1tenth.rviz` at Best Effort. Convergence under *sustained* motion still unproven |
+| 8 | VSLAM frame-delta warnings at high playback rates | `[!]` | **Next session, item 1.** The "replay artefact, no live action" verdict is a prediction that was never re-checked after the `use_gpu` fix — verify at 1x before closing |
 | 9 | Send a navigation goal | **`[x]` 2026-08-27** | Drove 5.781 m under Nav2; stopped 0.379 m short of tolerance. See §4 RESULTS |
 | 9 | CPU load during navigation | **`[x]` 2026-08-27** | No Nav2 CPU problem; the container is under ~3.5 %. See §4 RESULTS |
 | 10 | Teleop mode: full stack launches | **`[x]` 2026-08-27** | Full TF chain resolves, 41 nodes |
-| 10 | Mapping mode: no TF conflicts | `[!]` | §1(c) — parked, with `launch_2d_mapping:=True` |
+| 10 | Mapping mode: no TF conflicts | **`[x]` 2026-08-30** | bug-260 fixed (`TimerAction` outliving its `GroupAction` scope). 0 duplicates, `/map` single publisher |
 
 Update the markers in `testing_checklist.md` as each closes, in the same commit as the work.
