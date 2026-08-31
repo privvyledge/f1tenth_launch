@@ -19,7 +19,7 @@ from scipy.signal import fftconvolve
 from scipy.ndimage import binary_dilation
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from map_cloud_align import grid_occupied_xy, read_pcd_xyz
+from map_io import grid_occupied_xy, read_pcd_xyz
 
 
 def rasterize(xy, res, lo, shape):
@@ -54,6 +54,9 @@ def main():
     ap.add_argument('--yaw-step', type=float, default=1.0)
     ap.add_argument('--yaw-min', type=float, default=0.0)
     ap.add_argument('--yaw-max', type=float, default=360.0)
+    ap.add_argument('--overlay', metavar='PNG',
+                    help='render grid and cloud as published to this PNG and exit '
+                         '(do this before running the sweep)')
     args = ap.parse_args()
 
     grid, _meta = grid_occupied_xy(args.pgm, args.yml)
@@ -62,6 +65,27 @@ def main():
     print('grid occupied cells : %d' % len(grid))
     print('cloud pts in z band : %d of %d  (z %.2f..%.2f)'
           % (len(band), len(cl), args.zmin, args.zmax))
+
+    if args.overlay:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(10, 9))
+        ax.scatter(band[:, 0], band[:, 1], s=0.5, c='tab:red', alpha=0.3, linewidths=0,
+                   label='cloud %s (n=%d)' % (args.pcd.split('/')[-1], len(band)))
+        ax.scatter(grid[:, 0], grid[:, 1], s=3.5, c='k', marker='s',
+                   label='grid %s (n=%d)' % (args.pgm.split('/')[-1], len(grid)))
+        ax.plot(0, 0, marker='+', ms=14, mew=2, c='tab:green', label='map origin')
+        ax.set_aspect('equal')
+        ax.grid(alpha=0.25)
+        ax.legend(loc='upper left', fontsize=8)
+        ax.set_xlabel('x [m], map frame')
+        ax.set_ylabel('y [m], map frame')
+        ax.set_title('grid vs cloud, as published, no alignment applied')
+        fig.tight_layout()
+        fig.savefig(args.overlay, dpi=110)
+        print('wrote %s' % args.overlay)
+        return
 
     cx, cy = grid[:, 0].mean(), grid[:, 1].mean()
     pad = 3.0

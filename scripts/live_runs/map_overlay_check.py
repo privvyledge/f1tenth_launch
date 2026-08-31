@@ -108,9 +108,9 @@ def main():
         print('\n  matching against the candidate .pcd files on disk:')
         sys.path.insert(0, os.path.join(args.pkg_share, 'scripts', 'analysis'))
         try:
-            from map_cloud_align import read_pcd_xyz
+            from map_io import read_pcd_xyz
         except ImportError:
-            print('    (map_cloud_align.py not importable from --pkg-share; skipping)')
+            print('    (map_io.py not importable from --pkg-share; skipping)')
             return
         for rel in CANDIDATES:
             f = os.path.join(args.pkg_share, rel)
