@@ -712,7 +712,11 @@ is the plan.
 
 **STATUS 2026-08-30: (a) ACCEPTED, (b) PASS, (c) FIXED AND PASSING (bug-260), (d) PASS.
 (e) attempted — both blockers identified, needs the drive session. Four of the five parked items
-are closed; only (e) remains, and it needs the car to move.** (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
+are closed; only (e) remains, and it needs the car to move.**
+
+**Two items added 2026-08-30 evening, both written away from the lab and both entirely unrun:
+(f) velox1 as a DDS peer, and (g) presentation capture + moving RViz off the Jetson.** Neither
+needs the battery; (f) is minutes and gates (g). (c) mapping mode was never launched; (e) the particle-cloud *display* was never looked
 at (the topic exists as `nav2_msgs/msg/ParticleCloud` but stays silent parked, because AMCL is
 motion-gated — so this needs a drive *and* an operator at RViz).
 
@@ -863,6 +867,68 @@ blockers are now identified and the doc's own contradiction is resolved.**
 *Noticed in passing, not chased:* `odometry/local` was running at **8.4 Hz** rather than the usual
 ~30 Hz on that launch (RViz was up). Worth a look before trusting a fusion measurement from a run
 with visualization enabled.
+
+### (f) velox1 as a DDS peer — written 2026-08-30 away from the lab, **NOTHING RUN**
+
+velox1 (`192.168.2.13`) is to publish drive commands to the car. It is a static peer in **none**
+of the shipped CycloneDDS configs, and multicast is off, so today it would discover nothing —
+**with no error on either side.** Procedure, the config velox1 itself needs, and a six-step
+validation table: `DEMO_RUNBOOK_20260810.md` **§0★.3b**. Summary of what has to be true:
+
+- The §6 / §0★.3 launch environment uses **`cyclonedds_offline_lo.xml`, which cannot do this** —
+  it binds `lo` only, so a `192.168.2.x` peer is unroutable and buys an `EHOSTUNREACH` per
+  announcement instead of discovery. **Adding the peer line to that file is a no-op**; a third
+  profile is needed (`cyclonedds_velox1.xml` = `lo` + `wlP1p1s0`, peers `localhost` + `.195` +
+  `.13`, the four other robots dropped).
+- **Both ends need the other listed.** velox1 also needs `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
+  (a `CYCLONEDDS_URI` without it is silently inert) and `ROS_DOMAIN_ID=42`.
+- **This breaks the §6 "keep the DDS config constant" rule for bug-238.** Do the velox1
+  validation *after* anything that depends on a homogeneous seed-acceptance sample, or record the
+  profile alongside the result.
+- Pass/fail is `ros2 node list` on velox1, then `ros2 topic hz /odometry/local` **by name** —
+  `ros2 topic list` returns a partial graph under static peers and cannot falsify this.
+- **Open question that changes the peer count:** `CYCLONEDDS_PEERS.md` labels `192.168.2.194`
+  "DigitalStorm (viz desktop)" and velox1's login is `digitalstorm`. One machine on two NICs, or
+  two machines? Settle with `ip -br addr` on velox1; if one, comment `.194` out.
+
+### (g) Presentation capture — the dense cloud, and where RViz should run
+
+Two asks from the operator, 2026-08-30, both **unstarted**:
+
+1. **A video of the map being built, and of the finished map.** `record_screen.sh` already does
+   x11grab capture to the SSD. The finished-map shot can use the repo cloud; the *building* shot
+   needs a mapping run (`30_mapping_drive.sh`) with RViz up.
+2. **The dense cloud.** The repo ships only `cloud_voxel_0p05.pcd` (96 199 pts, 0.05 m voxel).
+   The denser originals are on the SSD at `/mnt/f1tenth_ssd/shared_dir/maps/20260805/`:
+   `cloud_clean.pcd/.ply` (**285 288 pts**, range-limited + noise-filtered — the preferred one)
+   and `cloud_full.pcd/.ply` (**700 445 pts**, unfiltered, heavy radial smear from D435i depth
+   error). **Confirm they survived the reflash before planning around them** — per the memory
+   note the SSD was rescued to velox1, so velox1 is the fallback copy.
+
+   **⚠ Both are in the export frame, i.e. yawed +25.33° against the grid (bug-265).** Only the
+   repo's voxel cloud has been corrected. Run either through
+   `scripts/analysis/cloud_to_grid_frame.py --transform-db rtabmap_final.db` before it goes on a
+   slide next to the occupancy grid, and **check the output header still says
+   `FIELDS x y z rgb`** — dropping colour renders flat white with no error (bug-266).
+
+**Running RViz off-board (velox1) instead of on the Jetson — feasible, unmeasured, and it is a
+different problem from (f).** Measured 2026-08-27, goal pending: **RViz is the single largest
+consumer on the Jetson at ~70 % CPU**, ahead of `sensing_container` at 50 %; `f1tenth_container`
+itself is under ~3.5 %. So moving it off is worth real headroom. Constraints, in the order they
+will bite:
+
+- It needs (f) done first — velox1 must be a peer at all.
+- **Today RViz is same-host and reaches the operator over SSH X11 forwarding, not over DDS**
+  (§6). Off-board RViz inverts that: pixels stop crossing the network and *sensor data* starts.
+- **Compression is not free and is not installed.** The image only carries
+  `compressed-image-transport` and `compressed-depth-image-transport`. **There is no
+  `point_cloud_transport` and no Draco** — and RViz2 has no compressed-pointcloud subscriber
+  anyway, so a cloud would need a republisher on both ends. The cheap first cut is to subscribe
+  to **nothing large**: TF, `/map` (transient-local, one shot), `map/pointcloud` (a static PCD
+  republished every 3 s, 1.5 MB), `lidar/scan_filtered`, `odometry/local`, `/plan`. That is a
+  usable Nav2 view with no camera stream at all, and it needs no new packages.
+- Only add camera images after that works, via `image_transport` `compressed`, and measure the
+  link before trusting it.
 
 ---
 

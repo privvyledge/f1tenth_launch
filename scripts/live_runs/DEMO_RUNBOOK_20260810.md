@@ -117,6 +117,91 @@ export ROS_LOG_DIR=/mnt/shared_dir/<run-dir>/log_<name>       # never the Jetson
   that day, costing ~200 failed `sendto`/sec per process across 41 nodes. RViz is unaffected — it
   runs same-host and reaches you over SSH X11, not DDS.
 
+## 0★.3b · Remote drive commands from velox1 (`192.168.2.13`) — WRITTEN 2026-08-30, **UNTESTED**
+
+velox1 is going to publish drive commands to the car, so it has to be a DDS peer. **Nothing
+below has been run** — it was written away from the lab and is a validation item for the next
+lab day (RESUME §1(f)).
+
+Two facts to get straight before editing any XML:
+
+- **Adding the peer to `cyclonedds_offline_lo.xml` does nothing.** That profile binds **`lo`
+  only** and carries a single `localhost` peer. A `192.168.2.x` address is unroutable over `lo`,
+  so `<Peer address="192.168.2.13"/>` there buys one `EHOSTUNREACH` per announcement and no
+  discovery. **The peer list is not the whole config — `<Interfaces>` has to carry the WiFi NIC
+  (`wlP1p1s0`) as well.** This is the same mechanism that makes the static profile spam
+  `retcode -3` (`CYCLONEDDS_PEERS.md`, correction of 2026-08-07).
+- **`cyclonedds_config_static.xml` already binds `wlP1p1s0`, but does not list `.13`** — and it
+  does list four other robots at ~200 failed `sendto`/sec each.
+
+So neither shipped profile is right. Make a third: **`lo` + WiFi, exactly one remote peer.**
+
+**Derive it from the known-good static file rather than typing XML from scratch** — the
+`<Interfaces>` block, the `lo` priority-10 entry (the VSLAM-jitter fix, 0.1373/s → 0.0294/s) and
+the `<AllowMulticast>false</AllowMulticast>` line all have to survive verbatim:
+
+```bash
+# in the container; the SSD copy survives a container rebuild
+cd /mnt/shared_dir
+cp cyclonedds_config_static.xml cyclonedds_velox1.xml
+$EDITOR cyclonedds_velox1.xml     # or sed; the whole edit is inside <Peers>
+```
+
+`<Peers>` must end up exactly this — everything else in the file untouched:
+
+```xml
+<Discovery>
+    <Peers>
+        <Peer address="localhost"/>       <!-- same-host, over lo -->
+        <Peer address="192.168.2.195"/>   <!-- gosling1 (self) -->
+        <Peer address="192.168.2.13"/>    <!-- velox1 — sends drive commands -->
+        <!-- Every other robot REMOVED on purpose. A configured peer costs ~200 failed
+             sendto()/sec per process whether or not it is powered on, and 41 nodes
+             multiply that. Re-add one only while it is actually needed. -->
+    </Peers>
+    <ParticipantIndex>auto</ParticipantIndex>
+    <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
+</Discovery>
+```
+
+Then launch with it instead of `_lo` — **every shell, the diagnosing ones included**:
+
+```bash
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_velox1.xml
+```
+
+**velox1 needs the mirror of this, not just the same domain.** Multicast is off on both ends, so
+static peering is symmetric — if velox1 does not list the robot, it will never discover it, with
+no error on either side:
+
+```bash
+# on velox1 (fish shell — pipe scripts on stdin: ssh velox1 bash -s <<'EOF' … EOF)
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp     # inert CYCLONEDDS_URI without this
+export ROS_DOMAIN_ID=42                          # must match the robot
+export CYCLONEDDS_URI=file://$HOME/cyclonedds_velox1.xml   # <Peer address="192.168.2.195"/>
+```
+
+**Validation at the lab, in this order** — each step distinguishes a real failure from the next:
+
+| # | On | Command | Pass |
+|---|---|---|---|
+| 1 | either | `ping -c3 192.168.2.13` / `ping -c3 192.168.2.195` | replies both ways; a firewall drop here is not a DDS problem |
+| 2 | robot | `grep -c 'ddsi_udp_conn_write' <launch stdout>` after 60 s | should be **~1/4 of the static-profile rate** (one remote peer instead of four), not zero |
+| 3 | velox1 | `ros2 node list` | the robot's nodes appear. Empty = domain or peer-list mismatch, **not** a stack fault |
+| 4 | velox1 | `ros2 topic hz /odometry/local` | ~30 Hz. Measure by name; `ros2 topic list` returns a partial graph under static peers |
+| 5 | velox1 | `ros2 topic pub` a zero-speed `AckermannDriveStamped` on `drive` | robot-side `ros2 topic echo /drive` shows it — **echo values, not `hz`** |
+| 6 | robot | `ros2 topic echo /vehicle/ackermann_cmd` | the command reaches the gate. Zeros with the joystick disconnected are the gate holding shut, working as designed |
+
+**Open question for the operator, before step 1.** `CYCLONEDDS_PEERS.md` lists
+`192.168.2.194` as *"DigitalStorm (viz desktop)"*, and velox1's login is `digitalstorm`. If
+those are one machine on two NICs, then `.13` and `.194` both announce to it and the second is
+pure cost — comment `.194` out. If they are two machines, leave the labels alone. **Do not guess
+this from the hostname; check `ip -br addr` on velox1.**
+
+**Bandwidth caveat, unmeasured.** Once WiFi is bound, every topic velox1 subscribes to crosses
+the air. Drive commands are tiny; a pointcloud or an image stream is not — see the note on
+running RViz off-board in `RUNBOOK.md`.
+
 ## 0★.4 · Pose seeding is now AUTOMATIC — do not seed by hand
 
 **bug-241 was verified on hardware 2026-08-27: six cold launches, six passes, zero identities**

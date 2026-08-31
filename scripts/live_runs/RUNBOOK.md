@@ -389,6 +389,15 @@ powered-off machine in the static peer list — one stack launch produced a
 and the fix (which lives in the build repo, not here) are in
 [CYCLONEDDS_PEERS.md](CYCLONEDDS_PEERS.md).
 
+**Off-board subscribers need a static peer entry, on both ends.** velox1
+(`192.168.2.13`) is to send drive commands, and remote RViz would be the same
+problem. Multicast is off, so a machine absent from `<Discovery><Peers>` is
+invisible **with no error on either side**. The procedure, the third DDS profile
+it needs (`lo` + WiFi, one remote peer — the `_lo` profile cannot do this, it
+binds loopback only), and the lab validation are in
+[DEMO_RUNBOOK_20260810.md](DEMO_RUNBOOK_20260810.md) §0★.3b. **Untested as of
+2026-08-30.**
+
 ### Recording
 
 **`ros2 bag record` has no record-for-N-seconds flag in Humble.** `-d` /

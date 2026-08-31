@@ -99,6 +99,7 @@ Peer status measured on 2026-08-05 09:55 from gosling1:
 | `192.168.2.193` | gosling3 | down |
 | `192.168.2.140` | gosling5 | down |
 | `192.168.2.194` | DigitalStorm | down |
+| `192.168.2.13` | velox1 | **not in any shipped config — must be added, see below** |
 
 ## Measurement
 
@@ -140,6 +141,7 @@ one-line uncomment rather than an archaeology exercise:
         <!-- <Peer address="192.168.2.193"/>  gosling3 -->
         <!-- <Peer address="192.168.2.140"/>  gosling5 -->
         <!-- <Peer address="192.168.2.194"/>  DigitalStorm (viz desktop) -->
+        <Peer address="192.168.2.13"/>   <!-- velox1 - sends drive commands, see below -->
     </Peers>
     <ParticipantIndex>auto</ParticipantIndex>
     <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
@@ -213,3 +215,29 @@ same-host traffic (848x480 stereo into `visual_slam_node`) off the WiFi stack,
 and it measurably fixed VSLAM frame stalls: 0.1373/s down to 0.0294/s, a 4.7x
 improvement. That change is unrelated to the peer list and must survive any edit
 here.
+
+
+## velox1 (`192.168.2.13`) — added 2026-08-30, **UNTESTED**
+
+velox1 is to publish drive commands to the car, so it has to be a static peer on both ends.
+**It is in none of the shipped configs.** The full procedure, the mirror config velox1 itself
+needs, and a six-step lab validation are in `DEMO_RUNBOOK_20260810.md` **§0★.3b**. The two
+things worth repeating here:
+
+- **Adding the peer to `cyclonedds_offline_lo.xml` accomplishes nothing.** That profile binds
+  `lo` only; a `192.168.2.x` peer is unroutable over loopback and costs one `EHOSTUNREACH` per
+  announcement with no discovery. `<Interfaces>` has to carry `wlP1p1s0` too — which is exactly
+  the mechanism in the 2026-08-07 correction above. Use a **third** profile
+  (`cyclonedds_velox1.xml`: `lo` + WiFi, peers = `localhost` + `.195` + `.13`, everything else
+  dropped) rather than editing either shipped file.
+- **Static peering is symmetric under `<AllowMulticast>false</AllowMulticast>`.** If velox1 does
+  not list `192.168.2.195`, it never discovers the robot, and **neither side logs anything**.
+
+**Unresolved, and it changes the peer count.** The table above labels `192.168.2.194`
+*"DigitalStorm (viz desktop)"*, and velox1's login is `digitalstorm`. If `.13` and `.194` are one
+machine on two NICs, `.194` is redundant and should be commented out; if they are two machines,
+the labels stand. Settle it with `ip -br addr` on velox1 — **not from the hostname.**
+
+This file's standing warning applies to the whole change: with multicast off, a machine that is
+not in the list is *invisible with no error*. If velox1 sees nothing, check both peer lists
+before debugging ROS.
