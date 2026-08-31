@@ -534,8 +534,12 @@ from `install/` until you rebuild.
   ros2 topic hz /lidar/scan_filtered          # ~10-12 Hz, no multi-second gaps
   ros2 lifecycle get /planner_server          # must be "active"
   ```
-- **A rotated car / scan / cloud inside a good map has TWO possible causes. Separate them with one
-  comparison**, because they look identical in RViz and have nothing to do with each other:
+- **A rotated car / scan / cloud inside a good map has THREE possible causes** (the third was
+  added 2026-08-30, bug-265). **First ask what moved**: if the *car, footprint and live scan* are
+  rotated inside a correct-looking map it is one of the two below; if the *two static maps* are
+  rotated relative to each other with the car sitting correctly, it is the map artifacts themselves
+  — see the bug-265 bullet further down. Then separate the first two with one comparison, because
+  they look identical in RViz and have nothing to do with each other:
   ```
   ros2 topic echo /amcl_pose      --field pose.pose.orientation --once
   ros2 topic echo /odometry/global --field pose.pose.orientation --once
@@ -556,16 +560,36 @@ from `install/` until you rebuild.
   Treat the 2.9 °/min as an **unexplained intermittent** — measure, don't assume.
   A watcher that reports *displacement since its first sample* will call all of this healthy: over
   90 s the drift was 10 mm and −0.14°. Read the absolute value.
-- **The 2D grid and the 3D cloud will never look perfectly aligned, and that is expected.** The grid
-  is LiDAR-built (360°, 10 m); the cloud is RGB-D (camera-facing, short range). The cloud spans
-  x ∈ [−5.5, 3.8] while the grid spans x ∈ [−9.3, 4.0] — **the cloud is simply missing the western
-  third of the room**, and a partial cloud inside a full grid reads as "rotated" even when every
-  point is correct. Two independent correlation attempts on the same two files disagree in sign on
-  the "best" angle (−27°/−30.75° one session, +24° the next, both broad and shallow), which is the
-  signature of a metric scoring coverage rather than geometry — consistent with the flat 1.11×
-  wall-orientation contrast. Median occupied-grid-cell to cloud distance is **0.05 m, one cell, at
-  zero shift**. **Do not shim the cloud.** If you want this settled properly, the test is a *scan*
-  against each map separately (`heading_from_scan.py`), not cloud-against-grid correlation.
+- ~~**The 2D grid and the 3D cloud will never look perfectly aligned, and that is expected.**~~
+  **WRONG, and it cost three sessions — RETRACTED 2026-08-30 (bug-265).** The cloud really was yawed
+  **+25.33°** against the grid, the operator reported it repeatedly, and this bullet is what talked
+  three sessions out of believing them. **It is fixed**: `data/maps/20260805/cloud_voxel_0p05.pcd`
+  was regenerated in the grid's frame (`a51bdc6`, shipped by `stage_0831.sh`) and the operator
+  verified it in RViz.
+  * **The cause, which matters for every future map build:** `rtabmap-export` re-roots the
+    optimized pose graph at the **first** node, so its clouds are in the frame the run *started* in;
+    the `rtabmap` ROS node publishes `grid_prob_map` anchored so the **latest** pose agrees with
+    odometry, and `map_saver` captures the `.pgm` in *that* frame — which is the frame AMCL
+    localizes in. The offset is exactly the yaw the optimizer removed over the run. Full detail and
+    the export recipe: `MAP_BUILD_HANDOFF.md`.
+  * **Every argument in the old bullet was an artefact of one bad metric.** The "0.05 m at zero
+    shift" figure came from `map_cloud_align.py`'s **one-way** score (grid cell → nearest cloud
+    point). The cloud is far denser than the grid and does not cover its footprint, so *every* pose
+    scores well and the metric cannot tell alignment from density. That is also why two sessions
+    "disagreed in sign" — they were reading noise. The script is **deleted** (`a8e027f`); use
+    `map_cloud_align2.py`, judge by **where the peak sits**, not its height, and require **both**
+    coverage columns to rise.
+  * **The partial-coverage point was true but irrelevant.** The cloud is RGB-D and does miss the
+    western third of the room, which is why absolute F1 stays ~0.42 even when perfectly aligned
+    (LiDAR-vs-LiDAR scores 0.67 on the same pair). Low overlap is expected; a peak away from 0° is
+    not.
+  * **Wall-orientation histograms DO work here**, contrary to the old claim that the lab is a ring:
+    grid 87.0°, corrected cloud 86.5°, pre-fix cloud 61.0°. That measure never compares one map to
+    the other, so density cannot bias it — it is the cheapest independent check available.
+  * **If the cloud and grid look misaligned in RViz, believe the picture** and check the two static
+    files against each other before suspecting localization. Set the camera to the saved
+    `Top Down (old default)` view first: an orbit view rotates the reference grid and the map
+    together, which produced a *separate* false alarm on 2026-08-30.
 - **`Robot is out of bounds of the costmap!` is a report, not the fault.** Chase `odom→base_link`
   first, then the global correction. Do not touch the costmap config.
 - **Repeated `amcl: Message Filter dropping message … earlier than all the data in the transform

@@ -39,6 +39,50 @@ aimed at a downstream consumer; read that for field-by-field detail.
 | `cloud_full.pcd` / `.ply` | 700 445 pts, unfiltered; heavy radial smear from D435i depth error |
 | `*_preview.png` | rendered previews of each grid and the cloud |
 
+**⚠ READ THIS BEFORE EXPORTING ANYTHING FROM A NEW BUILD (bug-265, 2026-08-30).**
+Sharing one database and one pose graph does **not** mean sharing one `map`
+frame. `rtabmap-export` and the `rtabmap` ROS node anchor the same optimized
+graph at **different nodes**:
+
+  * `rtabmap-export` re-roots the graph at the **first** node, so its clouds and
+    meshes come out in the frame the run *started* in — the odometry frame.
+  * the ROS node publishes `grid_prob_map` anchored so the **latest** pose agrees
+    with odometry, which is what makes `map→odom` a live correction. `map_saver`
+    captures the `.pgm` in **that** frame, and that is the frame AMCL and Nav2
+    then localize in.
+
+**The offset between the two is exactly the yaw the optimizer removed over the
+run** — 25.33° for this build. It is silent: both files are labelled `map`, both
+load without error, and every launch works. It cost three sessions, each of which
+dismissed a correct operator report.
+
+Provenance, the camera, and re-optimization were all ruled out by measurement, so
+do not spend time there: `rtabmap_2d_final.pgm` is byte-identical (md5
+`5188b888…`) to the grid `map_saver` wrote from `rtabmap_final_nf.db`;
+`--opt 0` and `--opt 2` exports are bit-identical; and a **LiDAR-only** export
+(`rtabmap-export --cloud --scan`) — same sensor as the grid — is rotated by the
+same amount as the RGB-D one, which eliminates any camera-extrinsic explanation.
+
+**So, for every new map set:** run each exported cloud through
+`scripts/analysis/cloud_to_grid_frame.py`, which reads the transform out of the
+database (`opt_pose ∘ odom_pose⁻¹` at the first keyframe) rather than fitting it,
+then confirm with `map_cloud_align2.py` that the peak sits at **yaw 0 with a
+zero shift** — and check the output header still says `FIELDS x y z rgb`, because
+dropping colour renders flat white in RViz with no error anywhere (bug-266).
+Note **only a cleanly closed-out database carries `Admin.opt_poses`**:
+`rtabmap_final.db` has it, `rtabmap_final_nf.db` does not, which is also why
+`rtabmap-export --opt 2` silently falls back to a full re-optimization on the
+latter. Pass `--transform-db` and state which database the transform came from.
+
+**Acceptance test for any rebuild, free and independent of every map:** the
+operator parked the car at the identical spot and heading at **both ends of all
+three** 2026-08-05 bags. Export the poses
+(`rtabmap-export --poses --poses_format 11 --opt 2 <db>`) and difference the
+first and last row — whatever does not close is pure residual error. This build
+leaves **9.59° of yaw** (first −54.53°, last −64.12°) against raw odometry's
+35.2°, so the optimizer removed 25.6° — which is where the frame offset above
+comes from.
+
 The 2D RTABMap grid and both clouds all come from `rtabmap_final_nf.db`, so they
 share one optimized pose graph and one `map` origin. `rtabmap_final.db` (118 MB)
 is the earlier build with the old grid parameters; its 3D content is equivalent
