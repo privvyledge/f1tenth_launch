@@ -106,43 +106,61 @@
 > layout*, so it preserves whatever fields the input declares. **Check the output header says
 > `FIELDS x y z rgb` before shipping a cloud.**
 >
-> **Still open, small:** `map_cloud_align.py` still ships its misleading one-way `score()` — delete
-> it or make it refuse to print a verdict. And the shipped grid+cloud pair is now correct, but
-> **nothing enforces it**: run any future exported cloud through `cloud_to_grid_frame.py` before
-> shipping it.
+> **Both follow-ups are DONE (2026-08-30 night).** `map_cloud_align.py` is **deleted** (`a8e027f`);
+> its loaders moved to `scripts/analysis/map_io.py` and its `--overlay` renderer — the "USE THIS
+> FIRST" half — moved into `map_cloud_align2.py`. And the fix is now **durable on the robot**:
+> `stage_0831.sh` / `f1tenth_stage_20260831.tgz` (md5 `0a9f6da6d5b229d7f5cd5bbfa5ff3703`, 198
+> entries, `git archive` over `a8e027f`), staged and **verified in the container, 16/16 checks**.
+> **The map set now ships inside the tarball**: `stage_0830b.sh` copied `data/maps/20260805/` out of
+> the SSD *after* unpacking, so the SSD copy silently beat git HEAD — exactly the drift that would
+> have reverted this fix on the next re-stage. Nothing is copied over it now; keep it that way.
+> Still true and unenforced: run any *future* exported cloud through `cloud_to_grid_frame.py`, and
+> check its header still says `FIELDS x y z rgb`.
 >
 > ---
 >
-> ### ▶ EVERYTHING ELSE STILL OPEN, as of 2026-08-30 19:45 EDT
+> ### ▶ EVERYTHING STILL OPEN, as of 2026-08-30 21:15 EDT
 >
-> **Needs no battery:**
-> - **bug-265 root cause** -- the block just above. The live one.
+> **bug-265 is CLOSED** (root cause, fix, three verifications, operator confirmation in RViz,
+> staged and durable). **bug-266 is CLOSED.** Nothing about the map alignment is left.
+>
+> **Needs no battery — start here:**
 > - **bug-256**: the unconditional `visual_slam/initial_pose` remap. cuVSLAM eats the seed as a
 >   relocalization hint and logs `Error 4` five times per launch. Harmless with an empty map path,
 >   noisy, and it **re-arms** under `localize_on_startup:=True`.
-> - **`min_turning_r: 0.462`** (`nav2_params.yaml:185`) is stale -- derived from 30 deg of steering
+> - **`min_turning_r: 0.462`** (`nav2_params.yaml:185`) is stale — derived from 30 deg of steering
 >   when this car has 18.0 deg, so it should be **0.788 m**. Inert today only because it sits under
 >   `AckermannConstraints` (MPPI) and the active plugin is RPP. Fix before anyone switches
 >   controllers. Related symptom: steering hit the +/-0.314 limit in **12 %** of commands on a real
 >   drive.
-> - **`map_cloud_align.py` still ships its misleading one-way `score()`** -- either delete it or make
->   it refuse to print a verdict.
+> - **Nothing has been pushed since `7a7d0b4`.** `a51bdc6` and `a8e027f` are local-only, and
+>   `CLAUDE.md` / `.wolf/` are git-excluded by design. Push when you are ready.
+> - **The other two 2026-08-05 bags have never been mapped.** `figure8_172338` and
+>   `loop_laps_173558` also start and end at the same parked pose, so each is a free, independent
+>   check of the loop-closure residual — and of whether 9.59 deg is this pipeline's normal or was
+>   specific to `mapping_drive_170025`.
+>
+> **Worth knowing before the next map build, and cheap:** the shipped graph leaves **9.59 deg of
+> yaw unclosed** over a run that physically returns to its start. That is a real map-quality number
+> nobody had measured, it is *separate* from the frame bug just fixed, and it bounds how well any
+> localizer can ever do against this grid. Whether it is worth rebuilding the map to improve it is
+> an open question, not a task.
 >
 > **Needs the drive battery (one session, get it all onto one bag):**
 > - **`odometry/local` yaw drift while moving.** Parked baseline is +0.04 deg/min; no parked test
 >   reaches the moving case.
 > - **Wheelbase 0.25 -> 0.256 m** (changed 2026-08-07), never verified on hardware. Biased
 >   `vesc_odom`'s kinematic yaw rate ~2.4 %.
-> - **Odometry loop closure over ~5 m** -- the **last open item in `testing_checklist.md`**, `[ ]`
+> - **Odometry loop closure over ~5 m** — the **last open item in `testing_checklist.md`**, `[ ]`
 >   since 2026-07-22. Last measurement: -24.3 deg residual yaw at closure. Forked rf2o and the EKF
 >   fixes have both landed since; the retest never ran.
 > - **Drive into the steering limit both ways.** All observed saturation was right-turn; `servo_min`
 >   has never been reached, so **nothing is known empirically about the left bound**. With
->   `max_steering` now 0.314, neither side should clip -- confirm that.
-> - **Does the IMU bias correction improve driven heading** -- the evidence the `remove_imu_bias`
+>   `max_steering` now 0.314, neither side should clip — confirm that.
+> - **Does the IMU bias correction improve driven heading** — the evidence the `remove_imu_bias`
 >   decision waits on, and the one thing a synthetic source cannot answer. Stays `'False'` at both
 >   call sites until then.
-> - **Particle-cloud display, item (e)** -- the topic is silent parked because AMCL is motion-gated,
+> - **Particle-cloud display, item (e)** — the topic is silent parked because AMCL is motion-gated,
 >   so this needs a drive *and* an operator at RViz.
 > - **Nav2 arm B leftovers**: a formally SUCCEEDED goal (best run stopped 0.379 m short against a
 >   0.25 m tolerance), obstacle avoidance (no obstacles have ever been placed), and `map_frequency`.

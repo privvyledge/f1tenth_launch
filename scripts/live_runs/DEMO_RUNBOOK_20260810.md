@@ -31,7 +31,7 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0830b.sh"    # ~1 min, idempotent, NO NETWORK
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0831.sh"     # ~1 min, idempotent, NO NETWORK
 ```
 
 - **The image changed on 2026-08-30: `humble-devel-08302026`.** It is a `docker commit` of a
@@ -48,7 +48,20 @@ docker exec $C bash -lc "bash /mnt/shared_dir/stage_0830b.sh"    # ~1 min, idemp
   the Jan-2024 cloud, which renders exactly like a rotated 3D map. If you roll back to it, stage
   before launching.
 
-- **`stage_0830b.sh` is CURRENT (2026-08-30 evening) and is the one to run.** It carries
+- **`stage_0831.sh` is CURRENT (2026-08-30 night) and is the one to run.** It carries
+  `f1tenth_stage_20260831.tgz` (md5 `0a9f6da6d5b229d7f5cd5bbfa5ff3703`, **198** entries,
+  `git archive` over git HEAD `a8e027f`) and verifies **sixteen** values. On top of `stage_0830b.sh`
+  it adds the bug-265 fix (`a51bdc6`, the cloud re-expressed in the grid's frame) and the deletion
+  of `map_cloud_align.py` (`a8e027f`).
+- **The map set now ships INSIDE the tarball, and that is the point.** `stage_0830b.sh` copied
+  `data/maps/20260805/` out of `/mnt/shared_dir/maps/20260805/` *after* unpacking, so the SSD copy
+  silently won over whatever git HEAD held — precisely the drift that would have reverted the
+  bug-265 cloud fix on the next re-stage. `data/maps/20260805` is now in the `git archive` path set
+  and nothing is copied over it. **Keep it that way**: the grid, the cloud and the AMCL seed must
+  move in lockstep, and one git commit is the only thing that guarantees it. Two of the sixteen
+  checks read the cloud's own header — `POINTS 96376` (de-rotated) and `FIELDS x y z rgb`
+  (bug-266, colour intact).
+- **`stage_0830b.sh` (superseded)** It carries
   `f1tenth_stage_20260830b.tgz` (md5 `19faed92cc4e6188efd66b37630ad916`, 189 entries, `git archive`
   over git HEAD `9f97980`) and verifies **fourteen** values in the installed tree. On top of
   `stage_0830.sh` it adds the `f1tenth.rviz` ParticleCloud display (`07c5149`, bug-261) and the
