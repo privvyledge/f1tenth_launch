@@ -35,83 +35,81 @@
 >
 > ---
 >
-> ## ★★★★★ THE MAP ROTATION IS REAL — 2026-08-30 ~19:40 EDT. The operator was right.
+> ## ★★★★★ THE MAP ROTATION IS SOLVED — 2026-08-30 ~20:45 EDT. Root cause found, fix shipped.
 >
-> **RETRACTION.** The block below, written 15 minutes earlier, said there was no misalignment. It
-> was wrong, and so were the two sessions before it. **The cloud is yawed ~+25.75 deg against the
-> grid** (bug-265). Correction: **-25.75 deg about the grid centroid (-0.627, -0.797), then
-> (+0.20, -0.25) m**.
+> **bug-265 is closed.** The cloud really was yawed against the grid (the operator was right and
+> three sessions were wrong), the mechanism is now understood, and
+> `data/maps/20260805/cloud_voxel_0p05.pcd` has been regenerated in the grid's frame.
+> **Verified three ways:** peak at **yaw 0.0°, one-cell shift** (`map_cloud_align2.py`, was 334.25°),
+> dominant wall orientation **86.5° vs the grid's 87.0°** (was 61.0°), and **the operator confirmed
+> it live in RViz on 2026-08-30** — the rotation is gone.
 >
-> **What to use:** `scripts/analysis/map_cloud_align2.py`. F1 0.308 -> 0.427 at 334.25 deg with
-> **both** coverage directions improving (0.556 -> 0.785 and 0.213 -> 0.293); peak stable at
-> 334-336 deg across nine z-band x tolerance settings; overlay agrees by eye.
+> **Root cause — carry this, it will recur on every future map build.** `rtabmap-export` and the
+> `rtabmap` ROS node anchor the optimized pose graph at *different* nodes, so their two `map`
+> frames differ by a rigid transform:
 >
-> **Why three sessions got this wrong, which is the part worth carrying:** every dismissal rested on
-> one number in CLAUDE.md -- "0.05 m median at zero shift" -- from `map_cloud_align.py`'s **one-way**
-> score. The cloud is a dense annulus not covering the grid's footprint, so every pose scores well
-> and the metric cannot tell alignment from density. This document already warned that the same
-> metric yields a spurious +31 deg under a yaw sweep; nobody noticed that this equally invalidates
-> the zero-shift reading being quoted as proof. Then this session added a fourth wrong argument --
-> that identity orientation on both published messages precludes a rotation. It only precludes a
-> *transform*-introduced one, never a rotation baked into the PCD data.
+> * `rtabmap-export` re-roots at the **first** node → clouds come out in the frame the run
+>   *started* in (the odometry frame).
+> * the ROS node publishes `grid_prob_map` anchored so the **latest** pose agrees with odometry —
+>   that is what makes `map→odom` a live correction. `map_saver` captures the `.pgm` in *that*
+>   frame, and that is the frame AMCL and Nav2 localize in.
 >
-> **The grid is the trustworthy one**: AMCL localizes against it and `heading_from_scan.py`
-> validated it against live LiDAR to 1.03 deg. **Impact today is visualization-only** --
-> `pcd_to_pointcloud` publishes `map/pointcloud` and only RViz subscribes -- but it must be fixed
-> before the cloud feeds nvblox, 3D nav, or any VSLAM co-registration claim.
+> The offset is exactly the yaw the optimizer removed over the run. Nobody transformed between
+> them, so two files both labelled `map` were in different frames.
 >
-> **STILL OPEN, and this is the next job:** *why* is it rotated? First thing to check is whether
-> `cloud_clean.pcd` and `rtabmap_2d_final.pgm` really were exported from the same database
-> (`rtabmap_final_nf.db`, on the SSD, not in the repo) -- see `MAP_BUILD_HANDOFF.md`. Until that is
-> answered, do not "fix" it by baking the measured yaw into the .pcd; that would paper over a
-> provenance bug with a fudge factor.
+> **Provenance was never the problem** — the first thing the old handoff told the next chat to
+> check, and it was a dead end. `rtabmap_2d_final.pgm` is **byte-identical** (md5 `5188b888…`) to
+> the grid `map_saver` wrote from `rtabmap_final_nf.db`, and `--opt 0` / `--opt 2` exports are
+> bit-identical. Same database, no re-optimization difference.
 >
-> ### ▶ NEXT CHAT: investigate WHY the cloud is rotated (bug-265)
+> **The fix:** `scripts/analysis/cloud_to_grid_frame.py`. It reads the transform out of a database
+> (`opt_pose ∘ odom_pose⁻¹` at the first keyframe — row 1 of `rtabmap_ground_truth.py`'s truth CSV)
+> instead of fitting it, so it is not a fudge factor. For the 2026-08-05 build:
+> **x +0.4545, y −0.5746, yaw −25.327°**. Gotcha: **only `rtabmap_final.db` carries
+> `Admin.opt_poses`**; `rtabmap_final_nf.db` was never closed out and has none — which is also why
+> `--opt 2` silently falls back to a full re-optimization on it. Pass `--transform-db` and state
+> which database the transform came from.
 >
-> Everything below needs **no robot, no battery, no container** except step 3, which needs a parked
-> stack. The measurement is done; this is a provenance hunt.
+> ### What actually broke the case open, and it was not an instrument
 >
-> **The one rule: do not use `map_cloud_align.py`'s `score()`, and do not quote the "0.05 m at zero
-> shift" figure.** It is one-way and cannot tell alignment from density -- it is what caused this
-> bug to be dismissed three times. Use `scripts/analysis/map_cloud_align2.py`, and read a real
-> improvement as **both** coverage directions rising, never just `grid->cloud`.
+> **The operator supplied a fact no script on the robot can derive: all three 2026-08-05 bags
+> start *and* end parked at exactly the same spot and heading.** That converts the pose graph into
+> a measurable loop closure with no localizer, no map and no second sensor in the loop:
 >
-> **1 · Establish provenance.** `MAP_BUILD_HANDOFF.md` records the map build; the databases are on
-> the SSD (`/mnt/f1tenth_ssd/`), not in the repo. Recover the exact export commands for
-> `cloud_clean.pcd` and for `rtabmap_2d_final.pgm`, and confirm they name the **same** `.db`.
-> `rtabmap_final_nf.db` is the claimed source for both; `rtabmap_final.db` (the earlier 19:18 build)
-> also exists and is the likelier culprit if they differ. Note the doc was already corrected once on
-> this exact point on 2026-08-10, so the claim has a history of being wrong.
+> | | first pose | last pose | residual |
+> |---|---|---|---|
+> | optimized (`--opt 2`) | −54.53° | −64.12° | **9.59° unclosed** |
+> | raw odometry (`--opt 3`) | −54.53° | −89.73° | 35.2° of drift |
 >
-> **2 · Re-export both from one database and re-measure.** If a freshly exported pair scores best at
-> ~0 deg, the shipped pair had mixed provenance and the fix is a re-export -- not a rotation.
-> Measure the full-resolution `cloud_clean.pcd` too, to rule the voxel downsample in or out (it
-> cannot rotate anything, but it is one command and it closes the question).
+> The optimizer therefore removed **25.6°** — which *is* the rotation, and which no amount of
+> map-against-map scoring could have identified as the mechanism.
 >
-> **3 · Break the tie with a third, independent reference: the live LiDAR.** This is the step that
-> cannot be argued with, because it does not use either file as ground truth. Parked at the spot
-> (pose known to 1.03 deg from `heading_from_scan.py`), transform a `lidar/scan_filtered` into
-> `map` and compare it against the grid and against the cloud separately. The grid should agree --
-> that is already established -- and if the cloud is off by ~25.75 deg against a live scan, the
-> cloud is conclusively the wrong artifact. If instead **both** disagree with the scan, the problem
-> is bigger than the cloud and the grid is implicated too.
+> **Two further independent checks, both worth reusing:**
+> 1. A **LiDAR** cloud exported from the same database (`rtabmap-export --cloud --scan`) is rotated
+>    by the *same* amount as the RGB-D one (−25.50° vs −25.75°). Same sensor as the grid, same
+>    poses — this killed every camera-extrinsic theory in one command, and scores F1 **0.67** where
+>    RGB-D-vs-LiDAR scores 0.42.
+> 2. A **wall-orientation** measure that never compares one map to the other — it scores each
+>    artifact's own dominant wall direction, so coverage and density cannot bias it. Gave −24.25°
+>    to −26.00° across four z-bands.
 >
-> **4 · Only then choose a fix.** If provenance explains it, re-export. **Do not bake the measured
-> -25.75 deg into the .pcd to make the picture look right** -- that converts a provenance bug into a
-> permanent fudge factor that the next person cannot distinguish from a correct map.
+> **Reading `map_cloud_align2.py` correctly:** absolute F1 stays low (~0.42) even when perfectly
+> aligned, because the grid is LiDAR-built and the cloud is RGB-D. **Judge by where the peak sits,
+> not by its height**, and require *both* coverage directions to rise. Never quote
+> `map_cloud_align.py`'s one-way "0.05 m at zero shift" — that single number is what dismissed this
+> bug three times.
 >
-> **5 · Check whether anything else inherited the rotation.** The cloud is visualization-only today
-> (`pcd_to_pointcloud` -> `map/pointcloud`, only RViz subscribes), so nothing is silently broken.
-> But if the source `.db` is the rotated thing, then anything else exported from it is suspect --
-> nvblox output, any saved VSLAM map, and the `localize_isaac_vslam_on_startup` co-registration
-> claim in CLAUDE.md.
+> **One trap the fix itself walked into (bug-266), worth not repeating.** The first version of
+> `cloud_to_grid_frame.py` wrote `FIELDS x y z` and dropped the source's `rgb`. RViz renders a
+> colourless cloud flat white and logs **nothing**, and every geometric check still passed — the
+> operator caught it by looking. The script now transforms points *in place inside the source record
+> layout*, so it preserves whatever fields the input declares. **Check the output header says
+> `FIELDS x y z rgb` before shipping a cloud.**
 >
-> **Useful invocations:**
-> ```bash
-> python3 scripts/analysis/map_cloud_align2.py                       # full 360 sweep, 1 deg
-> python3 scripts/analysis/map_cloud_align2.py --yaw-min 328 --yaw-max 342 --yaw-step 0.25
-> python3 scripts/analysis/map_cloud_align2.py --pcd <other.pcd>     # compare a re-export
-> ```
+> **Still open, small:** `map_cloud_align.py` still ships its misleading one-way `score()` — delete
+> it or make it refuse to print a verdict. And the shipped grid+cloud pair is now correct, but
+> **nothing enforces it**: run any future exported cloud through `cloud_to_grid_frame.py` before
+> shipping it.
 >
 > ---
 >
