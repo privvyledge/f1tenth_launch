@@ -35,7 +35,9 @@
 >
 > ---
 >
-> ## ★★★★★ THE MAP ROTATION IS SOLVED — 2026-08-30 ~20:45 EDT. Root cause found, fix shipped.
+> ## ★★★★★ THE MAP ROTATION IS SOLVED AND CLOSED — 2026-08-30 21:13 EDT.
+>
+> **Operator verified in RViz: rotation gone, cloud in colour.** bug-265 and bug-266 closed.
 >
 > **bug-265 is closed.** The cloud really was yawed against the grid (the operator was right and
 > three sessions were wrong), the mechanism is now understood, and
