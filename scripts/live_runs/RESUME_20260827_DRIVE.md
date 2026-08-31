@@ -6,9 +6,14 @@
 > family has repeatedly shipped stale blockers, and there were three of these in under 24 hours.
 > Correct this one in place, in the same commit as the work.
 >
-> **Machine state:** Jetson was shut down ~09:35 to recharge and comes back **on AC power**. The
-> container and everything in `/workspaces` are gone with it — **re-stage before anything**
-> (§6, and §0★.2 of `DEMO_RUNBOOK_20260810.md`).
+> **Machine state (updated 2026-08-30 21:20 EDT):** the stack was torn down cleanly (0 orphans)
+> and the operator then **shut the Jetson down**. The container and everything in `/workspaces`
+> go with it — **re-stage before anything**, with **`stage_0831.sh`** (§0★.2 of
+> `DEMO_RUNBOOK_20260810.md`). Do **not** re-stage `0830b` or earlier: they copy the map set out
+> of the SSD over the unpacked tarball and would revert the bug-265 cloud fix silently.
+>
+> **Nothing has been pushed since `7a7d0b4`.** Five local commits: `a51bdc6`, `a8e027f`,
+> `9113f82`, `e18001f`, `71ae98f`. `CLAUDE.md` and `.wolf/` are git-excluded by design.
 >
 > **DONE 2026-08-27 ~18:05 EDT — the tarball was re-cut and staged.** `config/nav2_params.yaml`
 > `movement_time_allowance` **100.0 → 10.0** (the nav2 default) is committed as `614c463` and now
