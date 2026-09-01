@@ -43,6 +43,10 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 #           external MPC node) still discover each other. THE COST: anything
 #           off-robot is invisible with no error at all — remote RViz just shows
 #           nothing. Local-only runs.
+#   velox1  lo + the physical NIC, peers localhost + gosling1 + velox1 (.13) only.
+#           For runs where velox1 publishes drive commands. NOTE its `lo` entry
+#           ranks BELOW the NIC on purpose — above it, the participant advertises
+#           127.0.0.1 and no remote peer can discover it (see CYCLONEDDS_PEERS.md).
 #   none    Leave CYCLONEDDS_URI exactly as inherited.
 #
 # Default: `none` when the caller already exported CYCLONEDDS_URI (their choice
@@ -50,9 +54,10 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export DDS_PROFILE="${DDS_PROFILE:-$([[ -n "${CYCLONEDDS_URI:-}" ]] && echo none || echo static)}"
 case "$DDS_PROFILE" in
   none) : ;;
-  static|lo)
+  static|lo|velox1)
     _dds_file="$SSD_ROOT/cyclonedds_config_static.xml"
-    [[ "$DDS_PROFILE" == lo ]] && _dds_file="$SSD_ROOT/cyclonedds_offline_lo.xml"
+    [[ "$DDS_PROFILE" == lo     ]] && _dds_file="$SSD_ROOT/cyclonedds_offline_lo.xml"
+    [[ "$DDS_PROFILE" == velox1 ]] && _dds_file="$SSD_ROOT/cyclonedds_velox1.xml"
     # A CYCLONEDDS_URI pointing at a missing file is worse than none: Cyclone
     # falls back to its built-in defaults (multicast on, no static peers) and
     # says so only in a line nobody reads.
@@ -64,8 +69,76 @@ case "$DDS_PROFILE" in
     fi
     unset _dds_file
     ;;
-  *) printf '[warn] unknown DDS_PROFILE=%s (want static|lo|none)\n' "$DDS_PROFILE" >&2 ;;
+  *) printf '[warn] unknown DDS_PROFILE=%s (want static|lo|velox1|none)\n' "$DDS_PROFILE" >&2 ;;
 esac
+
+# --------------------------------------------------------------- teardown --
+# Stop a backgrounded `ros2 launch` and everything under it.
+#
+# `kill -INT $LAUNCH_PID; wait $LAUNCH_PID` is NOT enough, and every script here
+# used to do exactly that. ros2 launch forwards SIGINT, but a node blocked in a
+# device read never reaches its handler: on this car `joy_node` (blocked on the
+# DualSense) and `vesc_driver_node` (blocked on /dev/sensors/vesc) routinely
+# outlive the parent. They are then reparented to init and keep publishing, and
+# the *next* run comes up alongside them — which looks exactly like a launch
+# file duplicating subsystems, and has been misdiagnosed as that before.
+#
+# `wait` also blocks forever on a launch that refuses to die, so Ctrl-C appears
+# to hang.
+#
+# Snapshot the process tree BEFORE signalling: once the parent dies its children
+# reparent and the pgrep -P link is gone, so a tree walk afterwards finds nothing.
+_proc_descendants() {
+  local p="$1" c
+  for c in $(pgrep -P "$p" 2>/dev/null); do
+    _proc_descendants "$c"
+    printf '%s\n' "$c"
+  done
+}
+
+# stop_launch_tree <pid> [grace_seconds]
+stop_launch_tree() {
+  local pid="${1:-}" grace="${2:-10}" kids k alive
+  [[ -n "$pid" ]] || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+
+  kids="$(_proc_descendants "$pid")"
+
+  kill -INT "$pid" 2>/dev/null
+  local i
+  for (( i = 0; i < grace * 10; i++ )); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+
+  if kill -0 "$pid" 2>/dev/null; then
+    printf '[warn] launch %s ignored SIGINT after %ss — escalating to TERM\n' "$pid" "$grace" >&2
+    kill -TERM "$pid" 2>/dev/null
+    sleep 2
+    kill -KILL "$pid" 2>/dev/null
+  fi
+  wait "$pid" 2>/dev/null
+
+  # Now the stragglers, by PID from the snapshot — never a blanket `pkill ros2`,
+  # because another agent's stack or an external MPC node may share this machine
+  # and this ROS domain.
+  alive=""
+  for k in $kids; do kill -0 "$k" 2>/dev/null && alive="$alive $k"; done
+  [[ -n "$alive" ]] || return 0
+
+  printf '[warn] %s node(s) outlived the launch — sending TERM\n' "$(wc -w <<< "$alive")" >&2
+  for k in $alive; do kill -TERM "$k" 2>/dev/null; done
+  sleep 2
+
+  local stubborn=""
+  for k in $alive; do kill -0 "$k" 2>/dev/null && stubborn="$stubborn $k"; done
+  if [[ -n "$stubborn" ]]; then
+    for k in $stubborn; do
+      printf '[warn] SIGKILL %s (%s)\n' "$k" "$(ps -o comm= -p "$k" 2>/dev/null)" >&2
+      kill -KILL "$k" 2>/dev/null
+    done
+  fi
+}
 
 # Robot namespace. bringup resolves this from $VEHICLE_NAME then $USER, and
 # raises if neither is set, so we pin it explicitly and pass it through.

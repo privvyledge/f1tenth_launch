@@ -106,8 +106,7 @@ LAUNCH_PID=$!
 
 stop_stack() {
   banner "shutting down"
-  kill -INT "$LAUNCH_PID" 2>/dev/null
-  wait "$LAUNCH_PID" 2>/dev/null
+  stop_launch_tree "$LAUNCH_PID"
 }
 trap stop_stack EXIT
 

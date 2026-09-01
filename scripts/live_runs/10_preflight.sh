@@ -65,6 +65,67 @@ if PKG_SHARE="$(ros2 pkg prefix f1tenth_launch 2>/dev/null)/share/f1tenth_launch
     fail "bringup.launch.py still defaults map_file to the retired raslab.yaml.
           Unstaged container (pre-2026-08-11). Stage before launching."
   fi
+
+  # --- bug-265 / bug-266: the 3D cloud must be in the GRID's frame, with colour --
+  # rtabmap-export re-roots the pose graph at the FIRST node, so its clouds come
+  # out in the frame the run STARTED in; the ROS node publishes grid_prob_map
+  # anchored so the LATEST pose agrees with odometry, and map_saver captures the
+  # .pgm in THAT frame. The two differ by the yaw the optimizer removed over the
+  # run -- 25.33 deg for the 2026-08-05 build. Both get labelled "map", so a
+  # straight export pairs a correct-looking cloud with the grid at a silent
+  # rotation. Fix is scripts/analysis/cloud_to_grid_frame.py.
+  #
+  # Checked as a fingerprint, not a re-derivation: a 25 deg yaw moves the
+  # axis-aligned bounding box well outside this tolerance, and the FIELDS line
+  # catches bug-266 (a cloud exported without rgb renders flat white in RViz,
+  # logs nothing, and passes every geometric check).
+  _cloud="$PKG_SHARE/data/maps/20260805/cloud_voxel_0p05.pcd"
+  if [[ -f "$_cloud" ]]; then
+    _verdict="$(python3 - "$_cloud" <<'PY' 2>/dev/null || echo "ERR unreadable"
+import struct, sys, math
+f = open(sys.argv[1], 'rb'); hdr = {}
+while True:
+    parts = f.readline().decode('ascii', 'replace').split()
+    if not parts: continue
+    hdr[parts[0]] = parts[1:]
+    if parts[0] == 'DATA': break
+if 'rgb' not in hdr.get('FIELDS', []):
+    print('NORGB ' + ' '.join(hdr.get('FIELDS', []))); sys.exit()
+n = int(hdr['POINTS'][0]); stride = sum(int(x) for x in hdr['SIZE'])
+data = f.read(); xs = []; ys = []
+for i in range(n):
+    x, y = struct.unpack_from('<ff', data, i * stride)
+    if math.isfinite(x) and math.isfinite(y): xs.append(x); ys.append(y)
+print('BBOX %.3f %.3f %.3f %.3f' % (min(xs), max(xs), min(ys), max(ys)))
+PY
+)"
+    case "$_verdict" in
+      NORGB*)
+        fail "the 3D cloud has no rgb field (${_verdict#NORGB }) -- bug-266.
+              RViz renders such a cloud flat WHITE and logs nothing, and every
+              geometric check still passes. Re-export preserving colour." ;;
+      BBOX*)
+        # shellcheck disable=SC2086
+        set -- $_verdict
+        if python3 -c "
+import sys
+got = [float(v) for v in sys.argv[1:5]]
+exp = [-5.504, 3.795, -5.619, 3.519]
+sys.exit(0 if all(abs(g - e) < 0.30 for g, e in zip(got, exp)) else 1)" "$2" "$3" "$4" "$5"; then
+          info "3D cloud in the grid frame (bug-265 corrected, rgb present)"
+        else
+          fail "the 3D cloud is NOT in the grid frame -- bug-265.
+                bounding box x[$2, $3] y[$4, $5]; expected
+                x[-5.504, 3.795] y[-5.619, 3.519] within 0.30 m.
+                This is almost certainly a cloud straight out of rtabmap-export,
+                which is yawed ~25.33 deg against the occupancy grid. Run it
+                through scripts/analysis/cloud_to_grid_frame.py --transform-db
+                first, and say which database the transform came from."
+        fi ;;
+      *) warn "could not fingerprint the 3D cloud ($_cloud) -- skipping the bug-265 check" ;;
+    esac
+    unset _cloud _verdict
+  fi
 fi
 
 info "RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID"

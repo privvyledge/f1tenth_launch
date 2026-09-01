@@ -23,9 +23,18 @@ from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 
+# One candidate on purpose. The Jan-2024 'data/maps/rtabmap/raslab/cloud.pcd'
+# used to sit here as a fallback: it is a DIFFERENT map in a DIFFERENT frame, so
+# falling back to it silently compares the live grid against an unrelated cloud
+# and every geometric check still "passes". The raslab grid was deleted in
+# bug-237; that .pcd survives only as an untracked leftover. If the file below is
+# missing, fail loudly instead.
+#
+# Note this cloud is the bug-265-corrected one (grid frame). Any cloud exported
+# straight out of rtabmap-export is in the run's START frame and is yawed against
+# the grid -- run scripts/analysis/cloud_to_grid_frame.py first.
 CANDIDATES = [
     'data/maps/20260805/cloud_voxel_0p05.pcd',
-    'data/maps/rtabmap/raslab/cloud.pcd',
 ]
 
 

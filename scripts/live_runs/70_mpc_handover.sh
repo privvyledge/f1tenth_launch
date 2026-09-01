@@ -102,8 +102,7 @@ ros2 launch f1tenth_launch bringup.launch.py \
 LAUNCH_PID=$!
 
 stop_stack() {
-  kill -INT "$LAUNCH_PID" 2>/dev/null
-  wait "$LAUNCH_PID" 2>/dev/null
+  stop_launch_tree "$LAUNCH_PID"
 }
 trap stop_stack EXIT
 
