@@ -102,7 +102,7 @@ docker exec $C bash -lc "bash /mnt/shared_dir/stage_0831.sh"     # ~1 min, idemp
 ```bash
 source /workspaces/f1tenth/install/setup.bash
 export ROS_DOMAIN_ID=42
-export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml
+export CYCLONEDDS_URI=file:///mnt/shared_dir/cyclonedds_offline_lo.xml  # /mnt/shared_dir/cyclonedds_offline_lo.xml or /mnt/shared_dir/cyclonedds_velox1.xml
 export ROS_LOG_DIR=/mnt/shared_dir/<run-dir>/log_<name>       # never the Jetson home
 ```
 
@@ -117,11 +117,19 @@ export ROS_LOG_DIR=/mnt/shared_dir/<run-dir>/log_<name>       # never the Jetson
   that day, costing ~200 failed `sendto`/sec per process across 41 nodes. RViz is unaffected — it
   runs same-host and reaches you over SSH X11, not DDS.
 
-## 0★.3b · Remote drive commands from velox1 (`192.168.2.13`) — WRITTEN 2026-08-30, **UNTESTED**
+## 0★.3b · Remote drive commands from velox1 (`192.168.2.13`) — **VALIDATED ON THE PAIR 2026-09-01**
 
-velox1 is going to publish drive commands to the car, so it has to be a DDS peer. **Nothing
-below has been run** — it was written away from the lab and is a validation item for the next
-lab day (RESUME §1(f)).
+velox1 is going to publish drive commands to the car, so it has to be a DDS peer.
+
+**Status 2026-09-01: built and validated end to end**, `demo_nodes_cpp talker` on gosling1 seen
+and echoed from a container on velox1, with **zero `retcode -3` on either end**. Files:
+`/mnt/f1tenth_ssd/shared_dir/cyclonedds_velox1.xml` (robot) and
+`/home/digitalstorm/f1tenth_dds/cyclonedds_velox1.xml` (velox1). Not yet exercised with the
+real stack — steps 4-6 of the table below still need a bringup.
+
+**The interface PRIORITY is the whole trick, and the first attempt failed on it.** See the
+box below; do not copy the static file's `lo priority="10"` into a profile that has to reach
+another machine.
 
 Two facts to get straight before editing any XML:
 
@@ -137,8 +145,31 @@ Two facts to get straight before editing any XML:
 So neither shipped profile is right. Make a third: **`lo` + WiFi, exactly one remote peer.**
 
 **Derive it from the known-good static file rather than typing XML from scratch** — the
-`<Interfaces>` block, the `lo` priority-10 entry (the VSLAM-jitter fix, 0.1373/s → 0.0294/s) and
-the `<AllowMulticast>false</AllowMulticast>` line all have to survive verbatim:
+`<Interfaces>` block and the `<AllowMulticast>false</AllowMulticast>` line have to survive. The
+**one thing that must NOT survive verbatim is the `lo` entry's `priority="10"`**:
+
+> ### `lo` must rank BELOW the physical NIC — measured on the pair, 2026-09-01
+>
+> With `lo` at priority 10 and the NIC at `default`, `lo` outranks the NIC, and the participant
+> **advertises `127.0.0.1` as its preferred locator**. The remote peer dutifully tries to reach
+> it there, hits its own loopback, and discovers nothing — **silently, with a healthy-looking
+> config on both ends**. `ros2 node list` on velox1 was empty while `ping` and raw UDP passed
+> cleanly in **both** directions.
+>
+> The same ordering is also the entire source of the `retcode -3` flood: every announcement to a
+> remote peer is attempted on the `lo` socket first, where a `192.168.2.x` address is
+> unroutable, so each one costs an `EHOSTUNREACH`.
+>
+> Set the NIC to `priority="20"` and `lo` to `priority="0"`. Measured effect, all three at once:
+> cross-machine discovery **works**; `retcode -3` count goes **3600 → 0** on both ends; and the
+> same-host loopback preference that the VSLAM-jitter fix depends on is **preserved** — a 133 MB
+> two-container transfer on gosling1 put **132.6 MB on `lo` / 0 KB on WiFi** at `lo=10` and
+> **133.8 MB on `lo` / 639 KB on WiFi** at `lo=0`, the 639 KB being peer announcements that
+> previously failed. The bulk data path does not move.
+>
+> **This retires the standing claim in `CYCLONEDDS_PEERS.md`** that silencing the spam requires
+> giving up the `lo` entry and is therefore "off the table by operator decision". It was a
+> priority-ordering defect, not a trade-off.
 
 ```bash
 # in the container; the SSD copy survives a container rebuild
@@ -186,17 +217,22 @@ export CYCLONEDDS_URI=file://$HOME/cyclonedds_velox1.xml   # <Peer address="192.
 | # | On | Command | Pass |
 |---|---|---|---|
 | 1 | either | `ping -c3 192.168.2.13` / `ping -c3 192.168.2.195` | replies both ways; a firewall drop here is not a DDS problem |
-| 2 | robot | `grep -c 'ddsi_udp_conn_write' <launch stdout>` after 60 s | should be **~1/4 of the static-profile rate** (one remote peer instead of four), not zero |
+| 2 | robot | `grep -c 'ddsi_udp_conn_write' <launch stdout>` after 60 s | **zero.** Measured 0 on both ends 2026-09-01 with `lo` below the NIC. A nonzero count means the `lo` priority regressed — fix that before reading any step below |
 | 3 | velox1 | `ros2 node list` | the robot's nodes appear. Empty = domain or peer-list mismatch, **not** a stack fault |
 | 4 | velox1 | `ros2 topic hz /odometry/local` | ~30 Hz. Measure by name; `ros2 topic list` returns a partial graph under static peers |
 | 5 | velox1 | `ros2 topic pub` a zero-speed `AckermannDriveStamped` on `drive` | robot-side `ros2 topic echo /drive` shows it — **echo values, not `hz`** |
 | 6 | robot | `ros2 topic echo /vehicle/ackermann_cmd` | the command reaches the gate. Zeros with the joystick disconnected are the gate holding shut, working as designed |
 
-**Open question for the operator, before step 1.** `CYCLONEDDS_PEERS.md` lists
-`192.168.2.194` as *"DigitalStorm (viz desktop)"*, and velox1's login is `digitalstorm`. If
-those are one machine on two NICs, then `.13` and `.194` both announce to it and the second is
-pure cost — comment `.194` out. If they are two machines, leave the labels alone. **Do not guess
-this from the hostname; check `ip -br addr` on velox1.**
+**Open question — SETTLED 2026-09-01.** `.194` *was* velox1, on WiFi. velox1 has since moved to
+**wired `eno1` at `.13`**, its WiFi NIC (`wlx3c37862315ae`) is DOWN with no address, and `.194`
+has been **reassigned by DHCP to some other machine** — it answers today from a different MAC
+(`68:3e:26:c5:15:52` vs velox1's `f0:2f:74:cc:b9:b1`). So `.194` is neither velox1 nor a viz
+desktop any more: the label in `CYCLONEDDS_PEERS.md` is stale, and `.194` must **not** be in
+this profile — it would announce to an unrelated machine. Confirmed by the operator, who set up
+the original config while velox1 was still on WiFi.
+
+**General lesson: a peer list keyed on DHCP addresses decays without anyone noticing.** Check
+`ip -br addr` and the MAC, not the hostname or the label.
 
 **Bandwidth caveat, unmeasured.** Once WiFi is bound, every topic velox1 subscribes to crosses
 the air. Drive commands are tiny; a pointcloud or an image stream is not — see the note on
@@ -414,7 +450,7 @@ Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2�
   ```
   source /opt/ros/humble/setup.bash && source /workspaces/f1tenth/install/setup.bash
   export ROS_DOMAIN_ID=42 CONFIRM=yes RESET_REALSENSE=true
-  export DDS_PROFILE=lo          # kills the ddsi_udp_conn_write spam
+  export DDS_PROFILE=lo          # kills the ddsi_udp_conn_write spam. Comment out for LUCIO runs
   export ROS_LOG_DIR=/mnt/shared_dir/claude_mpc_0810/roslogs
   /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs/71_mpc_stack.sh \
     --map /mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml --domain 42 -y

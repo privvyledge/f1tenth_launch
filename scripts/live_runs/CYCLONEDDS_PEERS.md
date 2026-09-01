@@ -1,5 +1,28 @@
 # CycloneDDS static peers — log noise and the fix
 
+> ## RETRACTION, measured 2026-09-01 — the spam was a priority bug, not a trade-off
+>
+> Everything below concludes that the `retcode -3` flood can only be silenced by dropping the
+> `lo` interface entry, that this is "off the table by operator decision", and that
+> `cyclonedds_offline_lo.xml` is the only way to sidestep it. **That is wrong.**
+>
+> The cause is that `lo` was given `priority="10"` while the physical NIC was left at
+> `priority="default"`, so `lo` **outranks** the NIC. Every announcement to a remote peer is then
+> attempted on the `lo` socket, where a `192.168.2.x` address is unroutable — one `EHOSTUNREACH`
+> per peer per announcement, which is exactly the "every peer produces an identical count,
+> whether it is up or down" observation below.
+>
+> **Fix: NIC `priority="20"`, `lo` `priority="0"`.** Measured on gosling1 ↔ velox1: `retcode -3`
+> count **3600 → 0** on both ends, and the loopback preference is **kept** — a 133 MB
+> two-container transfer put 132.6 MB on `lo` / 0 KB on WiFi before, 133.8 MB on `lo` / 639 KB on
+> WiFi after (the 639 KB being announcements that used to fail). So the VSLAM-jitter fix
+> (0.1373/s → 0.0294/s) does not depend on the priority *ordering*, only on `lo` being enabled.
+>
+> The same defect silently broke **cross-machine discovery**: with `lo` on top, a participant
+> advertises `127.0.0.1` as its preferred locator and no remote peer can ever reach it. See
+> `DEMO_RUNBOOK_20260810.md` §0★.3b. Applied so far only in `cyclonedds_velox1.xml`;
+> **`cyclonedds_config_static.xml` still carries the old ordering.**
+
 **Status: applied on the robot 2026-08-07, NOT in any repo.**
 `cyclonedds_config_static.xml` is owned by the separate workspace/build repo,
 not by `f1tenth_launch`. The live copy at
@@ -20,6 +43,11 @@ recording session.
 
 - Comment out **`192.168.2.193` (gosling3) only**. Do not delete the line.
 - **Leave `192.168.2.194` (DigitalStorm) active** even though it is down.
+  **Superseded 2026-09-01: `.194` was velox1's WiFi address.** velox1 is now wired at
+  `192.168.2.13`, its WiFi NIC is DOWN, and `.194` has been reassigned by DHCP to an unrelated
+  machine (different MAC). Announcing to it is pure cost aimed at a stranger — drop it from any
+  profile written from here on. The addresses in this file are DHCP leases and decay silently;
+  verify with `ip -br addr` and the MAC, not the label.
 - Adopt `cyclonedds_offline_lo.xml` for **local-only** runs (see below).
 - Leave the `lo` interface entry alone.
 
