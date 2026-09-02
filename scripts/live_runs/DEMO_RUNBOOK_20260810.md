@@ -126,11 +126,19 @@ export ROS_LOG_DIR=/mnt/shared_dir/<run-dir>/log_<name>       # never the Jetson
 - **`RMW_IMPLEMENTATION` is now set in the container environment** — the §4 warning below that it is
   not, and that a raw `ros2 launch` silently runs FastRTPS, is **STALE as of 2026-08-25**. Verify in
   one command rather than trusting either statement: `echo $RMW_IMPLEMENTATION`.
-- **Why `_lo` and not the container default**, measured 2026-08-27: both configs already carry `lo`
-  at priority 10, so the loopback fix behind the VSLAM-jitter result is in **both**. The static
-  config additionally binds `wlP1p1s0` and lists four remote robots, **all of which pinged ABSENT**
-  that day, costing ~200 failed `sendto`/sec per process across 41 nodes. RViz is unaffected — it
-  runs same-host and reaches you over SSH X11, not DDS.
+- **Why `_lo` and not the container default**, measured 2026-08-27: the static config binds
+  `wlP1p1s0` and lists four remote robots, **all of which pinged ABSENT** that day, costing ~200
+  failed `sendto`/sec per process across 41 nodes. RViz is unaffected — it runs same-host and
+  reaches you over SSH X11, not DDS.
+- **STALE, corrected 2026-09-01:** this bullet used to add "both configs already carry `lo` at
+  priority 10, so the loopback fix is in both". `lo` at priority **10** was the bug — it outranks
+  the physical NIC, which silently breaks cross-machine discovery and is the whole `retcode -3`
+  flood. Both `cyclonedds_config_static.xml` and `cyclonedds_velox1.xml` now carry `lo` at
+  **priority 0**, below the NIC, and the loopback benefit is unaffected (measured). The ~200
+  failed `sendto`/sec figure above also predates that fix — the count is now **zero**.
+- **Choose the profile by what the run needs, not by noise:** `_lo` for local-only runs
+  (off-robot is invisible, with no error); `cyclonedds_velox1.xml` when velox1 publishes drive
+  commands. Both are quiet now.
 
 ## 0★.3b · Remote drive commands from velox1 (`192.168.2.13`) — **VALIDATED ON THE PAIR 2026-09-01**
 
@@ -465,7 +473,7 @@ Terminals: **T1** = Jetson **desktop session** (physical/VNC, *not* ssh). **T2�
   ```
   source /opt/ros/humble/setup.bash && source /workspaces/f1tenth/install/setup.bash
   export ROS_DOMAIN_ID=42 CONFIRM=yes RESET_REALSENSE=true
-  export DDS_PROFILE=lo          # kills the ddsi_udp_conn_write spam. Comment out for LUCIO runs
+  #export DDS_PROFILE=lo          # kills the ddsi_udp_conn_write spam. Comment out for LUCIO runs
   export ROS_LOG_DIR=/mnt/shared_dir/claude_mpc_0810/roslogs
   /workspaces/f1tenth/src/f1tenth_launch/scripts/live_runs/71_mpc_stack.sh \
     --map /mnt/shared_dir/maps/20260805/rtabmap_2d_final.yaml --domain 42 -y
