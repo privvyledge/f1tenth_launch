@@ -20,8 +20,17 @@
 >
 > The same defect silently broke **cross-machine discovery**: with `lo` on top, a participant
 > advertises `127.0.0.1` as its preferred locator and no remote peer can ever reach it. See
-> `DEMO_RUNBOOK_20260810.md` §0★.3b. Applied so far only in `cyclonedds_velox1.xml`;
-> **`cyclonedds_config_static.xml` still carries the old ordering.**
+> `DEMO_RUNBOOK_20260810.md` §0★.3b.
+>
+> **Applied 2026-09-01 to the live `cyclonedds_config_static.xml` on gosling1** as well as to
+> `cyclonedds_velox1.xml` (both machines). Previous contents backed up beside it as
+> `cyclonedds_config_static.bak09012026.xml`. **The same edit still has to be made in the build
+> repo at merge time, or the next deploy silently reverts it** — the identical caveat that
+> applies to the `.193` change above.
+>
+> Watch the comment syntax: an XML comment may not contain `--`, so the usual em-dash prose
+> breaks the file. The first attempt did exactly that and left the config unparseable; it was
+> restored from the backup before re-patching.
 
 **Status: applied on the robot 2026-08-07, NOT in any repo.**
 `cyclonedds_config_static.xml` is owned by the separate workspace/build repo,
