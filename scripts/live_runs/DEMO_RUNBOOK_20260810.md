@@ -48,6 +48,13 @@ docker exec $C bash -lc "bash /mnt/shared_dir/stage_0831.sh"     # ~1 min, idemp
   the Jan-2024 cloud, which renders exactly like a rotated 3D map. If you roll back to it, stage
   before launching.
 
+- **`stage_0831.sh` now lives in the repo** (`scripts/live_runs/stage_0831.sh`, tracked
+  2026-09-01) as well as at `/mnt/shared_dir/stage_0831.sh` on the robot. Until then it existed
+  **only on the SSD**, which put the whole map-set-in-the-tarball fix one reflash away from
+  being lost — the same class of single-copy risk the fix itself was written to close. The
+  robot copy is still the one that runs; the repo copy is the record. **If you edit one, copy
+  it to the other**, and note the tarball it references (`f1tenth_stage_20260831.tgz`) is data
+  and stays on the SSD.
 - **`stage_0831.sh` is CURRENT (2026-08-30 night) and is the one to run.** It carries
   `f1tenth_stage_20260831.tgz` (md5 `0a9f6da6d5b229d7f5cd5bbfa5ff3703`, **198** entries,
   `git archive` over git HEAD `a8e027f`) and verifies **sixteen** values. On top of `stage_0830b.sh`
