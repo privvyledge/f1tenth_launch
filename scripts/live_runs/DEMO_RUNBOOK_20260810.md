@@ -235,7 +235,9 @@ export ROS_DOMAIN_ID=42                          # must match the robot
 export CYCLONEDDS_URI=file://$HOME/cyclonedds_velox1.xml   # <Peer address="192.168.2.195"/>
 ```
 
-**Validation at the lab, in this order** — each step distinguishes a real failure from the next:
+**Validation at the lab, in this order** — each step distinguishes a real failure from the next.
+**ALL SIX STEPS PASSED against the live stack on 2026-09-01, 20:40–21:00 EDT** — see the box
+after the table for the numbers and the bandwidth measurement that was outstanding.
 
 | # | On | Command | Pass |
 |---|---|---|---|
@@ -257,9 +259,40 @@ the original config while velox1 was still on WiFi.
 **General lesson: a peer list keyed on DHCP addresses decays without anyone noticing.** Check
 `ip -br addr` and the MAC, not the hostname or the label.
 
-**Bandwidth caveat, unmeasured.** Once WiFi is bound, every topic velox1 subscribes to crosses
-the air. Drive commands are tiny; a pointcloud or an image stream is not — see the note on
-running RViz off-board in `RUNBOOK.md`.
+### Steps 4–6 and the bandwidth question — MEASURED 2026-09-01 against the running stack
+
+The stack was the operator's `bringup.launch.py` with `use_f1tenth_namespace:=True
+f1tenth_namespace:=gosling1`, so **every topic below is `/gosling1/…`** — a bare `/odometry/local`
+from velox1 returns nothing and looks exactly like a discovery failure.
+
+| # | Result |
+|---|---|
+| 2 | **0** `ddsi_udp_conn_write` lines in 40 min of `launch.log` (16 MB, per-process output is in there, `[proc-N]`-prefixed). The MPC container's own launch, running on `cyclonedds_config_static.xml` with **four** remote peers listed, is also at **0** — so the `lo`/NIC priority order really was the whole flood, not the peer count |
+| 3 | 40 `/gosling1/…` nodes listed from velox1, the full stack |
+| 4 | `/gosling1/odometry/local` **30.00, 29.99, 29.96 Hz** (max gap 0.055 s), `/gosling1/lidar/scan_filtered` **8.72 Hz** — both at their on-robot rates, no thinning across the wire |
+| 5 | 10 zero-speed `AckermannDriveStamped` published from velox1 at 2 Hz; **all 10** arrived on the robot's `/gosling1/drive`, `frame_id: velox1_test` intact |
+| 6 | `/gosling1/vehicle/ackermann_cmd` carried zeros throughout — the gate holding shut with no joystick heartbeat, working as designed |
+
+**Bandwidth — measured, and off-board RViz is viable.** Read the delta, not the absolute: the
+lab network puts a **~385 kB/s unicast background** on velox1's `eno1` that is present with the
+test container *stopped*, so it is not ours and it swamps any small absolute reading.
+
+| Subscription set | Delta over background |
+|---|---|
+| participant only, no subscriptions | ~0 |
+| RViz-like set — `scan_filtered`, `odometry/local`, `tf`, `tf_static`, `map`, `map/pointcloud`, `particle_cloud`, `amcl_pose` | **~99 kB/s** |
+| `camera/color/image_raw` alone | **31.3 MB/s** (≈250 Mbit/s) |
+
+So the displays an off-board RViz actually needs cost about **0.1 MB/s** — nothing. A raw camera
+stream costs **300×** that. The link carried it (velox1 still received 24.5 of 30 Hz, i.e. it
+dropped ~18 %) and `/gosling1/odometry/local` measured **29.99 Hz** immediately afterwards, so
+the control path was unharmed — but do not leave an image display enabled on an off-board RViz.
+**The same caveat applies to `map/pointcloud`**: it is inside the 99 kB/s only because
+`pcd_to_pointcloud` republishes 1.5 MB every 3 s; a live dense cloud would not be.
+
+**Not yet exercised: a drive command that actually moves the car from velox1.** Everything above
+was measured with the command gate shut. The DDS path is proven; the closed-loop remote drive is
+not.
 
 ## 0★.4 · Pose seeding is now AUTOMATIC — do not seed by hand
 
@@ -839,17 +872,62 @@ Three things worth keeping from the repeat:
 basin than yaw at this resolution, 6 cm is well inside AMCL's convergence, and the offline replay
 seeds share those numbers. Measure it deliberately before moving it.
 
-**Still open — the offline seeds were left alone.** `51_localize_offline.sh`, `check_map_frame.py`,
-`MAP_BUILD_HANDOFF.md`, `BRIEF_PARTICLE_FILTER.md` and `LOCALIZER_FOLLOWUPS.md` all carry
-`(+0.445, −0.575, −79.82°)` as the start pose of the archived 2026-08-05 bags, taken from the
-RTABMap database's optimized poses — a *different* measurement that seeds replays of those specific
-bags. Either those bags really started 4.7° from where the car parks today, or the RTABMap ground
-truth carries the same error. It is decidable offline in one command — run `heading_from_scan.py`
-against the first few seconds of an archived bag — and until someone does, changing those files
-would desynchronize each replay from its own data.
+### The −79.82° offline seed — SETTLED 2026-09-01. The RTABMap ground truth carries the error.
 
-**Tell the LUCIO side.** They consume this frame, and figure-8 waypoint 0 (−92.08°, 62–64 % of best)
-is 7.6–7.8° from the map across every sample — anything seeding from waypoint 0 starts that wrong.
+`51_localize_offline.sh`, `check_map_frame.py`, `MAP_BUILD_HANDOFF.md`, `BRIEF_PARTICLE_FILTER.md`
+and `LOCALIZER_FOLLOWUPS.md` all carry `(+0.445, −0.575, −79.82°)` as the start pose of the
+archived 2026-08-05 bags, taken from the RTABMap database's optimized poses. The standing question
+was whether those bags really started 4.7° from where the car parks today, or whether the RTABMap
+ground truth is wrong by that much.
+
+**The bags themselves are gone** — nothing matching 2026-08-05 survives on gosling1 or velox1, so
+the `heading_from_scan.py --bag` test proposed here is not runnable and will not become runnable.
+**The databases do survive** (`maps/20260805/rtabmap_final.db` and `…_nf.db`), and they settle it
+outright. Read straight out of `rtabmap_final.db` (`Admin.opt_poses` is 19152 B = 48 B × 399 nodes,
+transform-only layout, no id prefix):
+
+| | x | y | yaw |
+|---|---|---|---|
+| `Node.pose` first (raw odom) | −0.010 | −0.005 | **−54.53°** |
+| `Node.pose` last (raw odom) | 0.473 | −0.668 | **−89.50°** |
+| `Admin.opt_poses` first | 0.444 | −0.575 | **−79.85°** ← this is the −79.82° everything quotes |
+| `Admin.opt_poses` last | 0.473 | −0.668 | **−89.50°** |
+
+Four things fall out, and each is checkable in the table:
+
+1. **The last optimized pose equals the last odom pose exactly.** That is bug-265's mechanism
+   caught in the act: the ROS-side graph is anchored so the *latest* pose agrees with odometry.
+   So `opt_poses` is already in the **grid frame** — the frame `map_saver` captured and AMCL
+   localizes in. The −79.85° and the −84.50° seed are therefore in the *same* frame and genuinely
+   disagree; this is not a frame artifact.
+2. **Raw odometry accumulated 34.97° of yaw over a run that starts and ends parked in the same
+   spot; the optimizer removed 25.32°** — the −25.327° of bug-265, arrived at independently.
+3. **It did not remove enough. 9.65° is left unclosed**, first-vs-last, in one frame, for one
+   physical heading. The graph is internally inconsistent by that much, so *neither* end of it can
+   be a 0.2°-grade ground truth.
+4. **−84.50° is the midpoint.** The mean of −79.85° and −89.50° is **−84.67°**, which is **0.18°**
+   from the independently scan-measured seed. The optimizer split its residual roughly evenly
+   between the two ends of the loop, and the scan measurement landed in the middle.
+
+**Conclusion: the bags did not start 4.7° away — the RTABMap start pose is ~4.7° off, and its end
+pose is ~4.8° off the other way.** −84.5° stands as the parking-spot heading, now with a second,
+independent line of evidence behind it.
+
+**What this does *not* license.** Do not simply retype the offline seeds to −84.5°: each replay is
+scored against a truth CSV derived from *these same* optimized poses, so a seed corrected in
+isolation desynchronizes the replay from its own scoring reference. The honest reading is that
+those replays carry ~±4.7° of yaw truth error at the ends of the loop and less in the middle, and
+that is a property of the 2026-08-05 graph that no reseeding removes. Either state that error bar
+alongside any offline localizer score, or rebuild the map with the loop actually closed.
+
+**The x/y agreement is circular and proves nothing** — `localizer_amcl.yaml`'s (0.445, −0.575)
+was itself taken from this table's third row. Only the yaw is independent.
+
+**Tell the LUCIO side — and there is now more to tell than there was.** They consume this frame,
+and figure-8 waypoint 0 (−92.08°, 62–64 % of best) is 7.6–7.8° from the map across every sample —
+anything seeding from waypoint 0 starts that wrong. As of 2026-09-01 the −79.82° figure is retired
+as well: if anything on their side seeds from the RTABMap start pose, it is ~4.7° off in the other
+direction. **−84.5° is the only number of the three that survives.**
 
 **To repeat it** (~40 s, parked, stack up — note the topic is bare on a raw §4 launch, `/gosling1/…`
 via the `live_runs` scripts):

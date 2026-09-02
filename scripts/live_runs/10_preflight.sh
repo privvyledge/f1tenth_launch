@@ -144,6 +144,54 @@ case "$DDS_PROFILE" in
       but DDS_PROFILE=$DDS_PROFILE — the config is whatever the caller inherited." ;;
 esac
 
+# --- interface priority: lo MUST rank below the physical NIC (bug-267) -------
+# With lo above the NIC the participant advertises 127.0.0.1 as its preferred
+# locator, so a remote peer resolves it to its own loopback and discovers
+# nothing -- silently, with a healthy-looking config on both ends. The same
+# ordering is the entire 'ddsi_udp_conn_write retcode -3' flood, because every
+# announcement to a remote peer is tried on the lo socket first, where a
+# routable address is unreachable. This check exists because the fix lives in
+# an XML file owned by the build repo: a fresh image can bring the old ordering
+# back and nothing else would say so.
+_cfg="${CYCLONEDDS_URI#file://}"
+if [[ -n "$_cfg" && -r "$_cfg" ]]; then
+  # XML comments matter here: the shipped static config carries a commented-out
+  # <Interfaces> block whose priority is "default", so a naive grep reads that
+  # one and misses the live entry. Strip comments before looking.
+  _prio=$(python3 - "$_cfg" <<'EOF'
+import re, sys
+x = re.sub(r"<!--.*?-->", "", open(sys.argv[1], encoding="utf-8").read(), flags=re.S)
+lo = nic = None
+for tag in re.findall(r"<NetworkInterface[^>]*>", x):
+    p = re.search(r'priority="([^"]*)"', tag)
+    p = p.group(1) if p else "default"
+    p = 0 if p == "default" else (int(p) if re.fullmatch(r"-?\d+", p) else None)
+    if 'name="lo"' in tag:
+        lo = p
+    elif nic is None:
+        nic = p
+print(lo if lo is not None else "", nic if nic is not None else "")
+EOF
+  ) || _prio=""
+  read -r _lo_pri _nic_pri <<<"$_prio"
+  if [[ -n "$_lo_pri" && -n "$_nic_pri" ]]; then
+    if (( _lo_pri >= _nic_pri )); then
+      fail "DDS interface priority inverted in $_cfg:
+      lo priority=$_lo_pri, physical NIC priority=$_nic_pri ('default' counts as 0).
+      lo must rank BELOW the NIC (NIC 20, lo 0). As it stands this machine
+      advertises 127.0.0.1 as its preferred locator, no remote peer can
+      discover it -- silently, with a healthy-looking config on both ends --
+      and stderr floods with ddsi_udp_conn_write retcode -3. The fix lives in
+      an XML file owned by the build repo, so a fresh image can bring the old
+      ordering back and nothing else would say so. See bug-267."
+    else
+      info "DDS interface priority OK (NIC=$_nic_pri > lo=$_lo_pri)"
+    fi
+  fi
+  unset _lo_pri _nic_pri _prio
+fi
+unset _cfg
+
 # ---------------------------------------------------------- 2. hardware ----
 banner "2. hardware"
 
