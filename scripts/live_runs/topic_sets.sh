@@ -41,6 +41,17 @@ TOPICS_CAMERA=$(_ns \
 
 TOPICS_CAMERA_CLOUD=$(_ns camera/depth/color/points)
 
+# The camera IMU alone, without a single image stream. Recording the D435i's
+# image topics costs ~125 MB/s and, measured on armA_loop_212826 (2026-09-01),
+# starves librealsense's USB thread: the infra1/infra2 pair stopped 4.9 s after
+# the recorder opened and resumed 1.1 s after it closed, taking Isaac VSLAM with
+# it (107 frames over 214 s against the EKF's 6415). Colour and depth were
+# unaffected, so the failure is silent unless the IR counts are checked. A bag
+# that only needs the IMU must not pay that price.
+TOPICS_CAMERA_IMU=$(_ns \
+  camera/imu \
+  camera/imu/filtered)
+
 # Everything a consumer needs to re-derive geometry offline: the unaligned
 # depth stream (aligned_depth_to_color is resampled into the colour intrinsics
 # and loses the native depth FOV), and the latched inter-stream extrinsics the
@@ -190,6 +201,19 @@ set_for() {
       printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_VEHICLE" \
                     "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" \
                     "$TOPICS_GLOBAL_LOC" "$TOPICS_NAV2" ;;
+    sysid)
+      # Actuator identification and fusion checks on a driven bag: everything
+      # fit_actuators.py scores against (gyro-z, sensors/core, servo/position,
+      # the ackermann chain) plus the three odometry sources needed to attribute
+      # a heading change, plus the camera IMU for the remove_imu_bias question.
+      # No image streams at all -- see TOPICS_CAMERA_IMU for why that matters.
+      printf '%s\n' "$TOPICS_TF" "$TOPICS_LIDAR" "$TOPICS_VEHICLE" \
+                    "$TOPICS_ACTUATOR" "$TOPICS_ODOM_LOCAL" \
+                    "$TOPICS_CAMERA_IMU"
+      if [[ "${USE_GPU,,}" == "true" ]]; then
+        printf '%s\n' "$TOPICS_ODOM_VSLAM"
+      fi
+      ;;
     mpc)
       # VSLAM odometry is included so a heading question asked of this bag can
       # be answered. odom/rf2o and odometry/local are not independent -- rf2o is

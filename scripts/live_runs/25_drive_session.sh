@@ -134,7 +134,10 @@ cmd_start() {
   mkdir -p "$SESSION_DIR"; ensure_dirs
   check_disk 25 || die "not enough space left to start another bag"
 
-  set_array drive
+  # `drive` is the default because bags from one session must be
+  # interchangeable downstream. Override with BAG_TOPIC_SET for a run that must
+  # not record images -- recording them costs VSLAM (see TOPICS_CAMERA_IMU).
+  set_array "${BAG_TOPIC_SET:-drive}"
   (( ${#TOPIC_LIST[@]} )) || die "empty topic list"
   printf '%s\n' "${TOPIC_LIST[@]}" > "$REC_TOPICS_F"
 

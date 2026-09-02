@@ -975,6 +975,46 @@ stays at 30 Hz on the remaining sources — so check it by **rate** at the start
 
 ## 3 · Drive session, arm A — fusion, steering, sysid
 
+> ### RESULTS 2026-09-01 evening — arm A was driven. Four of six items are closed.
+>
+> Four bags on gosling1 at `/mnt/shared_dir/bags/20260901/`: `armA_loop_212826` (26 GiB, the
+> `drive` set — **VSLAM starved, see bug-272**), then `armA_loop2_214423`, `armA_steer_sweep_214921`
+> and `armA_straight_5m_215624`, all with `BAG_TOPIC_SET=sysid` and VSLAM healthy at 30 Hz.
+>
+> **CLOSED — odometry loop closure over ~5 m** (`testing_checklist.md` §5, open since 2026-07-22).
+> `armA_loop2`, 29.5 m of path returning to the start spot: `odometry/local` closed to **0.206 m
+> with −3.44° residual yaw**, against the **−24.3°** on record. VSLAM agrees to three decimals
+> (0.206 m / −3.44°), rf2o alone gives 0.490 m / +9.76°, VESC wheel odom drifts 2.24 m in position
+> but only −0.50° in yaw. **The measurement is now bounded by how precisely the operator parked on
+> the start mark, not by the filter** — going below this needs a physical fiducial.
+>
+> **CLOSED — drive into the steering limit both ways.** `armA_steer_sweep`, 3+ full-lock circles
+> each direction: **17.45° left / 17.47° right, symmetric to 0.1 %**, minimum radius **0.814 m**,
+> **97.0 % of commanded** both sides. `servo_min` is *still* never reached, but the question it was
+> asked for is answered: the mechanics are symmetric and `max_steering:=0.314` is the sole limit.
+> Left has 0.1205 servo units spare, right has 0.0005. Details and the raised-limit decision are in
+> CLAUDE.md under the asymmetric-range entry.
+>
+> **CLOSED — the speed reference ambiguity, by tape measure.** rf2o and VSLAM disagree 6.3 % on
+> `speed_to_erpm_gain` (3974 vs 3737). Over a measured 5.50 m run: VSLAM **5.570 m (+1.3 %)**, VESC
+> 5.412 m, EKF 5.331 m, **rf2o 5.163 m (−6.1 %)**. rf2o under-reports distance; **`speed_to_erpm_gain`
+> stays 3750**. A speed calibration scored against rf2o alone is wrong by ~6 %.
+>
+> **NEW — the zero-steer offset is contested** (bug-273). Three fits today land at 0.5583 / 0.5532 /
+> **0.5508** against the configured 0.56 and the 2026-08-07 measurement of 0.5591/0.5610. At 0.5508
+> a zero command asks for −0.46° right = **47 cm of drift over 5.5 m**, which the operator reported
+> unprompted. **Not applied**; needs the bench sweep.
+>
+> **STILL OPEN:** the **wheelbase** 0.25 → 0.256 m check (answerable offline from `armA_loop2`,
+> which carries `vesc_odom`'s kinematic yaw rate alongside gyro and VSLAM through a figure-8 — no
+> further driving needed), and the **driven-heading evidence for `remove_imu_bias`**, which now has
+> the bags it needs (`camera/imu` is in the `sysid` set).
+>
+> **NEXT SESSION, and both open steering items point at it:** `scripts/analysis/bench_servo_sweep.py`
+> on blocks. It measures servo centring *and* the true `servo_min`/`servo_max` directly. No driving,
+> but it does need the drive pack, since the VESC powers the servo.
+
+
 Not startable without battery and a driven leg. Get all of this onto one drive:
 
 - **`odometry/local` yaw drift while moving** — no parked test reaches it. Parked is +0.04 °/min.
