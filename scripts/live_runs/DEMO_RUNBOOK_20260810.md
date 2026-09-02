@@ -31,7 +31,7 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0831.sh"     # ~1 min, idempotent, NO NETWORK
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0901.sh"     # ~1 min, idempotent, NO NETWORK
 ```
 
 - **The image changed on 2026-08-30: `humble-devel-08302026`.** It is a `docker commit` of a
@@ -48,7 +48,15 @@ docker exec $C bash -lc "bash /mnt/shared_dir/stage_0831.sh"     # ~1 min, idemp
   the Jan-2024 cloud, which renders exactly like a rotated 3D map. If you roll back to it, stage
   before launching.
 
-- **`stage_0831.sh` now lives in the repo** (`scripts/live_runs/stage_0831.sh`, tracked
+- **`stage_0901.sh` is CURRENT (2026-09-01 evening, git HEAD `f50e12d`) and is the one to run.**
+  Tarball `f1tenth_stage_20260901.tgz` (md5 `5a7cc874a49bfd8e6d62f970e69d6b12`, **199** entries),
+  **twenty-one** checks. On top of `stage_0831.sh` it carries the exec-bit fix (bug-268), the
+  `stop_launch_tree` teardown (bug-269), the `velox1` DDS profile, and the bug-265/266 cloud
+  fingerprint in `10_preflight.sh`. Ran on gosling1 2026-09-01, all checks pass.
+  **Note `scripts/` is NOT installed by CMakeLists** — it is used out of
+  `src/f1tenth_launch/scripts/`, so script checks read `$S`, not `$I`. The first cut of this
+  script got that wrong and reported five spurious MISSINGs.
+- **`stage_0831.sh` (superseded) now lives in the repo** (`scripts/live_runs/stage_0831.sh`, tracked
   2026-09-01) as well as at `/mnt/shared_dir/stage_0831.sh` on the robot. Until then it existed
   **only on the SSD**, which put the whole map-set-in-the-tarball fix one reflash away from
   being lost — the same class of single-copy risk the fix itself was written to close. The
