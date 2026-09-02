@@ -31,7 +31,7 @@ lsusb | grep -iE "intel|cp210"        # RealSense + the CP210x (that IS the YDLi
 
 ```bash
 bash ~/bolus_ws/f1tenth_launch.sh                 # T1, the Jetson desktop session, NOT ssh
-docker exec $C bash -lc "bash /mnt/shared_dir/stage_0901.sh"     # ~1 min, idempotent, NO NETWORK
+docker exec $C bash -lc "bash /mnt/shared_dir/stage_0902.sh"     # ~1 min, idempotent, NO NETWORK
 ```
 
 - **The image changed on 2026-08-30: `humble-devel-08302026`.** It is a `docker commit` of a
@@ -48,7 +48,29 @@ docker exec $C bash -lc "bash /mnt/shared_dir/stage_0901.sh"     # ~1 min, idemp
   the Jan-2024 cloud, which renders exactly like a rotated 3D map. If you roll back to it, stage
   before launching.
 
-- **`stage_0901.sh` is CURRENT (2026-09-01 evening, git HEAD `f50e12d`) and is the one to run.**
+- **`stage_0902.sh` is CURRENT (2026-09-01 night, git HEAD `a2eb260`) and is the one to run.**
+  Tarball `f1tenth_stage_20260902.tgz` (md5 `29ccc04e42e0f5a3d58ab469e44c8669`, **200** entries),
+  **twenty-four** checks. Both are staged at `/mnt/f1tenth_ssd/shared_dir/` on gosling1. On top of
+  `stage_0901.sh` it carries exactly one commit, `a2eb260` (bug-272): `topic_sets.sh` gains
+  `TOPICS_CAMERA_IMU` and a **`sysid`** bundle with no image streams, and `25_drive_session.sh`
+  gains a **`BAG_TOPIC_SET`** env override (default `drive`, so existing bags stay interchangeable).
+  **Use `BAG_TOPIC_SET=sysid` for any driven bag that does not need pixels** — recording the image
+  streams writes ~125 MB/s, starves librealsense's USB thread, and silently takes Isaac VSLAM down
+  with the infra1/infra2 pair (107 VSLAM messages over 214 s against the EKF's 6415, while
+  `visual_slam_node` reads a healthy 30 Hz before and after). Measured 47 MB vs 26 GiB for the same
+  drive. **Verify VSLAM survived a bag by message COUNT in `ros2 bag info`, never by topic rate.**
+  **Ran on gosling1 2026-09-01 22:10, all twenty-four checks pass** — including the three new ones
+  (`sysid` bundle present, zero image groups inside it, `BAG_TOPIC_SET` read by the session script),
+  and `set_array sysid` resolves to 24 topics with 0 image topics under the live namespace.
+
+  Two traps caught while cutting it, worth repeating for the next tarball: the `git archive` path
+  set is **`CMakeLists.txt package.xml config data/maps/20260805 launch rviz scripts urdf`** —
+  passing a bare `data/maps` pulls in the **retired** `data/maps/rtabmap/` raslab map (bug-237) plus
+  a 21 MB `rtabmap.db`, and omitting `urdf` drops `f1tenth.urdf.xacro`, which every camera frame
+  depends on. **Diff the new entry list against the previous tarball's before shipping** — both
+  mistakes were invisible in the build and obvious in one `comm`.
+
+- **`stage_0901.sh` (superseded, 2026-09-01 evening, git HEAD `f50e12d`).**
   Tarball `f1tenth_stage_20260901.tgz` (md5 `5a7cc874a49bfd8e6d62f970e69d6b12`, **199** entries),
   **twenty-one** checks. On top of `stage_0831.sh` it carries the exec-bit fix (bug-268), the
   `stop_launch_tree` teardown (bug-269), the `velox1` DDS profile, and the bug-265/266 cloud
