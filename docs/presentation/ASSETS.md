@@ -76,34 +76,34 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | ID | Kind | Status | Owner | Target path | Notes |
 |---|---|---|---|---|---|
 | FIG-ARCH-00 | figure | USER | user | `assets/figures/arch/0_SystemArchitecture.png` | **Reference export, not final** (see Open items). PNG received 2026-09-02. Review notes (a)-(f) in §4 apply. |
-| FIG-ARCH-01 | figure | USER | user | `assets/figures/arch/1_Sensing.png` | **Reference export, not final** (see Open items). Portrait 932x1998 — crop above the dashed line, or use a two-column slide. See §4 notes (b), (f). |
+| FIG-ARCH-01 | figure | USER | user | `assets/figures/arch/1_Sensing.png` | **Reference export, not final** (see Open items). Portrait 932x1998; **cropped above the dashed line to `1_Sensing_crop.png` on 2026-09-02**, which is what slide 2.1 embeds. Original untouched. See §4 notes (b), (f). |
 | FIG-ARCH-01A | figure | USER | user | `assets/figures/arch/1A_StereoVision.png` | **Reference export, not final** (see Open items). Embeds a MathWorks figure: attribute or crop. See §4 note (c). |
 | FIG-ARCH-02 | figure | USER | user | `assets/figures/arch/2A_Localization.png` | **Reference export, not final** (see Open items). SVG export still wanted. |
 | FIG-ARCH-03 | figure | USER | user | `assets/figures/arch/2B_ObstacleDetection.png` | **Reference export, not final** (see Open items). SVG export still wanted. |
 | FIG-ARCH-04 | figure | USER | user | `assets/figures/arch/3_Planning.png` | **Reference export, not final** (see Open items). SVG export still wanted. |
 | FIG-ARCH-05 | figure | USER | user | `assets/figures/arch/4_Control.png` | **Reference export, not final** (see Open items). Shows design intent (steering PID, 200 Hz velocity PID) and no mux/gate. See §4 notes (d), (e). |
-| PHOTO-CAR | photo | EXISTS | B1 | `assets/photos/car.jpg` | Crop/downscale from `docs/attachments/F1tenthDocumentation_v1_1_Release/media/`. |
-| PHOTO-COMPONENTS | photo | EXISTS | B1 | `assets/photos/components/` | Photo grid; sources as above and `docs/figures/teleop/sensors/`. |
-| PHOTO-WIRING | photo | EXISTS | B1 | `assets/photos/wiring.jpg` | Source stills are current hardware and need no 2024 label. |
-| PHOTO-ASSEMBLY | photo | EXISTS | B1 | `assets/photos/assembly/` | `docs/figures/teleop/assembly/`, `rollcage.png`, `body_shell.png`, `npf_adapter.png`. |
-| PHOTO-DUALSENSE | photo | EXISTS | B1 | `assets/photos/dualsense_labelled.png` | `docs/figures/teleop/dualsense_top_with_arrows_and_labels.png`. |
+| PHOTO-CAR | photo | DONE | B1 | `assets/photos/car.jpg` | Produced 2026-09-02 from the release doc's assembled-car photo. Current hardware, so no 2024 label. |
+| PHOTO-COMPONENTS | photo | DONE | B1 | `assets/photos/components/` | Produced 2026-09-02: six component shots (computer, ESC, camera, LiDAR, chassis, controller), laid out inline on slide 1.1. |
+| PHOTO-WIRING | photo | DONE | B1 | `assets/photos/wiring.jpg` | Produced 2026-09-02 as one image: the computer supply and the ESC XT90 connection side by side, from two current-hardware stills. |
+| PHOTO-ASSEMBLY | photo | DONE | B1 | `assets/photos/assembly/` | Produced 2026-09-02: the seven numbered assembly steps, downscaled. |
+| PHOTO-DUALSENSE | photo | EXISTS | B1 | `assets/photos/dualsense_labelled.png` | **File produced 2026-09-02 and embedded on 1.6 and 8.4.** Left at EXISTS, not DONE, because slide 7.8 (control chat) still cards it - flip to DONE once that card becomes an embed. |
 | FIG-ELEC | figure | TBD | user | `assets/figures/electrical.svg` | Does not exist. **Draw in mermaid** (SVG or TikZ if it outgrows mermaid), from Release doc §Wiring — decided 2026-09-02, plan §8 open item. Card until then. |
-| FIG-TF-TREE | figure | ROBOT | capture / B1 | `assets/figures/tf_tree.png` | `ros2 run tf2_tools view_frames` on a running stack. Offline alternative: mermaid from `static_transformations.launch.py` + URDF. |
-| FIG-LAUNCHTREE | diagram | OFFLINE | B1 | `assets/figures/launch_tree.svg` | Mermaid; pre-render to SVG. |
-| FIG-CMDPATH | diagram | OFFLINE | B1 | `assets/figures/cmd_path.svg` | **Mermaid** (decided 2026-09-02); reviewed by the vesc chat. |
-| FIG-EKF-INPUTS | diagram | OFFLINE | B2 | `assets/figures/ekf_inputs.svg` | Mermaid. |
+| FIG-TF-TREE | figure | DONE | capture / B1 | `assets/figures/tf_tree.svg` | Produced 2026-09-02 as the sanctioned offline alternative: mermaid from static_transformations.launch.py + the URDF. Source `assets/figures/src/tf_tree.mmd`. A `view_frames` capture may still replace it. |
+| FIG-LAUNCHTREE | diagram | DONE | B1 | `assets/figures/launch_tree.svg` | Produced 2026-09-02. Source `assets/figures/src/launch_tree.mmd`; re-render with `assets/figures/src/render.sh`. |
+| FIG-CMDPATH | diagram | DONE | B1 | `assets/figures/cmd_path.svg` | Produced 2026-09-02. Source `assets/figures/src/cmd_path.mmd`. **Still wants the vesc chat's review.** |
+| FIG-EKF-INPUTS | diagram | DONE | B2 | `assets/figures/ekf_inputs.svg` | Produced 2026-09-02 from ekf_odom.yaml as read, not from the prose summary (the rf2o gate is 3.0, not 5.0). Source `assets/figures/src/ekf_inputs.mmd`. |
 | FIG-LOWLEVEL | diagram | OWNER | vesc | `assets/figures/lowlevel.svg` | **Mermaid** (decided 2026-09-02). Drawn from the vesc fork's code, not the template. |
-| FIG-NAV2-BT | diagram | OFFLINE | B2 | `assets/figures/nav2_bt.svg` | From `config/behavior_trees/*.xml`. |
-| TABLE-REPOS | table | OFFLINE | B1 | inline | From `f1tenth.repos`. Date every cell in speaker notes. |
-| TABLE-CAMERA | table | OFFLINE | B1 | inline | Configured values from `config/sensors/realsense_config.yaml`; measured Hz needs CHART-RATES data. |
-| TABLE-IMU | table | OFFLINE | B1 | inline | — |
-| TABLE-ODOM | table | OFFLINE | B2 | inline | — |
+| FIG-NAV2-BT | diagram | DONE | B2 | `assets/figures/nav2_bt.svg` | Produced 2026-09-02 from config/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml. Source `assets/figures/src/nav2_bt.mmd`. |
+| TABLE-REPOS | table | DONE | B1 | inline, slide 0.4 | Written 2026-09-02 from f1tenth.repos (21 entries, 10 rows shown). |
+| TABLE-CAMERA | table | DONE | B1 | inline, slide 2.2 | Written 2026-09-02. Configured values only; the measured-Hz column still needs CHART-RATES. |
+| TABLE-IMU | table | DONE | B1 | inline, slide 2.5 | Written 2026-09-02. |
+| TABLE-ODOM | table | DONE | B2 | inline, slide 3.2 | Written 2026-09-02. |
 | TABLE-CONTROLLERS | table | OWNER | control | inline | — |
-| TABLE-SAFETY-TIMING | table | OFFLINE | B1 | inline | Reviewed by the vesc chat. |
-| TABLE-CALIB-STATUS | table | OFFLINE | B2 | inline | Inherited vs measured, per constant, with dates. |
-| TABLE-DEADBAND | table | OFFLINE | B2 | inline | Carry the numbers in ERPM, not m/s. |
-| TABLE-TAPE | table | OFFLINE | B2 | inline | The 5.50 m tape run vs VSLAM / rf2o / EKF. |
-| TABLE-BANDWIDTH | table | OFFLINE | B1 | inline | Remote-link measurements. |
+| TABLE-SAFETY-TIMING | table | DONE | B1 | inline, slide 8.2 | Written 2026-09-02. **Still wants the vesc chat's review.** |
+| TABLE-CALIB-STATUS | table | DONE | B2 | inline, slide 9.1 | Written 2026-09-02, inherited vs measured per constant with dates. |
+| TABLE-DEADBAND | table | DONE | B2 | inline, slide 9.4 | Written 2026-09-02, carried in ERPM. |
+| TABLE-TAPE | table | DONE | B2 | inline, slide 3.4 | Written 2026-09-02. Also reproduced on 9.4. |
+| TABLE-BANDWIDTH | table | DONE | B1 | inline, slide 1.5 | Written 2026-09-02. |
 | TABLE-PACKAGES | table | ROBOT | capture | inline | In the container on gosling1: `ros2 pkg list`, `apt list --installed 'ros-humble-*'`, `pip list`. Feeds 0.4. |
 | CHART-RATES | chart | ROBOT | capture | `assets/figures/rates.png` | `scripts/analysis/bag_stats.py` on a `sysid` bag (`armA_loop2`) -> CSV -> matplotlib. |
 | CHART-CLOSURE | chart | ROBOT | capture | `assets/figures/localization/closure.png` | `scripts/analysis/plot_localization.py <armA_loop2> --map data/maps/20260805/rtabmap_2d_final.yaml --out docs/presentation/assets/figures/localization/`; also yields `summary.md`. |
@@ -112,15 +112,15 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | CHART-LAG | chart | ROBOT | capture | `assets/figures/lag.png` | Step response; feeds both 7.6 and 9.5. |
 | CHART-NAV2-APPROACH | chart | ROBOT | capture | `assets/figures/nav2_approach.png` | Distance-to-goal and commanded speed vs time from the `nav2_drive4` bag. |
 | CHART-MPC-TRACKING | chart | OWNER | control | `assets/figures/mpc_tracking.png` | Cross-track and speed error from the figure-8 / loop runs. |
-| FIG-MAP-2D | figure | OFFLINE | B2 | `assets/figures/map_2d.png` | Render `data/maps/20260805/rtabmap_2d_final.pgm` with origin, axes and the seed pose marked. |
-| FIG-MAP-3D | figure | OFFLINE | B2 | `assets/figures/map_3d.png` | Top-down and oblique render of `cloud_voxel_0p05.pcd` (**colour preserved**) over the grid. |
+| FIG-MAP-2D | figure | DONE | B2 | `assets/figures/map_2d.png` | Produced 2026-09-02: rtabmap_2d_final.pgm rendered in metres with the map origin and the start-pose seed marked. |
+| FIG-MAP-3D | figure | DONE | B2 | `assets/figures/map_3d.png` | Produced 2026-09-02: top-down and oblique renders of cloud_voxel_0p05.pcd, **colour preserved**, over the occupancy grid. |
 | FIG-MAP-COMPARE | figure | ROBOT | capture | `assets/figures/map_compare.png` | Needs the SLAM Toolbox grid from `40_build_map_offline.sh --mode both`. |
 | FIG-COSTMAP | figure | EXISTS | perception | `assets/figures/costmap.png` | `data/maps/sample_costmap.png` — check its date; if stale it becomes ROBOT. |
 | FIG-WAYPOINTS | figure | OWNER | control | `assets/figures/waypoints.png` | — |
 | FIG-PERC-LASER | figure | OWNER | perception | `assets/figures/perc_laser.png` | — |
 | FIG-PERC-CLOUD | figure | OWNER | perception | `assets/figures/perc_cloud.png` | — |
 | FIG-PERC-IMAGE | figure | OWNER | perception | `assets/figures/perc_image.png` | — |
-| FIG-SYSID-METHOD | figure | OFFLINE | B2 | `assets/figures/sysid_method.svg` | Split from the grouped §4 row by the scaffold; drawn from `SYSID_RESULTS.md`. |
+| FIG-SYSID-METHOD | figure | DONE | B2 | `assets/figures/sysid_method.svg` | Produced 2026-09-02. Source `assets/figures/src/sysid_method.mmd`. |
 | FIG-BENCH-SWEEP | figure | TBD | B2 | `assets/figures/bench_sweep.png` | Split from the grouped §4 row. The bench sweep has not been run; `BENCH_SWEEP_SHEET.md` + `bench_servo_sweep.py` define it. |
 | VID-SENS-RGB | video | ROBOT | capture | `assets/video/VID-SENS-RGB.mp4` | `docs/demo_shot_list.md` §1, 10-20 s. |
 | VID-SENS-DEPTH | video | ROBOT | capture | `assets/video/VID-SENS-DEPTH.mp4` | shot list §1. |

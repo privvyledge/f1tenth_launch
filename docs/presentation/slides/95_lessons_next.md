@@ -19,85 +19,83 @@ Plan rows for this section are quoted above each slide, verbatim from §3.
 -->
 
 <!-- cut: lab sponsor research -->
+<!-- _class: dense -->
 <!-- plan §3 row 10.1 | owner: B2 (f1tenth_launch) -->
 
-## What is next
+## Seven open items, and five of them are one measurement each
 
-<!--
-TODO: write the slide. This comment is the plan, not the slide.
+| Next | Why it is next | Blocked on |
+|---|---|---|
+| Close the last 0.38 m of a navigation goal | the controller decelerates into the speed below which the car cannot move | a terminal-approach rule that respects the breakaway floor |
+| Bench servo sweep | settles the steering offset **and** both servo bounds in one pass | a bench session; the sheet and the script exist |
+| Obstacle avoidance on the car | never tested — no obstacle has been placed in front of it | a drive session with cones |
+| Model-predictive go-to-goal on the car | path following drives; goal mode has not | the control chat's schedule |
+| Perception into the bringup | detectors build and run standalone, nothing is wired in | integration, not research |
+| Settle the speed constant | driven fits span 3687–4022 erpm per m/s — about 7 % | a staircase run scored against tape, not against one odometry source |
+| Closed-loop speed and adaptive feed-forward | already implemented and wired, all defaulted off | the speed constant above; enabling them first would tune against a wrong gain |
 
-plan content: Nav2 goal reach (0.38 m stall), servo offset bench sweep, obstacle avoidance test on the car, MPC go-to-goal on the car, perception integration into bringup, `servo_min/max` measurement, closed-loop speed enable after recalibration
-plan source:  CLAUDE.md, `LOCALIZER_FOLLOWUPS.md`
-
-Title must state the claim this slide makes; rewrite it if the plan's
-wording is a topic. Put rates/limits/defaults in a table.
-Add one note per number:  src: FILE; measured YYYY-MM-DD
--->
-
+<!-- src: CLAUDE.md open items, scripts/live_runs/LOCALIZER_FOLLOWUPS.md, SYSID_RESULTS.md; compiled 2026-09-02 -->
 
 ---
 
 <!-- reference-only: no cut tag (plan §3 marks this R) -->
+<!-- _class: dense -->
 <!-- plan §3 row 10.2 | owner: B2 (f1tenth_launch) -->
 
-## Lessons for measuring on this car
+## Six things this car taught us about measuring it
 
-<!--
-TODO: write the slide. This comment is the plan, not the slide.
+| Lesson | What it cost to learn |
+|---|---|
+| **A stream can be dead and still read the right rate.** Verify by message count in a recording, never by a topic frequency before or after it | one whole drive's visual odometry, silently: 107 messages against the local filter's 6415 |
+| **Never calibrate against a single reference.** Two estimators that each score R² ≈ 0.99 disagreed by 6.3 % | the speed constant nearly moved 6 % in the wrong direction |
+| **Check the twist before trusting the pose.** A filter can lock into a runaway velocity and report a confident, wrong position | a parked car whose transform ran to nearly ten kilometres |
+| **A bad timestamp is not a bad sensor.** Three IMU samples stamped seconds out of order swung attitude by up to 167°, while the raw gyro showed no motion at all | three sessions hunting an attitude problem that was a clock problem |
+| **A closed safety gate publishes at full rate with empty payloads.** Frequency proves nothing; echo the values | — |
+| **An unexplained failure is a state bug before it is a code bug.** Check what is on disk, then leftover processes, then the environment | orphaned nodes that made the next run look like a duplicated launch |
 
-plan content: RealSense IMU first stamps and `constant_dt` (attitude jump 80-167 deg to 0.19 deg); rf2o scale error, so never calibrate against one reference; check `odometry/local` twist before trusting a pose; verify streams by message count, not rate
-plan source:  CLAUDE.md
-
-Title must state the claim this slide makes; rewrite it if the plan's
-wording is a topic. Put rates/limits/defaults in a table.
-Add one note per number:  src: FILE; measured YYYY-MM-DD
--->
-
-
----
-
-<!--
-S99 Research questions (research cut only). Plan §3, verbatim:
-
-### S99 Research questions (research cut only; T 3-4)
-
-Each owning brief contributes one or two candidate questions from its area, phrased as a question the platform can answer with an experiment we can run. Seeds from this repo, for the owners to accept, reject or replace:
-
-| # | Slide | Candidate question | Evidence already in hand |
-|---|---|---|---|
-| 11.1 | What this platform can measure | One slide: the sensor set, the three independent ground-truth references (tape, VSLAM, RTABMap loop closure), the bag tooling, and the cost of a run | S90, `scripts/analysis/` |
-| 11.2 | Estimation | Can actuator calibration (gain, offset, deadband) be identified from ordinary driving with enough accuracy to replace bench measurement, given that three driven fits disagreed with the bench value of the servo offset by up to 0.009 servo units (47 cm of drift over 5.5 m)? Which odometry reference is trustworthy for scale, given rf2o at -6 % and VSLAM at +1 % against tape? | 9.3, 9.4, 3.4 |
-| 11.3 | Control | Speed-floor-aware tracking: the car cannot move below 0.20-0.26 m/s, and the goal approach stalled at 0.269 m/s. How should MPC or RPP terminal behaviour account for a hard breakaway speed? Obstacle-aware MPC on a platform with ~100 ms actuation lag: what horizon and rate does the lag force? | 6.4, 7.6, control brief |
-| 11.4 | Perception and fusion | Which detector (laser, pointcloud, image + depth) gives obstacle states good enough for the MPC at what rate on the Orin, and does fusing them help? | perception brief |
-
-**Cut totals (estimates, integration chat confirms from `build.sh`)**: `lab` 42, `sponsor` 32, `research` 38. Reference-only: 26. Full deck: 72.
--->
+<!-- src: CLAUDE.md §Debugging Caveats and the live_runs closeout notes; incidents dated 2026-08-25 through 2026-09-01 -->
 
 ---
 
 <!-- cut: research -->
-<!-- plan §3 row 11.1 | owner: integration chat, seeded by the owning briefs -->
+<!-- _class: dense -->
+<!-- plan §3 row 11.1 | owner: integration chat, seeded by B2 (f1tenth_launch) -->
 
-## What this platform can measure
+## The platform's real asset is three ground-truth references that do not share a failure mode
 
-<!--
-TODO: one research question the platform can answer with an experiment
-we can run, plus the evidence already in hand. See the S99 table quoted
-above and the owning brief. Title must be the question's claim.
--->
+| Reference | What it is good for | Known error |
+|---|---|---|
+| **Tape measure** | absolute distance over a straight run | the only one with no model in it — but manual, and one number per run |
+| **Visual SLAM** | continuous pose at 30 Hz | +1.3 % over a 5.50 m tape run |
+| **LiDAR range-flow odometry** | continuous pose at 10 Hz, no camera | **−6.1 %** over the same run |
+| **Loop closure from the map database** | absolute *heading* truth | the three archived mapping runs each start and end parked in the same spot, which turns the graph into a measurable closure |
+
+Plus: six fused estimator inputs, bags with a topic set that costs 47 MB per 105 s instead of 26 GiB per 214 s, and offline scripts that replay a whole navigation or localization stack with no robot attached.
+
+**Cost of a run**: one battery charge, one operator, and about eight minutes of bring-up. That is what makes a repeat-measurement study — six cold launches to accept one fix — practical here and not elsewhere.
+
+<!-- src: scripts/analysis/, scripts/live_runs/SYSID_RESULTS.md, topic_sets.sh; figures measured 2026-08-27 and 2026-09-01 -->
 
 ---
 
 <!-- cut: research -->
-<!-- plan §3 row 11.2 | owner: integration chat, seeded by the owning briefs -->
+<!-- plan §3 row 11.2 | owner: integration chat, seeded by B2 (f1tenth_launch) -->
 
-## Estimation
+## Can a car identify its own actuators from ordinary driving, or does calibration still need a bench?
 
-<!--
-TODO: one research question the platform can answer with an experiment
-we can run, plus the evidence already in hand. See the S99 table quoted
-above and the owning brief. Title must be the question's claim.
--->
+**The question.** Actuator constants — steering gain, steering offset, deadband, speed gain — are conventionally measured on a bench. Can they be identified to the same accuracy from ordinary driving logs, so that a fleet re-calibrates itself?
+
+**What the evidence already says, and it splits:**
+
+| Constant | Driven identification | Verdict so far |
+|---|---|---|
+| Steering **gain** | two independent bags agree to 0.85 %, and the correction they produced holds at full lock | <span class="ok">driving is enough</span> |
+| Steering **offset** | three driven fits disagree with the standing value by up to 0.009 servo units — which is 47 cm of lateral drift over 5.5 m | <span class="no">driving is not enough</span> |
+| Speed **gain** | two references that both fit at R² ≈ 0.99 disagree by 6.3 % | <span class="warn">needs an external reference</span> |
+
+**The second question follows from the third row**: which odometry reference is trustworthy for *scale*, when one reads −6.1 % and another +1.3 % against tape and both look healthy? **The experiment**: a bench servo sweep gives the offset directly, a speed staircase scored against tape gives the gain — and both then become the truth that scores every driven estimator.
+
+<!-- src: scripts/live_runs/SYSID_RESULTS.md, BENCH_SWEEP_SHEET.md; fits 2026-08-07 and 2026-09-01 -->
 
 ---
 

@@ -1,0 +1,29 @@
+flowchart LR
+  BL(["base_link<br/><i>= rear axle</i>"])
+
+  SK["sensor_kit_link<br/>x +8.5 mm, z +45.5 mm<br/><i>aluminium plate</i>"]
+  LID["lidar<br/>x +75.7, z +88.6 mm<br/><i>YDLidar X4</i>"]
+  IMU["imu_link<br/>x +132.6, z -12.2 mm<br/>yaw -90°, roll 180°<br/><i>VESC IMU</i>"]
+  CAM["camera_bottom_screw_frame<br/>x +177.5, z +63.9 mm<br/><i>D435i, from URDF</i>"]
+  CAMK["camera_link, camera_color_frame,<br/>camera_infra1/2_frame, camera_depth_frame<br/><i>published by robot_state_publisher</i>"]
+
+  BF["base_footprint<br/>z -33 mm"]
+  RA["rear_axle<br/><i>identity alias</i>"]
+  FA["front_axle<br/>x +256 mm"]
+  W["right/left rear wheel &nbsp; y ∓101.6 mm<br/>right/left front wheel &nbsp; x +256, y ∓101.6 mm"]
+
+  BL --> SK
+  SK --> LID
+  SK --> IMU
+  SK --> CAM --> CAMK
+  BL --> BF
+  BL --> RA
+  BL --> FA
+  BL --> W
+
+  classDef root fill:#f5e7e7,stroke:#b3282d,stroke-width:2px,color:#14181d;
+  classDef sens fill:#eef4fa,stroke:#0353a4,stroke-width:1.5px,color:#14181d;
+  classDef geom fill:#f7f8fa,stroke:#8b97a5,stroke-width:1.2px,color:#14181d;
+  class BL root;
+  class SK,LID,IMU,CAM,CAMK sens;
+  class BF,RA,FA,W geom;

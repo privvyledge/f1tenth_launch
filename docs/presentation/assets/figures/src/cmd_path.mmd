@@ -1,0 +1,28 @@
+flowchart LR
+  TEL["teleop<br/><i>joy_teleop, priority 100, 0.3 s</i>"]
+  DRV["drive<br/><i>Nav2 / MPC, priority 10, 0.2 s</i>"]
+  EST["estop<br/><i>priority 255, 0.5 s</i>"]
+  SAF["safety<br/><i>40 Hz zeros, priority 1, 0.05 s</i>"]
+
+  MUX{{"ackermann_mux<br/>highest live priority wins"}}
+  OUT["ackermann_drive"]
+  GATE{{"command_gate<br/>open = heartbeat_ok AND enabled"}}
+  VCMD["vehicle/ackermann_cmd"]
+  A2V["ackermann_to_vesc<br/>erpm = 3750 v<br/>servo = -1.1448 d + 0.56"]
+  VESC[["VESC 6 MkVI"]]
+
+  HB(["command_gate/heartbeat<br/>joy_teleop, 0.5 s timeout"])
+
+  EST --> MUX
+  TEL --> MUX
+  DRV --> MUX
+  SAF --> MUX
+  MUX --> OUT --> GATE --> VCMD --> A2V --> VESC
+  HB -. "gate closes 0.5 s after the joystick stops" .-> GATE
+
+  classDef src fill:#eef4fa,stroke:#0353a4,stroke-width:1.5px,color:#14181d;
+  classDef gate fill:#f5e7e7,stroke:#b3282d,stroke-width:2px,color:#14181d;
+  classDef topic fill:#f7f8fa,stroke:#8b97a5,stroke-width:1.2px,color:#14181d;
+  class TEL,DRV,EST,SAF src;
+  class MUX,GATE gate;
+  class OUT,VCMD,A2V,VESC,HB topic;

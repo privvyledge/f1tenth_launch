@@ -1,0 +1,38 @@
+flowchart TB
+  ROOT["RecoveryNode &nbsp; NavigateRecovery<br/><i>6 retries</i>"]
+  PIPE["PipelineSequence<br/>NavigateWithReplanning"]
+  RATE["RateController &nbsp; 1 Hz"]
+  RN1["RecoveryNode &nbsp; ComputePathToPose"]
+  PLAN["ComputePathToPose<br/>planner_id = GridBased<br/><i>Smac Hybrid-A*, Reeds-Shepp</i>"]
+  CG1["ClearEntireCostmap<br/>global"]
+  RN2["RecoveryNode &nbsp; FollowPath"]
+  FOLLOW["FollowPath<br/>controller_id = FollowPath<br/><i>Regulated Pure Pursuit, 10 Hz</i>"]
+  CL1["ClearEntireCostmap<br/>local"]
+
+  FB["ReactiveFallback<br/>RecoveryFallback"]
+  GU["GoalUpdated"]
+  RR["RoundRobin &nbsp; RecoveryActions"]
+  CLR["Sequence &nbsp; ClearingActions<br/>local then global costmap"]
+  WAIT["Wait &nbsp; 5 s"]
+  BACK["BackUp &nbsp; 0.30 m at 0.5 m/s"]
+
+  ROOT --> PIPE
+  ROOT --> FB
+  PIPE --> RATE --> RN1
+  RN1 --> PLAN
+  RN1 --> CG1
+  PIPE --> RN2
+  RN2 --> FOLLOW
+  RN2 --> CL1
+  FB --> GU
+  FB --> RR
+  RR --> CLR
+  RR --> WAIT
+  RR --> BACK
+
+  classDef ctrl fill:#f7f8fa,stroke:#8b97a5,stroke-width:1.2px,color:#14181d;
+  classDef act fill:#eef4fa,stroke:#0353a4,stroke-width:1.5px,color:#14181d;
+  classDef rec fill:#fdf3e3,stroke:#9a6a00,stroke-width:1.5px,color:#14181d;
+  class ROOT,PIPE,RATE,RN1,RN2,FB,RR ctrl;
+  class PLAN,FOLLOW,GU act;
+  class CG1,CL1,CLR,WAIT,BACK rec;

@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph S["odometry sources"]
+    O0["odom0 &nbsp; vehicle/vesc_odom<br/><i>wheel + steer, silent while parked</i>"]
+    O1["odom1 &nbsp; visual_slam/tracking/odometry<br/><i>differential:false, relative:true</i>"]
+    O2["odom2 &nbsp; odom/rf2o &nbsp; 10 Hz<br/><i>differential:true, gate 3.0</i>"]
+    O3["odom3 &nbsp; odom/rtabmap/icp<br/><i>off by default: no data</i>"]
+  end
+  subgraph I["inertial"]
+    I0["imu0 &nbsp; vehicle/sensors/imu/raw<br/><i>roll+pitch only — no magnetometer</i>"]
+    I1["imu1 &nbsp; camera/imu/filtered<br/><i>angular rate only — accel not fused</i>"]
+  end
+
+  EKF{{"ekf_odom &nbsp; 30 Hz<br/>world_frame = odom"}}
+  OUT["odometry/local<br/>+ odom to base_link TF"]
+
+  O0 --> EKF
+  O1 --> EKF
+  O2 --> EKF
+  O3 -. "no data" .-> EKF
+  I0 --> EKF
+  I1 --> EKF
+  EKF --> OUT
+
+  classDef on fill:#eef4fa,stroke:#0353a4,stroke-width:1.5px,color:#14181d;
+  classDef off fill:#f2f3f5,stroke:#a8b0b9,stroke-width:1.2px,stroke-dasharray:4 3,color:#5a6572;
+  classDef ekf fill:#f5e7e7,stroke:#b3282d,stroke-width:2px,color:#14181d;
+  class O0,O1,O2,I0,I1 on;
+  class O3 off;
+  class EKF,OUT ekf;

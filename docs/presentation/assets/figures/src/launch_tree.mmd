@@ -1,0 +1,47 @@
+flowchart LR
+  BR(["bringup.launch.py"])
+
+  subgraph T0["t = 0 s"]
+    direction TB
+    JOY["vehicle/joystick"]
+    MUX["vehicle/ackermann_mux<br/>+ 40 Hz safety publisher"]
+    GATE["vehicle/command_gate"]
+    VEH["vehicle/vehicle<br/><i>VESC, servo, wheel odom</i>"]
+    TF["vehicle/static_transformations"]
+    SENS["sensors/sensors"]
+  end
+
+  subgraph T26["t = 2 s / 6 s"]
+    direction TB
+    LID["sensors/ydlidar"]
+    CAM["sensors/realsense_d435i<br/><i>+ stereo, depth, cloud</i>"]
+  end
+
+  subgraph T10["t = 10 s"]
+    LOC["localization/localization<br/><i>EKF odom, EKF map, AMCL</i>"]
+  end
+
+  subgraph T15["t = 15 s"]
+    direction TB
+    MAP["mapping.launch.py<br/><i>only when slam:=True</i>"]
+    NAV["nav2_navigation.launch.py"]
+  end
+
+  BR --> JOY
+  BR --> MUX
+  BR --> GATE
+  BR --> VEH
+  BR --> TF
+  BR --> SENS
+  SENS -. "USB bandwidth" .-> LID
+  SENS -. "USB bandwidth" .-> CAM
+  CAM -. "let the TF tree settle" .-> LOC
+  LOC -. "needs sensors + localization" .-> MAP
+  LOC -. "needs sensors + localization" .-> NAV
+
+  classDef now fill:#eef4fa,stroke:#0353a4,stroke-width:1.5px,color:#14181d;
+  classDef late fill:#fdf3e3,stroke:#9a6a00,stroke-width:1.5px,color:#14181d;
+  classDef root fill:#f5e7e7,stroke:#b3282d,stroke-width:2px,color:#14181d;
+  class JOY,MUX,GATE,VEH,TF,SENS now;
+  class LID,CAM,LOC,MAP,NAV late;
+  class BR root;
