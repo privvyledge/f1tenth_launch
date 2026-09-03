@@ -320,10 +320,12 @@ Not a repo, a lab session. Lists every `ROBOT` asset in §4 with the exact comma
 | C | **Control chat** | S70 high-level, 6.2, 6.5; list which MPC/MPPI videos exist | A, D1 |
 | D | **Perception chat** | S50 | A, D4 |
 | E | **vesc/f1tenth_system chat** | 7.5, 7.6; review 8.1-8.2 | A |
-| F | **Robot capture session** (you + one chat on gosling1) | Every `ROBOT` asset; charts first, clips second, driving last | A; the lab |
+| ~~F~~ | | **SPLIT 2026-09-03 into F1 and F2** — the one phase bundled two jobs needing different things, and only one needs the lab. | |
+| F1 | **Offline chart chat** (`briefs/BRIEF_charts.md`) | The 7 `ROBOT` assets that are processing of bags **already recorded**: CHART-RATES, CHART-CLOSURE, CHART-STEER, CHART-SPEED, CHART-NAV2-APPROACH, FIG-MAP-COMPARE, TABLE-PACKAGES. Plus the plotting path `fit_actuators.py` does not have. No car, no battery, no driving. Inputs verified present on the gosling1 SSD 2026-09-03. | A |
+| F2 | **Robot capture session** (you + one chat on gosling1) | The 11 `VID-*` clips. `VID-MPC-OBST-RVIZ` and `VID-MPC-OBST-LIVE` are **not capturable** — that mode has never run on the car — and stay cards (§9 G4). | A; the lab |
 | G | **Integration chat** | Merge, enforce conventions (source notes, placeholder IDs, cut tags, no agent-file references on slides), cross-check every number against CLAUDE.md, arbitrate cut membership to the §2a targets, produce `out/deck_lab.pdf`, `out/deck_sponsor.pdf`, `out/deck_research.pdf`, `out/deck_full.pdf` | B-F (`sponsor` also needs F complete) |
 
-B, C, D, E can run at the same time and touch disjoint files, so merges are trivial. F can happen any day the lab is free; the deck is presentable with cards before F.
+B, C, D, E and F1 can run at the same time and touch disjoint files, so merges are trivial. F2 can happen any day the lab is free; the deck is presentable with cards before it.
 
 ---
 
@@ -376,6 +378,8 @@ Each entry names the hand-back that raised it. Entries here **override §3**.
 | G8 | New slide 7.2b (MPC formulation), reference-only, added by the control chat | **Kept.** The section had no place where the optimal-control problem was stated. Nothing renumbered. S70's header count ("T 5, R 3") was already known to disagree with its rows; with 7.2b added and 7.8 retired it reads T 5, R 4 — the rows are authoritative, the header is not. |
 | G9 | 6.2 cut tag widened `lab` -> `lab research`, deliberately not into `sponsor` | **Accepted.** The reasoning (§2a drops format/config detail from `sponsor`; that cut is already over target) is the right one. |
 | G10 | S99 research question for 11.3 | **Accepted and folded into the §3 row 11.3** verbatim in substance. |
+
+| G11 | Phase F is one phase covering 29 assets, 7 of which need no lab | **Split into F1 (offline charts, `briefs/BRIEF_charts.md`, written 2026-09-03) and F2 (video capture).** F1's inputs were verified present on the gosling1 SSD the same day. |
 
 Build state after these edits: `STRICT=1 ./build.sh full md` clean, 71 slides;
 `check_overflow.mjs` reports one overflow, slide 31 (perception's), unchanged.
