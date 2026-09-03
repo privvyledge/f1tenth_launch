@@ -197,12 +197,13 @@ Sensor demo clips (VID-SENS-RGB, -DEPTH, -CLOUD, -LIDAR, -IMU) are R except LiDA
 | 7.1 | T | Control architecture | Excalidraw: high-level controller, lateral/longitudinal low-level, rates 100/200/16000 Hz | Obsidian `4_Control` | FIG-ARCH-05 |
 | 7.2 | T | High-level controllers | Table: **MPC from `trajectory_following_ros2`** (acados / casadi / do_mpc backends, coupled kinematic model; modes: waypoint following, go-to-goal, obstacle avoidance), pure pursuit (same repo), Nav2 RPP, Nav2 MPPI (secondary, evaluated), joystick. Columns: rate, horizon, model, constraints (delta ±0.314 rad, speed bounds), obstacle-aware, has driven the car | trajectory_following_ros2, `nav2_params.yaml` | TABLE-CONTROLLERS |
 | 7.3 | T | MPC: waypoint following | Offline figure-8 and loop runs (rerun recordings) and live drives; tracking error chart; acceptance `k ≈ 0.96`; LUCIO ego-MPC one line | control chat, `SYSID_RESULTS.md` | VID-MPC-RERUN, VID-MPC-LIVE, CHART-MPC-TRACKING |
+| | | | **CORRECTED 2026-09-03 (§9)** — this row carried two errors: `k ≈ 0.96` is a *steering-calibration* acceptance band, not a tracking metric (it belongs on 9.3), and the CTE p95 of ~4.6 cm was measured over all logged ticks, ~90 % of them parked. Written numbers are the route-acquired figures: loop 3.0 / **13.1** cm, figure-8 5.0 / **18.8** cm. | | |
 | 7.4 | T | MPC: go-to-goal and obstacle avoidance | How obstacles enter the problem (constraints or cost), what the obstacle source is today (`autodriver_fake_obstacle_publisher` vs perception), RViz and live placeholders with and without obstacles | control chat | VID-MPC-OBST-RVIZ, VID-MPC-OBST-LIVE |
 | 7.4b | R | Nav2 MPPI | Configuration tried, result, why it is secondary | control chat, `nav2_params.yaml` | — |
 | 7.5 | T | Low-level actuation chain | `ackermann_to_vesc`: erpm = 3750 v, servo = -1.1448 delta + 0.56, clamp [0.08, 0.92]; saturator; optional closed-loop speed PI (`speed_kp/ki`, anti-windup), adaptive FF, accel FF, rate limit, all default off; `throttle_interpolator` (fixed, optional). Owner confirms whether a steering PID exists (template: "confirm from my vesc fork") | `vesc.yaml`, `bringup.launch.py`, vesc fork | FIG-LOWLEVEL |
 | 7.6 | R | Actuation lag | 60 ms delay + 40 ms first-order; throttle transport <20 ms; step-response plot | `SYSID_RESULTS.md` | CHART-LAG |
 | 7.7 | R | Pure pursuit details | lookahead, gains | control chat | — |
-| 7.8 | R | Joystick as a controller | joy_teleop mapping, `max_speed`, `max_steering` 0.314 | `joy_teleop.yaml`, `joystick.launch.py` | PHOTO-DUALSENSE |
+| ~~7.8~~ | — | ~~Joystick as a controller~~ | **RETIRED 2026-09-03 (§9): a duplicate of 8.4**, which already carries the axis mappings, `max_speed`, `max_steering` 0.314 and PHOTO-DUALSENSE from the same two files. Not reassigned — dropped. | — | — |
 
 ### S80 Vehicle interface and safety (T 4, R 2)
 
@@ -244,7 +245,7 @@ Each owning brief contributes one or two candidate questions from its area, phra
 |---|---|---|---|
 | 11.1 | What this platform can measure | One slide: the sensor set, the three independent ground-truth references (tape, VSLAM, RTABMap loop closure), the bag tooling, and the cost of a run | S90, `scripts/analysis/` |
 | 11.2 | Estimation | Can actuator calibration (gain, offset, deadband) be identified from ordinary driving with enough accuracy to replace bench measurement, given that three driven fits disagreed with the bench value of the servo offset by up to 0.009 servo units (47 cm of drift over 5.5 m)? Which odometry reference is trustworthy for scale, given rf2o at -6 % and VSLAM at +1 % against tape? | 9.3, 9.4, 3.4 |
-| 11.3 | Control | Speed-floor-aware tracking: the car cannot move below 0.20-0.26 m/s, and the goal approach stalled at 0.269 m/s. How should MPC or RPP terminal behaviour account for a hard breakaway speed? Obstacle-aware MPC on a platform with ~100 ms actuation lag: what horizon and rate does the lag force? | 6.4, 7.6, control brief |
+| 11.3 | Control | **Sharpened 2026-09-03 from the control hand-back §9:** the actuator's floor sits *above* the controller's ceiling — the plant cannot move below 0.20-0.26 m/s, while an MPC publishing the one-step state `v + a·dt` can command at most `max_accel·dt` = 0.15 m/s from rest. How should terminal and standstill behaviour be formulated when the plant has a hard breakaway speed, and what does ~100 ms of actuation lag then force on the horizon and the rate? Evidence in hand: the 2026-08-07 speed staircase (0.18 m/s on stands), the 2026-08-08 ground A/B (un-floored creep pass-through 21.6 % -> 0 % over 16 838 qualifying ticks), and the Nav2 approach on 6.4 that stalled at 0.269 m/s, 0.379 m short. Runnable as it stands: a commanded-speed staircase scored against tape on the ground, then the same terminal approach re-driven with and without a floor. | 6.4, 7.2b, 7.6, control brief |
 | 11.4 | Perception and fusion | Which detector (laser, pointcloud, image + depth) gives obstacle states good enough for the MPC at what rate on the Orin, and does fusing them help? | perception brief |
 
 **Cut totals (estimates, integration chat confirms from `build.sh`)**: `lab` 42, `sponsor` 32, `research` 38. Reference-only: 26. Full deck: 72.
@@ -352,3 +353,29 @@ B, C, D, E can run at the same time and touch disjoint files, so merges are triv
 | D7 | Diagram export format | SVG for the deck, 2x PNG alongside for review and PPTX. PNGs of all seven received 2026-09-02 and parked in the planning scratchpad; SVGs still to export. |
 
 Still open: whether the new diagrams (FIG-CMDPATH, FIG-ELEC, FIG-LOWLEVEL) are drawn in Excalidraw to match the existing seven or in mermaid inside Marp. Default is mermaid unless an Excalidraw authoring tool is set up.
+
+
+---
+
+## 9. Phase-G arbitration log
+
+Decisions taken by the integration chat on material escalated in the hand-backs.
+Each entry names the hand-back that raised it. Entries here **override §3**.
+
+### 2026-09-03 — `briefs/HANDBACK_trajectory_following.md` (control chat)
+
+| # | Item | Decision |
+|---|---|---|
+| G1 | Nav2 rows of TABLE-CONTROLLERS, filled by the control chat and flagged "please confirm" | **Confirmed.** All seven values re-read from `config/nav2_params.yaml` on 2026-09-03 and correct as written. Recorded on the slide. Two notes carried to 7.4b rather than the table: MPPI has its own `vx_max: 0.75`, and its `min_turning_r: 0.462` is derived from 30° of steering against this car's 18° (0.788 m) — inert only because RPP is the selected plugin. |
+| G2 | 7.8 ownership: scaffold said control chat, `BRIEF_trajectory_following` §1 said f1tenth_launch chat, `BRIEF_f1tenth_launch` §1 listed it nowhere | **Row retired, not reassigned** — it is a duplicate of 8.4. See the §3 row and the closing note in `slides/70_control.md`. |
+| G3 | PHOTO-DUALSENSE held at `EXISTS` because 7.8 still carded it | **Flipped to DONE.** Nothing cards it any more. |
+| G4 | `rviz_obstacle_detection.mp4` rejected as VID-MPC-OBST-RVIZ (no MPC path, no keep-out — it is detection footage) | **Upheld and re-routed to the perception brief**, with the condition that no slide may imply those detections reached a controller. Both obstacle videos stay cards. |
+| G5 | `k ≈ 0.96` quoted on plan row 7.3 as a tracking acceptance | **Upheld: the plan was wrong.** It is the steering-calibration band agreed with the downstream group on 2026-08-08 (accepted 0.95–1.02). It belongs on 9.3 and is not quoted on 7.3. |
+| G6 | Plan row 7.3's cross-track p95 of ~4.6 cm | **Upheld: the plan was wrong.** Measured over all 14 322 ticks, ~90 % of them parked at the route start with the deadman released. The route-acquired figures (13.1 / 18.8 cm) stand. |
+| G7 | Plan's preferred figure-8 CSV `data/fig8_video/solver_155008.csv` | **Upheld: the plan was wrong.** It is a breakaway-floor bench run (1.12 m of travel, `ref_idx` never leaves 5). The chart is built from the two 2026-08-06 hardware legs, whose logs are in the repo. |
+| G8 | New slide 7.2b (MPC formulation), reference-only, added by the control chat | **Kept.** The section had no place where the optimal-control problem was stated. Nothing renumbered. S70's header count ("T 5, R 3") was already known to disagree with its rows; with 7.2b added and 7.8 retired it reads T 5, R 4 — the rows are authoritative, the header is not. |
+| G9 | 6.2 cut tag widened `lab` -> `lab research`, deliberately not into `sponsor` | **Accepted.** The reasoning (§2a drops format/config detail from `sponsor`; that cut is already over target) is the right one. |
+| G10 | S99 research question for 11.3 | **Accepted and folded into the §3 row 11.3** verbatim in substance. |
+
+Build state after these edits: `STRICT=1 ./build.sh full md` clean, 71 slides;
+`check_overflow.mjs` reports one overflow, slide 31 (perception's), unchanged.

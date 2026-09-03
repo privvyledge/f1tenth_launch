@@ -218,3 +218,19 @@ Each owning brief contributes one or two candidate questions from its area, phra
      bench — say it in those words;
    - anything in the plan you believe is wrong. Push back in the hand-back
      rather than silently working around it.
+
+---
+
+## Addendum — routed here from the control hand-back, 2026-09-03
+
+`rviz_obstacle_detection.mp4` was offered to the control chat as VID-MPC-OBST-RVIZ
+and **rejected as the wrong asset**: it shows clustered-pointcloud detection with red
+boxes in `base_link` — no MPC path, no keep-out ring, no avoidance. It is a *perception*
+recording, so it is yours to place if it fits S50 (5.2 / 5.3 look likely). Two conditions
+if you use it: label what produced the boxes and on what date, and do not let a slide imply
+the detections reached a controller — no live detection has ever reached the MPC.
+
+Also settled at the same time, because it touches 5.5: the Nav2 costmap values on
+TABLE-CONTROLLERS were re-read from `config/nav2_params.yaml` on 2026-09-03 and confirmed.
+If 5.5 quotes local/global costmap rates or layer lists, take them from that file directly
+rather than from the control slide.

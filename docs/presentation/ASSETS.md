@@ -114,7 +114,7 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | PHOTO-COMPONENTS | photo | DONE | B1 | `assets/photos/components/` | Produced 2026-09-02: six component shots (computer, ESC, camera, LiDAR, chassis, controller), laid out inline on slide 1.1. |
 | PHOTO-WIRING | photo | DONE | B1 | `assets/photos/wiring.jpg` | Produced 2026-09-02 as one image: the computer supply and the ESC XT90 connection side by side, from two current-hardware stills. |
 | PHOTO-ASSEMBLY | photo | DONE | B1 | `assets/photos/assembly/` | Produced 2026-09-02: the seven numbered assembly steps, downscaled. |
-| PHOTO-DUALSENSE | photo | EXISTS | B1 | `assets/photos/dualsense_labelled.png` | **File produced 2026-09-02 and embedded on 1.6 and 8.4.** Left at EXISTS, not DONE, because slide 7.8 (control chat) still cards it - flip to DONE once that card becomes an embed. |
+| PHOTO-DUALSENSE | photo | **DONE** | B1 | `assets/photos/dualsense_labelled.png` | **File produced 2026-09-02 and embedded on 1.6 and 8.4.** Flipped EXISTS -> DONE 2026-09-03: the only remaining card was slide 7.8, and that plan row is retired as a duplicate of 8.4 (Phase-G arbitration; see the note at the end of `slides/70_control.md`). |
 | FIG-ELEC | figure | TBD | user | `assets/figures/electrical.svg` | Does not exist. **Draw in mermaid** (SVG or TikZ if it outgrows mermaid), from Release doc §Wiring — decided 2026-09-02, plan §8 open item. Card until then. |
 | FIG-TF-TREE | figure | DONE | capture / B1 | `assets/figures/tf_tree.svg` | Produced 2026-09-02 as the sanctioned offline alternative: mermaid from static_transformations.launch.py + the URDF. Source `assets/figures/src/tf_tree.mmd`. A `view_frames` capture may still replace it. |
 | FIG-LAUNCHTREE | diagram | DONE | B1 | `assets/figures/launch_tree.svg` | Produced 2026-09-02. Source `assets/figures/src/launch_tree.mmd`; re-render with `assets/figures/src/render.sh`. |
@@ -126,7 +126,7 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | TABLE-CAMERA | table | DONE | B1 | inline, slide 2.2 | Written 2026-09-02. Configured values only; the measured-Hz column still needs CHART-RATES. |
 | TABLE-IMU | table | DONE | B1 | inline, slide 2.5 | Written 2026-09-02. |
 | TABLE-ODOM | table | DONE | B2 | inline, slide 3.2 | Written 2026-09-02. |
-| TABLE-CONTROLLERS | table | OWNER | control | inline | — |
+| TABLE-CONTROLLERS | table | DONE | control | inline, slide 7.2 | Written 2026-09-03 from the config files as read, not from a prose summary. The two Nav2 rows are filled from `config/nav2_params.yaml`; the f1tenth_launch chat owns them and should confirm. |
 | TABLE-SAFETY-TIMING | table | DONE | B1 | inline, slide 8.2 | Written 2026-09-02. **Still wants the vesc chat's review.** |
 | TABLE-CALIB-STATUS | table | DONE | B2 | inline, slide 9.1 | Written 2026-09-02, inherited vs measured per constant with dates. |
 | TABLE-DEADBAND | table | DONE | B2 | inline, slide 9.4 | Written 2026-09-02, carried in ERPM. |
@@ -139,12 +139,12 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | CHART-SPEED | chart | ROBOT | capture | `assets/figures/speed.png` | `fit_actuators.py` on `armA_straight_5m` + the tape run. |
 | CHART-LAG | chart | ROBOT | capture | `assets/figures/lag.png` | Step response; feeds both 7.6 and 9.5. |
 | CHART-NAV2-APPROACH | chart | ROBOT | capture | `assets/figures/nav2_approach.png` | Distance-to-goal and commanded speed vs time from the `nav2_drive4` bag. |
-| CHART-MPC-TRACKING | chart | OWNER | control | `assets/figures/mpc_tracking.png` | Cross-track and speed error from the figure-8 / loop runs. |
+| CHART-MPC-TRACKING | chart | DONE | control | `assets/figures/mpc_tracking.png` | Produced 2026-09-03 from the two gosling1 hardware legs of 2026-08-06. Cross-track error and reference-vs-measured speed, over route-acquired ticks only. |
 | FIG-MAP-2D | figure | DONE | B2 | `assets/figures/map_2d.png` | Produced 2026-09-02: rtabmap_2d_final.pgm rendered in metres with the map origin and the start-pose seed marked. |
 | FIG-MAP-3D | figure | DONE | B2 | `assets/figures/map_3d.png` | Produced 2026-09-02: top-down and oblique renders of cloud_voxel_0p05.pcd, **colour preserved**, over the occupancy grid. |
 | FIG-MAP-COMPARE | figure | ROBOT | capture | `assets/figures/map_compare.png` | Needs the SLAM Toolbox grid from `40_build_map_offline.sh --mode both`. |
 | FIG-COSTMAP | figure | EXISTS | perception | `assets/figures/costmap.png` | `data/maps/sample_costmap.png` — check its date; if stale it becomes ROBOT. |
-| FIG-WAYPOINTS | figure | OWNER | control | `assets/figures/waypoints.png` | — |
+| FIG-WAYPOINTS | figure | DONE | control | `assets/figures/waypoints.png` | Produced 2026-09-03 from the two map-frame route CSVs, forward vs reverse coloured by the signed `vx` column. |
 | FIG-PERC-LASER | figure | OWNER | perception | `assets/figures/perc_laser.png` | — |
 | FIG-PERC-CLOUD | figure | OWNER | perception | `assets/figures/perc_cloud.png` | — |
 | FIG-PERC-IMAGE | figure | OWNER | perception | `assets/figures/perc_image.png` | — |
@@ -161,10 +161,10 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | VID-MAP-3D-ORBIT | video | EXISTS-2024 | B2 | `docs/3d_mapping.mp4` | As above. |
 | VID-NAV2-LIVE | video | ROBOT | capture | `assets/video/VID-NAV2-LIVE.mp4` | shot list §4.3; requires a driving session. |
 | VID-SAFETY-MUX | video | ROBOT | capture | `assets/video/VID-SAFETY-MUX.mp4` | shot list §5. |
-| VID-MPC-RERUN | video | OWNER | control | `assets/video/VID-MPC-RERUN.mp4` | Control chat lists what already exists. |
-| VID-MPC-LIVE | video | OWNER | control | `assets/video/VID-MPC-LIVE.mp4` | — |
-| VID-MPC-OBST-RVIZ | video | OWNER | control | `assets/video/VID-MPC-OBST-RVIZ.mp4` | — |
-| VID-MPC-OBST-LIVE | video | OWNER | control | `assets/video/VID-MPC-OBST-LIVE.mp4` | — |
+| VID-MPC-RERUN | video | DONE | control | `assets/video/VID-MPC-RERUN.mp4` | The 2026-08-10 figure-8 leg replayed from its recording, frame-corrected. Already H.264; copied 2026-09-03. Video is gitignored - re-copy from the control repo `data/fig8_video/figure8_leg1_drive.mp4` for a build. |
+| VID-MPC-LIVE | video | DONE | control | `assets/video/VID-MPC-LIVE.mp4` | Two-camera overhead of the same 2026-08-10 figure-8 leg. Transcoded to H.264 720p 2026-09-03 from the capture on OneDrive. |
+| VID-MPC-OBST-RVIZ | video | ROBOT | control | `assets/video/VID-MPC-OBST-RVIZ.mp4` | **Stays a card.** No MPC obstacle run exists on this car. `rviz_obstacle_detection.mp4` was offered for this slot and is *not* it - it shows clustered-pointcloud detection with no MPC path and no keep-out; it belongs to perception. |
+| VID-MPC-OBST-LIVE | video | ROBOT | control | `assets/video/VID-MPC-OBST-LIVE.mp4` | **Stays a card.** Needs a driving session with an obstacle feed; obstacle avoidance has never run on the car. |
 | VID-PERC-2024 | video | EXISTS-2024 | perception | `docs/perception_and_gotogoal_planning.mp4` | The perception chat decides whether it still represents the pipeline. Label it 2024. |
 | LAT-E2E | measurement | TBD | B2 | inline | End-to-end joystick-to-servo latency has never been measured. Define it (timestamp `joy` vs `commands/servo/position`) before any number is claimed; slide 9.5 says `TBD` until then. |
 

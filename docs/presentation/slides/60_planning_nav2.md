@@ -44,27 +44,37 @@ The split matters because replanning is expensive and tracking is not: the globa
 <!-- src: figure exported from the Obsidian `3_Planning` note, received 2026-09-02; rates from config/nav2_params.yaml (BT RateController 1.0 Hz, controller_frequency 10.0), read 2026-09-02 -->
 
 ---
-
-<!-- cut: lab -->
+<!-- cut: lab research -->
+<!-- _class: cols dense -->
 <!-- plan §3 row 6.2 | owner: control -->
 
-## Waypoint recording and loading
+## A route is poses plus a **signed** speed column — the sign is what makes reversing expressible
 
-> [!PLACEHOLDER FIG-WAYPOINTS]
->
-> figure not produced yet - see ASSETS.md for how to produce it.
+<div class="split">
+<div>
 
-<!--
-TODO: write the slide. This comment is the plan, not the slide.
+![w:560](../assets/figures/waypoints.png)
 
-plan content: `waypoint_recorder.py` / `waypoint_loader.py`: format, frame, how a figure-8 was recorded
-plan source:  trajectory_following_ros2
-NOTE: plan §2a does not say which cuts this belongs to. Scaffold tagged it `lab` only; the section owner must confirm or widen it.
+</div>
+<div>
 
-Title must state the claim this slide makes; rewrite it if the plan's
-wording is a topic. Put rates/limits/defaults in a table.
-Add one note per number:  src: FILE; measured YYYY-MM-DD
--->
+| | |
+|---|---|
+| Recorder | odometry every `save_interval`, into the target frame |
+| Columns | `frame_id, total_time_elapsed, dt, x, y, z, yaw, q*, vx, vy, speed, omega` |
+| Loader publishes | path + speed array + markers, all **latched**, so a controller that starts later still gets the route |
+
+**`speed` is a magnitude; `vx` carries the sign.** The loader restores direction from `vx`, with a 0.05 m/s deadband so a noisy standstill does not dither. A bare path message has no speeds at all — so **it cannot express a reversing manoeuvre**, and every route here ends in one.
+
+**Frame is a real trap.** An `odom`-frame route is valid only in the session that recorded it — `odom` is fixed at estimator start-up, so a later session drives the file **rotated**, measured at 45.7° here, with every diagnostic still reading healthy. Replay the `map`-frame copies.
+
+</div>
+</div>
+
+<!-- src: column list and deadband from waypoint_recorder.py / waypoint_loader.py (reverse_speed_threshold 0.05); route figure plotted 2026-09-03 from data/gosling1_loop_laps.csv (834 points, 37.0 m, 55 reverse) and data/gosling1_figure8.csv (868 points, 39.4 m, 51 reverse), trajectory_following_ros2 branch refactor/unify-backends. The 45.7 deg rotation was measured on gosling1 2026-08-06. -->
+<!-- Cut tag widened from `lab` to `lab research` (the scaffold left a NOTE asking the owner
+     to confirm). Deliberately NOT added to `sponsor`: plan 2a drops format/config detail
+     from that cut, and the sponsor count is already over target. -->
 
 ---
 
@@ -137,22 +147,25 @@ Recovery ladder: **clear costmaps → wait 5 s → back up 0.30 m**. No `Spin` �
 <!-- VID-NAV2-LIVE stays uncarded here: the chart is the honest gap. The video is listed in ASSETS.md for the capture session. -->
 
 ---
-
 <!-- reference-only: no cut tag (plan §3 marks this R) -->
+<!-- _class: dense -->
 <!-- plan §3 row 6.5 | owner: control -->
 
-## Go-to-goal: Nav2 vs the MPC node
+## Two go-to-goal paths: Nav2 is sent a goal, the MPC is only ever sent a path
 
-<!--
-TODO: write the slide. This comment is the plan, not the slide.
+| | Nav2 | MPC node |
+|---|---|---|
+| Interface | `NavigateToPose` action | a path message — **it never sees a goal** |
+| Planner | Smac hybrid-A*, Reeds–Shepp | none in the package |
+| How a goal is driven | planner → controller server | an external planner must publish the path |
+| Replanning | behaviour tree, 1 Hz | accepted when the path subscription is set to non-latched |
+| Driven the car | **yes**, 2026-08-27 | **no — simulator only**, 2026-08-08 |
 
-plan content: The two go-to-goal paths (Nav2 `NavigateToPose`; the MPC node's goal mode), their interfaces, and which has driven the car (the Nav2 run in 6.4 is the only one documented in this repo; the control chat states the MPC node's status)
-plan source:  trajectory_following_ros2, CLAUDE.md
+The stand-in used in simulation fits a **Dubins** curve from the *live* vehicle pose to the goal: shortest forward-only path that never turns tighter than `min_turn_radius`, which is the right primitive for a car and turns "the goal is behind me" into a feasible loop rather than an impossible manoeuvre.
 
-Title must state the claim this slide makes; rewrite it if the plan's
-wording is a topic. Put rates/limits/defaults in a table.
-Add one note per number:  src: FILE; measured YYYY-MM-DD
--->
+**One honest limit: this mode is forward-only by construction.** Direction of travel lives in the signed speed array, and a path message carries no speeds — so a goal needing reverse, in a space too tight for a Dubins loop, is out of reach. That needs cusps and a signed profile, i.e. a richer message than a path.
+
+<!-- src: MPC-side interfaces from base_tracker.py and tools/goal_to_plan.py (plan_type dubins, min_turn_radius 0.5 m default), trajectory_following_ros2 branch refactor/unify-backends, read 2026-09-03; first simulator go-to-goal runs 2026-08-08. Nav2 side from config/nav2_params.yaml and the live run on slide 6.4, gosling1 2026-08-27. -->
 
 ---
 
