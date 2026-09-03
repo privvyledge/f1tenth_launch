@@ -1,0 +1,5 @@
+# Build output and video are never committed (plan §7.8).
+out/
+assets/video/*
+!assets/video/README.md
+__pycache__/
