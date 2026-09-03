@@ -100,6 +100,12 @@ Recovery ladder: **clear costmaps → wait 5 s → back up 0.30 m**. No `Spin` �
 </div>
 
 <!-- src: config/nav2_params.yaml (GridBased/SmacPlannerHybrid, FollowPath/RegulatedPurePursuitController, controller_frequency 10.0, local costmap update 5.0, global 1.0, smoothing_frequency 20.0), config/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml, launch/nav2_navigation.launch.py; read 2026-09-02 -->
+<!-- KNOWN DEFECT, deliberately not on the slide (bug-274): this planner's
+     `minimum_turning_radius` is 0.462 m, but the car's true minimum at its
+     +/-0.314 rad steering limit is 0.788 m, and 0.814 m driven. So it plans
+     turns the car cannot execute - 12 % of commands hit the steering limit on
+     the 2026-08-27 drive. Changing it alters planner behaviour and needs a
+     drive to validate; see the Open items in ASSETS.md. -->
 
 ---
 

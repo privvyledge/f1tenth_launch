@@ -34,6 +34,34 @@ Unticked on purpose. None of these blocks a section chat from writing slides.
       places: S20 says "T 5" and lists six T slides; S70 says "R 3" and lists
       four R slides. Noted, not corrected — the rows are what the scaffold built
       from. Left for Phase G.
+- [ ] **Write slides from the config files, not from the prose summary.** Four
+      claims in `CLAUDE.md` were stale against the tree when the f1tenth_launch
+      sections were written on 2026-09-02, and each one would have put a wrong
+      number on a slide. They are logged in `.wolf/buglog.json` as `bug-274`
+      to `bug-277`:
+      - `bug-274` — **not a doc problem, a live defect.** `min_turning_r` is
+        described as inert because only the MPPI copy was checked. The *active*
+        planner, `SmacPlannerHybrid` under `planner_server/GridBased`, carries
+        its own `minimum_turning_radius: 0.462` (`config/nav2_params.yaml:620`)
+        plus `analytic_expansion_max_length: 3.465` derived from it. At the car's
+        measured ±0.314 rad the true minimum is **0.788 m**, and the driven
+        full-lock radius is **0.814 m** — so the planner routinely plans turns
+        the car cannot execute, which matches the 12 % steering saturation seen
+        on a real drive. **Left unchanged on purpose**: it alters planner
+        behaviour and needs a drive to validate. Do not "fix" it from a desk.
+      - `bug-275` — the rf2o rejection gates in `ekf_odom.yaml` are **3.0**, not
+        the 5.0 the prose records (and VSLAM carries an unrecorded 2.0 gate).
+      - `bug-276` — the RealSense **decimation filter is not enabled**; the whole
+        post-processing block is commented out and no launch file sets it.
+      - `bug-277` — `Grid/RayTracing` is **never passed** to RTABMap; that
+        argument is commented out in `3d_mapping.launch.py`.
+- [ ] **Run `./check_overflow.mjs` before handing a section back.** Marp clips a
+      slide at 720 px silently — no warning, no error, the PDF just loses the
+      bottom. 21 of the 70 slides overflowed on first write. Usage is in the
+      script's header. Sizing rule that avoids the loop: usable content height is
+      about 616 px, minus ~72 for a one-line `h2` or ~113 for two lines; size
+      figures with `h:` rather than `w:`, and put a near-square diagram in
+      `<div class="split">` instead of shrinking it.
 
 ## Status codes
 
