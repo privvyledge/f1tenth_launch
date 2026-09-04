@@ -1,0 +1,208 @@
+{
+  "window_s": 60.00049295400095,
+  "stress_images": true,
+  "self_loading_topics": [],
+  "skipped_topics": [
+    "camera/depth/color/points"
+  ],
+  "stress_hz": {
+    "/gosling1/camera/color/image_raw": 28.09976913510632,
+    "/gosling1/camera/depth/image_rect_raw": 31.08307795787265,
+    "/gosling1/camera/infra1/image_rect_raw": 28.433099729828815,
+    "/gosling1/camera/infra2/image_rect_raw": 28.433099729828815,
+    "/gosling1/camera/aligned_depth_to_color/image_raw": 26.849779404896964
+  },
+  "direct_images": false,
+  "namespace": "/gosling1",
+  "topics": {
+    "camera/color/image_raw": {
+      "count": 1689,
+      "hz": 28.149768724314693,
+      "gap_p50_ms": 33.98212299725856,
+      "gap_max_ms": 834.1541059999145,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/color/camera_info",
+      "configured_hz": 30.0
+    },
+    "camera/depth/image_rect_raw": {
+      "count": 1868,
+      "hz": 31.133077547081022,
+      "gap_p50_ms": 33.31653899658704,
+      "gap_max_ms": 240.14365000039106,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/depth/camera_info",
+      "configured_hz": 30.0
+    },
+    "camera/infra1/image_rect_raw": {
+      "count": 1709,
+      "hz": 28.483099319037187,
+      "gap_p50_ms": 34.060849000525195,
+      "gap_max_ms": 951.758270002756,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/infra1/camera_info",
+      "configured_hz": 30.0
+    },
+    "camera/infra2/image_rect_raw": {
+      "count": 1709,
+      "hz": 28.483099319037187,
+      "gap_p50_ms": 33.979723000811646,
+      "gap_max_ms": 951.7520940025861,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/infra2/camera_info",
+      "configured_hz": 30.0
+    },
+    "camera/aligned_depth_to_color/image_raw": {
+      "count": 1614,
+      "hz": 26.899778994105336,
+      "gap_p50_ms": 34.16660699804197,
+      "gap_max_ms": 1499.9604980002914,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/aligned_depth_to_color/camera_info",
+      "configured_hz": 30.0
+    },
+    "camera/depth/color/points": {
+      "count": 0,
+      "hz": 0.0,
+      "gap_p50_ms": 0.0,
+      "gap_max_ms": 0.0,
+      "advertised": false,
+      "measured_via": null,
+      "configured_hz": 30.0
+    },
+    "camera/imu": {
+      "count": 12005,
+      "hz": 200.08168948217755,
+      "gap_p50_ms": 4.580529999657301,
+      "gap_max_ms": 30.105706999165704,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/imu",
+      "configured_hz": 200.0
+    },
+    "camera/imu/filtered": {
+      "count": 12003,
+      "hz": 200.0483564227053,
+      "gap_p50_ms": 4.626898997230455,
+      "gap_max_ms": 29.391353000391973,
+      "advertised": true,
+      "measured_via": "/gosling1/camera/imu/filtered",
+      "configured_hz": 200.0
+    },
+    "lidar/scan": {
+      "count": 526,
+      "hz": 8.766594641201616,
+      "gap_p50_ms": 114.31791600261931,
+      "gap_max_ms": 130.5673740025668,
+      "advertised": true,
+      "measured_via": "/gosling1/lidar/scan",
+      "configured_hz": 12.0
+    },
+    "lidar/scan_filtered": {
+      "count": 526,
+      "hz": 8.766594641201616,
+      "gap_p50_ms": 114.35746899951482,
+      "gap_max_ms": 131.8227100018703,
+      "advertised": true,
+      "measured_via": "/gosling1/lidar/scan_filtered",
+      "configured_hz": 12.0
+    },
+    "vehicle/sensors/imu/raw": {
+      "count": 6007,
+      "hz": 100.11584412490134,
+      "gap_p50_ms": 8.932700999139342,
+      "gap_max_ms": 30.59871300138184,
+      "advertised": true,
+      "measured_via": "/gosling1/vehicle/sensors/imu/raw",
+      "configured_hz": 100.0
+    },
+    "vehicle/sensors/core": {
+      "count": 3003,
+      "hz": 50.04958879758261,
+      "gap_p50_ms": 20.247222997568315,
+      "gap_max_ms": 36.661520000052406,
+      "advertised": true,
+      "measured_via": "/gosling1/vehicle/sensors/core",
+      "configured_hz": 50.0
+    },
+    "vehicle/vesc_odom": {
+      "count": 3002,
+      "hz": 50.03292226784648,
+      "gap_p50_ms": 20.14366900039022,
+      "gap_max_ms": 39.13242899943725,
+      "advertised": true,
+      "measured_via": "/gosling1/vehicle/vesc_odom",
+      "configured_hz": 50.0
+    },
+    "odom/rf2o": {
+      "count": 526,
+      "hz": 8.766594641201616,
+      "gap_p50_ms": 100.55859000203782,
+      "gap_max_ms": 209.80521599994972,
+      "advertised": true,
+      "measured_via": "/gosling1/odom/rf2o",
+      "configured_hz": null
+    },
+    "visual_slam/tracking/odometry": {
+      "count": 1706,
+      "hz": 28.433099729828815,
+      "gap_p50_ms": 33.940168999833986,
+      "gap_max_ms": 951.4037969966012,
+      "advertised": true,
+      "measured_via": "/gosling1/visual_slam/tracking/odometry",
+      "configured_hz": 30.0
+    },
+    "odometry/local": {
+      "count": 1801,
+      "hz": 30.016420054760665,
+      "gap_p50_ms": 33.38918000008562,
+      "gap_max_ms": 52.79856000197469,
+      "advertised": true,
+      "measured_via": "/gosling1/odometry/local",
+      "configured_hz": 30.0
+    },
+    "tf": {
+      "count": 3540,
+      "hz": 58.9995152658816,
+      "gap_p50_ms": 18.56055800089962,
+      "gap_max_ms": 45.02198099726229,
+      "advertised": true,
+      "measured_via": "/gosling1/tf",
+      "configured_hz": null
+    },
+    "safety": {
+      "count": 2400,
+      "hz": 39.99967136669939,
+      "gap_p50_ms": 25.337046001368435,
+      "gap_max_ms": 45.281161001184955,
+      "advertised": true,
+      "measured_via": "/gosling1/safety",
+      "configured_hz": 40.0
+    },
+    "command_gate/heartbeat": {
+      "count": 1838,
+      "hz": 30.63308165499728,
+      "gap_p50_ms": 31.49607999876025,
+      "gap_max_ms": 102.9904009992606,
+      "advertised": true,
+      "measured_via": "/gosling1/command_gate/heartbeat",
+      "configured_hz": null
+    },
+    "ackermann_drive": {
+      "count": 1837,
+      "hz": 30.616415125261156,
+      "gap_p50_ms": 31.562799002131214,
+      "gap_max_ms": 102.98761599915451,
+      "advertised": true,
+      "measured_via": "/gosling1/ackermann_drive",
+      "configured_hz": null
+    },
+    "vehicle/ackermann_cmd": {
+      "count": 1837,
+      "hz": 30.616415125261156,
+      "gap_p50_ms": 31.760917001520284,
+      "gap_max_ms": 109.59770099725574,
+      "advertised": true,
+      "measured_via": "/gosling1/vehicle/ackermann_cmd",
+      "configured_hz": null
+    }
+  }
+}

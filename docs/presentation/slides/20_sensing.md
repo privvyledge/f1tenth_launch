@@ -55,24 +55,31 @@ Four sensor groups, each with its own filter chain:
 
 ## The camera runs at 848×480×30 with the IR emitter off, and no post-processing filter is enabled
 
-| Topic | Format | Configured | QoS | On by default |
+| Topic | Format | Configured | Measured | On by default |
 |---|---|---|---|---|
-| `camera/color/image_raw` | 848×480, RGB8 | 30 fps | `SENSOR_DATA` | yes |
-| `camera/infra1/image_rect_raw`, `…infra2…` | 848×480, Y8 | 30 fps | `SENSOR_DATA` | yes |
-| `camera/depth/image_rect_raw` | 848×480, Z16 | 30 fps | `SENSOR_DATA` | yes |
-| `camera/aligned_depth_to_color/image_raw` | 848×480 | 30 fps | `SENSOR_DATA` | yes |
-| `camera/depth/color/points` | coloured cloud | 30 fps | `SENSOR_DATA` | yes — from `depth_image_proc`, **not** the RealSense SDK |
-| `camera/imu` → `camera/imu/filtered` | gyro + accel, interpolated | 200 Hz | `SENSOR_DATA` | yes |
+| `camera/color/image_raw` | 848×480, RGB8 | 30 fps | **29.97** | yes |
+| `camera/infra1/image_rect_raw`, `…infra2…` | 848×480, Y8 | 30 fps | **29.97** | yes |
+| `camera/depth/image_rect_raw` | 848×480, Z16 | 30 fps | **29.97** | yes |
+| `camera/aligned_depth_to_color/image_raw` | 848×480 | 30 fps | **29.97** | yes |
+| `camera/depth/color/points` | coloured cloud, from the RealSense SDK | 30 fps | **not published** | **no** — `publish_realsense_pointcloud` defaults `False` |
+| `camera/imu` → `camera/imu/filtered` | gyro + accel, interpolated | 200 Hz | **199.87 / 200.07** | yes |
 
 - **IR emitter off** — on, it improves depth and prints a structured-light pattern across both IR images that makes them useless for visual odometry. This platform's odometry needs the IR pair, so the emitter loses.
 - **Every post-processing filter is commented out** — decimation, spatial, temporal, disparity and hole-filling. Depth arrives full-resolution, unsmoothed, clipped at 6.0 m.
 - 848×480×60 works standalone but falls to ~20 Hz under full teleop load.
+- **Measured** is a 60 s live window on the car — sensing + localization up, Nav2 not running, car parked. Every stream holds 100 % of its configured rate. All six topics use `SENSOR_DATA` QoS.
 
-> [!PLACEHOLDER CHART-RATES]
->
-> Measured per-topic rates from a drive bag — the column this table cannot fill offline.
-
-<!-- src: config/sensors/realsense_config.yaml and launch/sensors/realsense_d435i.launch.py (qos default SENSOR_DATA, emitter_enabled 0, align_depth True, enable_pointcloud False); cloud publisher is depth_image_proc::PointCloudXyzrgbNode in launch/sensors/stereo_and_depth_image_processing.launch.py; read 2026-09-02 -->
+<!-- src: config/sensors/realsense_config.yaml and launch/sensors/realsense_d435i.launch.py (qos default SENSOR_DATA, emitter_enabled 0, align_depth True, enable_pointcloud False); read 2026-09-02 -->
+<!-- src: assets/data/rates_live_20260903_nocloud_baseline.json; measured 2026-09-03 (60 s, gosling1, stack up, parked, Nav2 off). Image rates metered via each stream's paired camera_info, 1:1 with the image in every bag carrying both, so that metering them does not perturb them. -->
+<!-- CORRECTION to plan §3 row 2.2 and to this slide as first written: the cloud row said
+     "on by default: yes - from depth_image_proc, not the RealSense SDK". Both halves are
+     wrong. `camera/depth/color/points` is the RealSense driver's own cloud
+     (publish_realsense_pointcloud -> enable_pointcloud -> pointcloud.enable), default
+     'False' at bringup.launch.py:166; depth_image_proc's clouds go to different topics
+     (points_from_depth_proc / points_from_aligned_depth_proc), and its own enabling flag
+     depthimage_to_pointcloud also defaults 'False' at bringup.launch.py:163. Both child
+     launch files default these True and are beaten by launch-config inheritance.
+     Confirmed live 2026-09-03: the topic is not advertised under a default bringup. -->
 <!-- CORRECTION to plan §3 row 2.2: the plan says "decimation 2". It is not enabled -
      the decimation_filter block is commented out in the YAML and nothing sets it in
      the launch files. Flagged in the hand-back. -->
@@ -166,19 +173,12 @@ $$
 <!-- _class: dense -->
 <!-- plan §3 row 2.7 | owner: B1 (f1tenth_launch) -->
 
-## Recording the image streams costs 125 MB/s — and it silently starves visual odometry
+## It is not a recording bug: a consumer pulling the cloud *and* the images starves visual odometry
 
-> [!PLACEHOLDER CHART-RATES]
->
-> Per-topic measured rate and bandwidth from a drive bag: the sensor rates this section quotes as configured, shown as achieved.
+![w:660](../assets/figures/rates.png)
 
-| Bag topic set | Size | What it costs |
-|---|---|---|
-| `drive` — includes depth, infra and the coloured cloud | **26 GiB over 214 s** (~125 MB/s) | starves the camera's USB thread |
-| `sysid` — the two IMU topics, no images | **47 MB over 105 s** | nothing measurable |
+**Five 60 s conditions, parked, plain subscriber — no recorder, no disk write.** Only the fourth collapses: consuming the images alone costs nothing (B), publishing the cloud unconsumed costs a few percent (E), **both together drop the IR pair and visual SLAM to 42 %** while colour holds 96 % and the camera IMU 100 %. The same two streams — and only those — stopped in the 2026-09-01 drive recording (26 GiB / 214 s, against a `sysid` set's 47 MB / 105 s): **107 visual-SLAM messages against the fused EKF's 6415**, no crash, no log line.
 
-**The failure mode is worth the slide on its own.** With the image set recording, only the *infra1/infra2* pair stops — colour, depth, the cloud and the camera IMU all keep streaming at full rate. Visual SLAM consumes the IR pair, so it is starved in lockstep: **107 VSLAM messages against the local EKF's 6415** over the same 214 s. It never crashes, never logs an error, and reads a healthy 30 Hz both before and after.
+**The rule is wider than "don't record pixels you don't need"** — any external consumer at that volume will do it. **Verify a stream by message count, not by a topic rate:** fusion holds 30 Hz on its other sources and looks healthy while one input is gone.
 
-**So: verify a stream by message *count* in the recording, never by a topic rate before or after it.** Fusion stays at 30 Hz on its remaining sources and looks entirely healthy while one input is gone.
-
-<!-- src: scripts/live_runs/topic_sets.sh, scripts/analysis/bag_stats.py; measured on gosling1 2026-09-01. Stall began 4.9 s after the recorder opened and ended 1.1 s after it closed. -->
+<!-- src: assets/data/rates_live_20260903_{nocloud_baseline,nocloud_stress,cloud_baseline,cloud_stress,cloud_unsubscribed_stress}.json via scripts/analysis/plot_rates.py; measured on gosling1 2026-09-03, stack up, car parked, Nav2 not running. Bag figures from scripts/live_runs/topic_sets.sh and scripts/analysis/bag_stats.py; measured 2026-09-01. Condition E's JSON records skipped_topics, so the un-consumed cloud is documented, not inferred; that the driver was publishing it rests on that run's launch configuration, and E's 95 % against B's 100 % under identical image load is the corroborating evidence. No egress threshold is claimed: aggregate volume and per-message size are confounded, and the 2026-09-01 measurement was taken driving while these five were parked. -->

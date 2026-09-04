@@ -123,7 +123,7 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | FIG-LOWLEVEL | diagram | OWNER | vesc | `assets/figures/lowlevel.svg` | **Mermaid** (decided 2026-09-02). Drawn from the vesc fork's code, not the template. |
 | FIG-NAV2-BT | diagram | DONE | B2 | `assets/figures/nav2_bt.svg` | Produced 2026-09-02 from config/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml. Source `assets/figures/src/nav2_bt.mmd`. |
 | TABLE-REPOS | table | DONE | B1 | inline, slide 0.4 | Written 2026-09-02 from f1tenth.repos (21 entries, 10 rows shown). |
-| TABLE-CAMERA | table | DONE | B1 | inline, slide 2.2 | Written 2026-09-02. Configured values only; the measured-Hz column still needs CHART-RATES. |
+| TABLE-CAMERA | table | DONE | B1 | inline, slide 2.2 | Written 2026-09-02. Measured column filled 2026-09-03 from a 60 s live window (`assets/data/rates_live_20260903_nocloud_baseline.json`), not from a chart; the CHART-RATES card on 2.2 is retired. Cloud row corrected: it is the RealSense SDK cloud and it is OFF by default. |
 | TABLE-IMU | table | DONE | B1 | inline, slide 2.5 | Written 2026-09-02. |
 | TABLE-ODOM | table | DONE | B2 | inline, slide 3.2 | Written 2026-09-02. |
 | TABLE-CONTROLLERS | table | DONE | control | inline, slide 7.2 | Written 2026-09-03 from the config files as read, not from a prose summary. The two Nav2 rows are filled from `config/nav2_params.yaml`; the f1tenth_launch chat owns them and should confirm. |
@@ -133,7 +133,7 @@ from a slide. Video is never committed; see `assets/video/README.md`.
 | TABLE-TAPE | table | DONE | B2 | inline, slide 3.4 | Written 2026-09-02. Also reproduced on 9.4. |
 | TABLE-BANDWIDTH | table | DONE | B1 | inline, slide 1.5 | Written 2026-09-02. |
 | TABLE-PACKAGES | table | ROBOT | capture | inline | In the container on gosling1: `ros2 pkg list`, `apt list --installed 'ros-humble-*'`, `pip list`. Feeds 0.4. |
-| CHART-RATES | chart | ROBOT | capture | `assets/figures/rates.png` | `scripts/analysis/bag_stats.py` on a `sysid` bag (`armA_loop2`) -> CSV -> matplotlib. |
+| CHART-RATES | chart | DONE | B1 | embedded, slide 2.7 | Built 2026-09-03 by `scripts/analysis/plot_rates.py` from the five `assets/data/rates_live_20260903_*.json` conditions measured live on gosling1. Not from a bag: no bag on the SSD carries a clean-load camera stream, so `bag_stats.py` on `armA_loop2` could not produce it. Carded once, on 2.7; the 2.2 card is retired (see TABLE-CAMERA). |
 | CHART-CLOSURE | chart | ROBOT | capture | `assets/figures/localization/closure.png` | `scripts/analysis/plot_localization.py <armA_loop2> --map data/maps/20260805/rtabmap_2d_final.yaml --out docs/presentation/assets/figures/localization/`; also yields `summary.md`. |
 | CHART-STEER | chart | ROBOT | capture | `assets/figures/steer.png` | `fit_actuators.py` on `armA_loop`, `armA_loop2`, `armA_steer_sweep`; add `--save-fig` if absent. |
 | CHART-SPEED | chart | ROBOT | capture | `assets/figures/speed.png` | `fit_actuators.py` on `armA_straight_5m` + the tape run. |
@@ -190,7 +190,7 @@ Status codes: `EXISTS` (file in repo/OneDrive), `OFFLINE` (renderable on this ma
 | FIG-TF-TREE | figure | ROBOT (or OFFLINE) | `ros2 run tf2_tools view_frames` on a running stack; offline alternative: draw from `static_transformations.launch.py` + URDF with mermaid. |
 | FIG-LAUNCHTREE, FIG-CMDPATH, FIG-EKF-INPUTS, FIG-LOWLEVEL, FIG-NAV2-BT | diagram | OFFLINE | Mermaid inside Marp (marp-core renders mermaid via plugin, or pre-render to SVG in `build.sh`). |
 | TABLE-REPOS, -CAMERA, -IMU, -ODOM, -CONTROLLERS, -SAFETY-TIMING, -CALIB-STATUS, -DEADBAND, -TAPE, -BANDWIDTH | table | OFFLINE | Values from config YAML, CLAUDE.md and `SYSID_RESULTS.md`; each cell dated in speaker notes. |
-| CHART-RATES | chart | ROBOT | `scripts/analysis/bag_stats.py` on a `sysid` bag on the SSD (`armA_loop2`), output CSV, plot with matplotlib. |
+| CHART-RATES | chart | DONE | Built offline from the committed `assets/data/rates_live_20260903_*.json` by `scripts/analysis/plot_rates.py`; no robot time needed to rebuild it. |
 | CHART-CLOSURE | chart | ROBOT | `scripts/analysis/plot_localization.py <armA_loop2 bag> --map data/maps/20260805/rtabmap_2d_final.yaml --out docs/presentation/assets/figures/localization/`; also yields `summary.md`. |
 | CHART-STEER, CHART-SPEED, CHART-LAG | chart | ROBOT | `fit_actuators.py` on `armA_loop`, `armA_loop2`, `armA_straight_5m`, `armA_steer_sweep`; add a `--save-fig` path if the script lacks one. |
 | CHART-NAV2-APPROACH | chart | ROBOT | Distance-to-goal and commanded speed vs time from the `nav2_drive4` bag. |

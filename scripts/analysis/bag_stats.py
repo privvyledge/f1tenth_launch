@@ -7,6 +7,12 @@ seconds mid-run and then catches up has a healthy-looking average. This walks
 the actual message timestamps and reports the gap distribution, which is what
 distinguishes "recorded fine" from "the recorder could not keep up".
 
+Reads through rosbag2_py when a ROS 2 overlay is sourced, and falls back to
+the pure-Python `mcap` reader otherwise -- so an MCAP bag can be analysed on a
+workstation with no ROS installed, which is how the presentation charts are
+built. Both paths use the message *receive* time (rosbag2's `t`, MCAP's
+`log_time`), so their numbers are directly comparable.
+
 Usage:
     python3 bag_stats.py <bag_dir_or_file> [--expect topic=hz ...] [--json]
 """
@@ -21,11 +27,48 @@ from pathlib import Path
 try:
     import rosbag2_py
 except ImportError:  # pragma: no cover - depends on the ROS environment
-    sys.exit("rosbag2_py not importable — source the ROS 2 overlay first")
+    rosbag2_py = None
+
+
+def _mcap_files(bag_path: str) -> list[Path]:
+    """The .mcap files a bag path refers to, in name order (empty if none)."""
+    path = Path(bag_path)
+    if path.is_file():
+        return [path] if path.suffix == ".mcap" else []
+    return sorted(path.glob("*.mcap"))
+
+
+def read_timestamps_mcap(files: list[Path]) -> tuple[dict[str, list[int]], dict[str, str]]:
+    """read_timestamps() without ROS, via the pure-Python mcap reader."""
+    from mcap.reader import make_reader
+
+    stamps: dict[str, list[int]] = {}
+    types: dict[str, str] = {}
+    for f in files:
+        with f.open("rb") as fh:
+            reader = make_reader(fh)
+            for channel in reader.get_summary().channels.values():
+                stamps.setdefault(channel.topic, [])
+            for schema, channel, message in reader.iter_messages():
+                stamps.setdefault(channel.topic, []).append(message.log_time)
+                if schema is not None:
+                    types[channel.topic] = schema.name
+    return stamps, types
 
 
 def read_timestamps(bag_path: str) -> tuple[dict[str, list[int]], dict[str, str]]:
     """Return {topic: [recv_timestamp_ns, ...]} and {topic: type}."""
+    if rosbag2_py is None:
+        files = _mcap_files(bag_path)
+        if not files:
+            sys.exit("rosbag2_py not importable — source the ROS 2 overlay "
+                     "first, or point at an .mcap bag for the fallback reader")
+        try:
+            return read_timestamps_mcap(files)
+        except ImportError:
+            sys.exit("rosbag2_py not importable and the `mcap` package is "
+                     "missing — source the ROS 2 overlay, or `pip install mcap`")
+
     reader = rosbag2_py.SequentialReader()
 
     storage_id = ""
