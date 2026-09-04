@@ -105,6 +105,13 @@ check_disk 40 || die "not enough free space for an image + pointcloud bag"
 LAUNCH_PID=
 
 start_stack() {
+  # Both of these scripts record camera data, so a dead RealSense makes the
+  # whole run worthless — and it fails while every other check passes. Check
+  # the precondition, not the symptom.
+  banner "display check (RealSense needs GL)"
+  require_gl_display || die "no usable X display; the operator must launch this
+                             stack from a session with real display authority."
+
   banner "launching sensors + local localization ($($WITH_VEHICLE && echo 'vehicle ON' || echo 'no vehicle'), no joystick)"
 
   if $WITH_VEHICLE; then
@@ -153,8 +160,9 @@ start_stack() {
   banner "waiting for the stack to settle (camera is delayed ~6 s)"
   wait_for_topic "$(ns_topic lidar/scan_filtered)" 60 || die "LiDAR never came up"
   wait_for_topic "$(ns_topic camera/color/image_raw)" 90 \
-    || die "camera never came up — check the container has /tmp/.X11-unix
-            mounted and DISPLAY set (RealSense needs a GL context)"
+    || die "camera never came up. The display check before launch passed, so
+            this is not the X11/authorization problem — try again with
+            RESET_REALSENSE=True, then suspect the USB cable."
   wait_for_topic "$(ns_topic camera/depth/color/points)" 60 \
     || warn "no colored pointcloud yet — this is the topic the pointcloud-only
              detector needs; do not record without it"

@@ -25,19 +25,47 @@
 #
 # BEFORE YOU RUN THIS: the container needs X11, or the RealSense dies
 # -------------------------------------------------------------------
-# librealsense needs a GL context. A container started from a shell with no
-# DISPLAY (any ssh session) silently loses the X11 mounts: /tmp/.X11-unix comes
-# up empty and /tmp/.docker.xauth is a 0-byte file from the image, while
-# DISPLAY/XAUTHORITY still *look* correct in env. Every camera stream then sits
-# at 0 Hz and Isaac VSLAM has no input. On the HOST, before starting it:
+# librealsense needs a GL context, and there are TWO ways to lose it. This
+# script now probes for both with require_gl_display (00_env.sh) before it
+# launches, so you should not have to remember either — but when it fails,
+# this is what it is telling you.
 #
-#     export DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority
-#     xauth nlist $DISPLAY | sed -e 's/^..../ffff/' \
-#         | xauth -f /tmp/.docker.xauth nmerge -
-#     chmod 644 /tmp/.docker.xauth
+#   1. MOUNTS. A container started from a shell with no DISPLAY (any ssh
+#      session) silently loses the X11 mounts: /tmp/.X11-unix comes up empty
+#      and /tmp/.docker.xauth is a 0-byte file from the image, while
+#      DISPLAY/XAUTHORITY still *look* correct in env. On the HOST, before
+#      starting the container:
 #
-# Then verify INSIDE the container that /tmp/.X11-unix/X0 exists and
-# /tmp/.docker.xauth is non-zero. Checking env alone will not catch this.
+#          export DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority
+#          xauth nlist $DISPLAY | sed -e 's/^..../ffff/' \
+#              | xauth -f /tmp/.docker.xauth nmerge -
+#          chmod 644 /tmp/.docker.xauth
+#
+#   2. AUTHORIZATION, which is the one measured on 2026-09-03 and the one the
+#      old advice here missed. The mounts can be perfectly correct — X0 socket
+#      present, xauth file non-zero — and the display still refuses the
+#      connection, because Xorg authenticates against the display manager's
+#      cookie, which no ssh session can read. The camera then dies while every
+#      other check in this script passes. `xhost +local:` over ssh does NOT
+#      fix it (it authorizes the forwarded display, not :0), and neither does
+#      RESET_REALSENSE. The stack must be launched by the operator, from a
+#      session with real authority on the display.
+#
+# So: do not verify this by looking at the mounts. Run `xdpyinfo` inside the
+# container — it fails with "Authorization required" in case 2 and succeeds
+# when the display is usable.
+#
+# Extra launch arguments
+# ----------------------
+# Any trailing `name:=value` token is appended verbatim to the bringup launch
+# command, so a one-off can be run without editing this file:
+#
+#     ./71_mpc_stack.sh --map <map.yaml> --domain 42 -y \
+#         depthimage_to_pointcloud:=True
+#
+# Prefer this over editing the launch block: it keeps the health checks and,
+# more importantly, the stop_launch_tree teardown — killing the launch PID
+# directly orphans every node.
 
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -45,13 +73,15 @@ cd "$(dirname "$0")"
 source ./00_env.sh
 
 MAP=""
+EXTRA_LAUNCH_ARGS=()
 while (( $# )); do
   case "$1" in
     --map)     MAP="$2"; shift ;;
     --domain)  export ROS_DOMAIN_ID="$2"; shift ;;
     -y|--yes)  export CONFIRM=yes ;;
-    -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
-    *) die "unknown option: $1" ;;
+    -h|--help) sed -n '2,68p' "$0"; exit 0 ;;
+    *:=*)      EXTRA_LAUNCH_ARGS+=("$1") ;;
+    *) die "unknown option: $1 (extra launch arguments must be name:=value)" ;;
   esac
   shift
 done
@@ -70,9 +100,18 @@ info "map: $MAP"
 banner "domain check"
 info "this run is on ROS_DOMAIN_ID=$ROS_DOMAIN_ID — the MPC must export the same"
 
+# The camera is the one subsystem whose failure this script's own health checks
+# cannot attribute, so check the precondition rather than the symptom.
+banner "display check (RealSense needs GL)"
+require_gl_display || die "no usable X display — see the X11 notes at the top of
+                           this file. The operator must launch this stack."
+
 confirm_unsafe "MPC bring-up: an external controller will be free to command the vehicle."
 
 banner "launching bringup (localization on, Nav2 off, drive free)"
+if (( ${#EXTRA_LAUNCH_ARGS[@]} )); then
+  info "extra launch arguments: ${EXTRA_LAUNCH_ARGS[*]}"
+fi
 ros2 launch f1tenth_launch bringup.launch.py \
     use_f1tenth_namespace:=True \
     f1tenth_namespace:="$NS" \
@@ -101,7 +140,8 @@ ros2 launch f1tenth_launch bringup.launch.py \
     reset_realsense:="$RESET_REALSENSE" \
     max_speed:="$MAX_SPEED" \
     max_steering:="$MAX_STEERING" \
-    log_level:=warn &
+    log_level:=warn \
+    "${EXTRA_LAUNCH_ARGS[@]}" &
 LAUNCH_PID=$!
 
 stop_stack() {
@@ -128,7 +168,9 @@ require_rate "$(ns_topic odometry/global)"         25 || rc=1
 require_rate "$(ns_topic command_gate/heartbeat)"   5 || rc=1
 # Camera at 0 Hz almost always means the X11/GL problem in the header above.
 require_rate "$(ns_topic camera/color/image_raw)"   20 \
-  || { rc=1; err "camera dead — check /tmp/.X11-unix/X0 INSIDE the container"; }
+  || { rc=1; err "camera dead. The display check above passed, so this is NOT
+                 the usual X11 problem — do not go back to /tmp/.X11-unix.
+                 Try RESET_REALSENSE=True, then suspect the USB cable."; }
 require_rate "$(ns_topic visual_slam/tracking/odometry)" 20 || rc=1
 
 banner "TF"

@@ -47,6 +47,13 @@ $WITH_CLOUD && PHASE=sensors_cloud
 LAUNCH_PID=
 
 start_stack() {
+  # Both of these scripts record camera data, so a dead RealSense makes the
+  # whole run worthless — and it fails while every other check passes. Check
+  # the precondition, not the symptom.
+  banner "display check (RealSense needs GL)"
+  require_gl_display || die "no usable X display; the operator must launch this
+                             stack from a session with real display authority."
+
   confirm_unsafe "Teleop stack: the joystick deadman will command the motor."
 
   banner "launching teleop stack"
@@ -86,9 +93,9 @@ start_stack() {
   banner "waiting for the stack to settle (camera is delayed ~6 s)"
   wait_for_topic "$(ns_topic lidar/scan_filtered)" 60 || die "LiDAR never came up"
   wait_for_topic "$(ns_topic camera/color/image_raw)" 90 \
-    || die "camera never came up — try again with RESET_REALSENSE=True, and
-            check the container has /tmp/.X11-unix mounted and DISPLAY set
-            (RealSense needs a GL context)"
+    || die "camera never came up. The display check before launch passed, so
+            this is not the X11/authorization problem — try again with
+            RESET_REALSENSE=True, then suspect the USB cable."
   wait_for_topic "$(ns_topic odometry/local)" 60 || warn "no odometry/local yet"
   sleep 5   # let static TFs settle before the recorder attaches
 }

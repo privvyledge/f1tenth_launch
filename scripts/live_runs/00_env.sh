@@ -310,6 +310,63 @@ require_rate() {
   return 1
 }
 
+# require_gl_display — is an X display actually reachable AND authorized?
+#
+# librealsense opens a GL window, so a RealSense that cannot reach an
+# authorized display comes up with
+#     Error starting device: Could not open OpenGL window
+# and every other check in this suite still passes: VESC, LiDAR, both EKFs,
+# all four TF edges and AMCL lifecycle all report ok while camera and VSLAM
+# are dead. Failing loudly here is much cheaper than reading that verdict.
+#
+# There are TWO distinct ways this breaks, and the older prose in these scripts
+# described only the first:
+#
+#   1. MOUNTS. A container started from a shell with no DISPLAY loses the X11
+#      bind mounts: /tmp/.X11-unix comes up empty and /tmp/.docker.xauth is a
+#      0-byte file from the image, while DISPLAY/XAUTHORITY still look correct
+#      in env.
+#   2. AUTHORIZATION. The mounts are present and correct, and the display still
+#      refuses the connection because Xorg authenticates against the display
+#      manager's cookie (on this Jetson /run/user/128/gdm/Xauthority), which no
+#      ssh session can read. This is the failure observed on 2026-09-03 across
+#      four launches: X0 socket present, xauth file 54 bytes, camera dead.
+#
+# `xdpyinfo` distinguishes them from a check of the mounts alone: it reports
+# "Authorization required, but no authorization protocol specified" in case 2
+# and succeeds when the display is usable. Note glxinfo is NOT installed in
+# this image, so it is not an option.
+#
+# Limits, stated honestly: a passing xdpyinfo proves the display is reachable
+# and authorized. That is necessary but not sufficient for GLX — it catches the
+# observed failure and does not promise more.
+require_gl_display() {
+  local disp="${DISPLAY:-}" out
+  if [[ -z "$disp" ]]; then
+    err "DISPLAY is unset — librealsense needs a GL context and will fail with
+         'Could not open OpenGL window'. Launch from a session that owns a real
+         display."
+    return 1
+  fi
+  if ! command -v xdpyinfo >/dev/null 2>&1; then
+    warn "xdpyinfo not installed; cannot verify DISPLAY=$disp is authorized.
+          If the camera comes up at 0 Hz, this is the first thing to suspect."
+    return 0
+  fi
+  if out="$(xdpyinfo 2>&1)"; then
+    info "X display $disp reachable and authorized"
+    return 0
+  fi
+  err "X display $disp is NOT usable — the RealSense will fail to start.
+       xdpyinfo said: $(printf '%s' "$out" | head -1)
+       The operator must launch from a session with real authority on the
+       display. Running 'xhost +local:' over ssh does NOT fix this: it
+       authorizes the forwarded display, not :0. Checking that
+       /tmp/.X11-unix/X0 exists and /tmp/.docker.xauth is non-zero does not
+       catch it either — both are true in this failure."
+  return 1
+}
+
 # tf_has_edge <parent> <child> — is this TF edge being broadcast?
 #
 # The remaps are load-bearing, not decoration. tf2_echo's TransformListener

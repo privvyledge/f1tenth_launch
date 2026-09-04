@@ -247,6 +247,26 @@ fi
 
 $HAVE_LSUSB || info "(lsusb not installed; used sysfs and device nodes instead)"
 
+# The camera being *enumerated* is not the same as the camera being able to
+# START. librealsense opens a GL window, and on 2026-09-03 four launches came
+# up with the device present, the X11 mounts correct, and
+#     Error starting device: Could not open OpenGL window
+# because Xorg authenticates against a display-manager cookie no ssh session
+# can read. Every other check in this file passed on all four. See
+# require_gl_display in 00_env.sh for what it does and does not prove.
+# EXPECT_CAMERA=false for a phase that runs LiDAR/VESC only, matching the
+# EXPECT_VESC / EXPECT_JOYSTICK pattern above.
+if require_gl_display; then
+  :
+elif [[ "${EXPECT_CAMERA:-true}" != "true" ]]; then
+  info "no usable display, but the camera is not required for this phase
+        (EXPECT_CAMERA=false)"
+else
+  # require_gl_display has already printed the detail; count it and move on
+  # rather than printing a second wall of text.
+  FAILURES=$((FAILURES + 1))
+fi
+
 # --------------------------------------------------------- 3. GPU/VSLAM ----
 banner "3. GPU / VSLAM readiness"
 
